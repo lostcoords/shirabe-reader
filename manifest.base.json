@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Shirabe Reader",
+  "version": "0.1.0",
+  "description": "Parse Japanese on any web page and look it up with Shirabe.",
+  "icons": {
+    "16": "icons/logo_16.png",
+    "32": "icons/logo_32.png",
+    "48": "icons/logo_48.png",
+    "128": "icons/logo_128.png"
+  },
+  "permissions": ["storage", "contextMenus", "activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_title": "Shirabe Reader",
+    "default_popup": "action/popup.html",
+    "default_icon": {
+      "16": "icons/logo_16.png",
+      "32": "icons/logo_32.png",
+      "48": "icons/logo_48.png",
+      "128": "icons/logo_128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

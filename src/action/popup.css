@@ -1,0 +1,92 @@
+:root {
+  --indigo: #4f46e5;
+  --indigo-dark: #4338ca;
+}
+
+body {
+  width: 300px;
+  margin: 0;
+  padding: 16px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: #1f2937;
+  background: #f9fafb;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.head h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 600;
+  font-size: 13px;
+}
+label.row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+input[type="url"],
+input[type="password"],
+select {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+}
+input:focus,
+select:focus {
+  outline: 2px solid var(--indigo);
+  outline-offset: 0;
+  border-color: var(--indigo);
+}
+
+.primary {
+  font: inherit;
+  font-weight: 600;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--indigo);
+  color: #fff;
+  cursor: pointer;
+}
+.primary:hover {
+  background: var(--indigo-dark);
+}
+
+.status {
+  margin: 0;
+  min-height: 16px;
+  font-size: 12px;
+  color: #059669;
+}
+.hint {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+.hint code {
+  background: #eef2ff;
+  padding: 1px 4px;
+  border-radius: 4px;
+}

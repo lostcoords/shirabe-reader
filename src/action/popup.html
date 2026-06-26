@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>Shirabe Reader</title>
+  </head>
+  <body>
+    <header class="head">
+      <img src="../icons/logo_48.png" alt="" width="28" height="28" />
+      <h1>Shirabe Reader</h1>
+    </header>
+
+    <button id="parse" class="primary">Parse this page</button>
+
+    <form id="settings">
+      <label>
+        API server
+        <input id="apiBase" type="url" placeholder="https://api.shirabe.org" />
+      </label>
+      <label>
+        API key
+        <input id="apiKey" type="password" placeholder="Paste your Shirabe API key" autocomplete="off" />
+      </label>
+      <label>
+        Definition language
+        <select id="locale">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="ja">日本語</option>
+        </select>
+      </label>
+      <label class="row">
+        <input id="showFurigana" type="checkbox" />
+        Show furigana
+      </label>
+      <label class="row">
+        <input id="autoParse" type="checkbox" />
+        Parse pages automatically
+      </label>
+      <button type="submit" class="primary">Save settings</button>
+      <p id="status" class="status" role="status"></p>
+    </form>
+
+    <p class="hint">
+      Create a key with <code>bin/rails api_keys:create</code>, then paste it above.
+    </p>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
