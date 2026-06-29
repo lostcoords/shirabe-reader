@@ -1,15 +1,9 @@
 // Shared shapes that cross the content ↔ background boundary.
 
-// A word's learning status, mirroring Shirabe's SRS vocabulary. Until the
-// server exposes a per-user state endpoint, every parsed word comes back as
-// "unknown" and the UI treats it as not-yet-tracked.
-export type WordState =
-  | "new"
-  | "learning"
-  | "known"
-  | "due"
-  | "ignored"
-  | "unknown";
+// A word's learning status, mirroring Shirabe's Card::STATES. `/v1/parse`
+// stamps each word with the caller's state; "none" means the user has no card
+// for it yet (not-yet-tracked). Ordered weakest → strongest, like the server.
+export type WordState = "none" | "new" | "learning" | "due" | "known";
 
 // One token as the content script needs it: where it sits in the source text
 // (UTF-16 offsets, matching the DOM), how to render furigana, and its state.

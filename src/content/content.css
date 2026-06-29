@@ -1,6 +1,8 @@
-/* Shirabe Reader — injected on every page. All selectors are `sb-` prefixed and
-   kept low-specificity-but-scoped so we color our own words without bleeding
-   into the host page. */
+/* Shirabe Reader — injected on every page. Only the in-text word spans live in
+   the host's light DOM (they must, to flow inline with the page's text); the
+   hover popup is isolated in a shadow root (see content/popup.ts). All
+   selectors are `sb-` prefixed and low-specificity so we colour our own words
+   without bleeding into the host page. */
 
 .sb-word {
   cursor: help;
@@ -32,106 +34,7 @@
 .sb-known {
   border-bottom: 2px solid transparent;
 }
-.sb-ignored {
-  border-bottom: 2px solid transparent;
-  opacity: 0.7;
-}
-/* v0 default: not yet tracked — a faint dotted hint that it's interactive. */
-.sb-unknown {
+/* Not yet tracked — a faint dotted hint that it's interactive. */
+.sb-none {
   border-bottom: 1px dotted rgba(79, 70, 229, 0.5);
-}
-
-/* ── Popup ─────────────────────────────────────────────────────────────── */
-.sb-popup {
-  position: absolute;
-  z-index: 2147483647;
-  max-width: 360px;
-  min-width: 180px;
-  padding: 12px 14px;
-  background: #ffffff;
-  color: #1f2937;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
-  font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(4px);
-  transition: opacity 0.12s ease, transform 0.12s ease;
-  pointer-events: none;
-}
-.sb-popup.sb-visible {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-.sb-popup-head {
-  font-size: 20px;
-  font-weight: 700;
-  color: #111827;
-}
-.sb-popup-reading {
-  margin-left: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #4f46e5;
-}
-.sb-popup-message {
-  color: #6b7280;
-}
-
-.sb-senses {
-  margin: 8px 0 0;
-  padding-left: 18px;
-}
-.sb-senses li {
-  margin: 4px 0;
-}
-.sb-pos {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #9ca3af;
-}
-
-.sb-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid #f3f4f6;
-}
-.sb-btn {
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 5px 12px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  cursor: pointer;
-}
-.sb-btn-save {
-  background: #4f46e5;
-  color: #fff;
-}
-.sb-btn-save:hover {
-  background: #4338ca;
-}
-.sb-btn-known {
-  background: #eef2ff;
-  color: #4338ca;
-}
-.sb-btn-known:hover {
-  background: #e0e7ff;
-}
-.sb-feedback {
-  font-size: 12px;
-  color: #6b7280;
 }

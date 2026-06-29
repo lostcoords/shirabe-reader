@@ -74,19 +74,83 @@ select:focus {
   background: var(--indigo-dark);
 }
 
-.status {
+.ghost {
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+}
+.ghost:hover {
+  background: #f3f4f6;
+}
+
+/* ── Connection card ─────────────────────────────────────────────────────── */
+.card {
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+.card > div {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.account-line {
   margin: 0;
+  font-weight: 600;
+}
+.muted {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+.code {
+  margin: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--indigo-dark);
+}
+a {
+  color: var(--indigo);
+}
+
+/* ── Segmented radio group ───────────────────────────────────────────────── */
+.seg {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+.seg legend {
+  padding: 0;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+details#advanced {
+  margin-top: 14px;
+  font-size: 13px;
+}
+details#advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #6b7280;
+}
+details#advanced form {
+  margin-top: 10px;
+}
+
+.status {
+  margin: 10px 0 0;
   min-height: 16px;
   font-size: 12px;
   color: #059669;
-}
-.hint {
-  margin: 14px 0 0;
-  font-size: 12px;
-  color: #6b7280;
-}
-.hint code {
-  background: #eef2ff;
-  padding: 1px 4px;
-  border-radius: 4px;
 }

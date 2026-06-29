@@ -12,17 +12,35 @@
       <h1>Shirabe Reader</h1>
     </header>
 
+    <!-- Connection card: swaps between connected / connecting / disconnected. -->
+    <section id="account" class="card" hidden>
+      <!-- connected -->
+      <div data-state="connected" hidden>
+        <p class="account-line">
+          Connected<span id="accountName"></span>
+        </p>
+        <button id="disconnect" class="ghost">Disconnect</button>
+      </div>
+
+      <!-- connecting: show the code to approve in the page we opened -->
+      <div data-state="connecting" hidden>
+        <p class="muted">Approve this code in the Shirabe tab we just opened:</p>
+        <p class="code" id="userCode"></p>
+        <p class="muted">
+          Waiting for approval… <a id="verifyLink" href="#" target="_blank" rel="noopener">open again</a>
+        </p>
+      </div>
+
+      <!-- disconnected -->
+      <div data-state="disconnected" hidden>
+        <p class="muted">Connect your Shirabe account to colour words by what you know and mine cards.</p>
+        <button id="connect" class="primary">Connect to Shirabe</button>
+      </div>
+    </section>
+
     <button id="parse" class="primary">Parse this page</button>
 
-    <form id="settings">
-      <label>
-        API server
-        <input id="apiBase" type="url" placeholder="https://api.shirabe.org" />
-      </label>
-      <label>
-        API key
-        <input id="apiKey" type="password" placeholder="Paste your Shirabe API key" autocomplete="off" />
-      </label>
+    <form id="prefs">
       <label>
         Definition language
         <select id="locale">
@@ -31,6 +49,13 @@
           <option value="ja">日本語</option>
         </select>
       </label>
+
+      <fieldset class="seg">
+        <legend>Show popup on</legend>
+        <label class="row"><input type="radio" name="popupTrigger" value="hover" /> Hover</label>
+        <label class="row"><input type="radio" name="popupTrigger" value="modifier" /> Alt&nbsp;/&nbsp;Option&nbsp;+&nbsp;hover</label>
+      </fieldset>
+
       <label class="row">
         <input id="showFurigana" type="checkbox" />
         Show furigana
@@ -39,13 +64,24 @@
         <input id="autoParse" type="checkbox" />
         Parse pages automatically
       </label>
-      <button type="submit" class="primary">Save settings</button>
-      <p id="status" class="status" role="status"></p>
     </form>
 
-    <p class="hint">
-      Create a key with <code>bin/rails api_keys:create</code>, then paste it above.
-    </p>
+    <details id="advanced">
+      <summary>Advanced</summary>
+      <form id="advancedForm">
+        <label>
+          API server
+          <input id="apiBase" type="url" placeholder="https://api.shirabe.org" />
+        </label>
+        <label>
+          API key (manual)
+          <input id="apiKey" type="password" placeholder="Paste a key instead of connecting" autocomplete="off" />
+        </label>
+        <button type="submit" class="ghost">Save advanced</button>
+      </form>
+    </details>
+
+    <p id="status" class="status" role="status"></p>
 
     <script src="popup.js"></script>
   </body>

@@ -11,29 +11,53 @@ export class ApiError extends Error {
 }
 
 // ── Raw server shapes (subset of what /v1 returns) ───────────────────────────
-type RawToken = {
+// /v1/parse: positioned tokens that point into a deduped vocab pool carrying
+// the caller's per-word state. Positions are UTF-16 code units (DOM-native),
+// so the content script never re-derives offsets.
+type RawParseToken = {
+  position: number;
+  length: number;
   surface: string;
-  lemma: string;
+  lemma?: string;
   reading?: string; // katakana
   pos?: string; // short label
   primary?: boolean;
+  vocabIndex?: number; // index into `vocabulary`; absent for particles/punctuation
 };
+type RawVocab = { lemma: string; reading?: string; pos?: string; state: WordState };
+type RawParse = { tokens: RawParseToken[]; vocabulary: RawVocab[] };
 
+// /v1/device/authorize → the handshake a client shows the user.
+export type DeviceAuth = {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete: string;
+  scopes: string[];
+  expiresIn: number;
+  interval: number; // seconds to wait between token polls
+};
+// /v1/device/token → a status envelope; the key arrives on "approved".
+export type DeviceToken =
+  | { status: "pending" | "denied" | "expired" }
+  | { status: "approved"; apiKey: string; scopes: string[] };
+
+// /v1/search: nested entries → senses → definitions/tags (camelCase).
 type RawSearch = {
   results: Array<{
     headword: string;
     reading: string | null;
-    sources: Array<{
+    entries: Array<{
       dictionary: string;
-      senses?: Array<{ glosses: Record<string, string[]>; parts_of_speech: string[] }>;
+      senses: Array<{
+        definitions: Array<{ lang: string; text: string }>;
+        tags: Array<{ category: string; code: string; label: string }>;
+      }>;
     }>;
   }>;
 };
 
-// POS short labels that carry no standalone meaning — not worth wrapping/saving.
-const FUNCTION_POS = new Set(["prt", "aux", ""]);
 const KANJI = /[一-龯㐀-䶿]/;
-const JAPANESE = /[぀-ヿ一-龯㐀-䶿ｦ-ﾟ]/;
 
 export class ShirabeApi {
   constructor(private config: Config) {}
@@ -42,65 +66,87 @@ export class ShirabeApi {
     this.config = config;
   }
 
-  // Tokenize text and lift each token to a ParsedToken with UTF-16 offsets into
-  // `text`. The server returns tokens in reading order but no positions, so we
-  // walk the source string sequentially — correct even when a surface repeats.
+  // Parse text into ParsedTokens. The server returns UTF-16 positions and a
+  // deduped vocab pool with the caller's per-word state, so each token's
+  // offsets map straight onto the DOM and its colour is known up front.
   async parse(text: string): Promise<ParsedToken[]> {
-    const { tokens } = await this.post<{ tokens: RawToken[] }>("/v1/tokenize", { text });
+    const { tokens, vocabulary } = await this.post<RawParse>("/v1/parse", { text });
 
-    let cursor = 0;
     return tokens.map((t) => {
-      const found = text.indexOf(t.surface, cursor);
-      const start = found >= 0 ? found : cursor;
-      cursor = start + t.surface.length;
-
-      const reading = furiganaFor(t.surface, t.reading);
-      const content = !FUNCTION_POS.has(t.pos ?? "") && JAPANESE.test(t.surface);
-
+      const vocab = t.vocabIndex != null ? vocabulary[t.vocabIndex] : undefined;
       return {
-        start,
-        length: t.surface.length,
+        start: t.position,
+        length: t.length,
         surface: t.surface,
-        reading,
+        reading: furiganaFor(t.surface, t.reading),
         lemma: t.lemma || t.surface,
         pos: t.pos ?? "",
-        content,
-        // No per-user state endpoint yet — see docs/extension.md. Everything is
-        // "unknown" until /v1/word_states lands; the seam below is ready for it.
-        state: "unknown" as WordState,
+        content: vocab != null, // only pooled (content) words are interactive
+        state: vocab?.state ?? "none",
       };
     });
   }
 
   // Hover-popup definition. Reuses the public search endpoint and flattens the
-  // first JMdict result for the requested gloss locale.
+  // first result's senses for display.
   async lookup(query: string): Promise<Definition | null> {
-    const params = new URLSearchParams({ q: query, locale: this.config.locale, limit: "1" });
-    const data = await this.get<RawSearch>(`/v1/search?${params}`);
+    const data = await this.post<RawSearch>("/v1/search", {
+      query,
+      locale: this.config.locale,
+      take: 1,
+    });
     const result = data.results[0];
     if (!result) return null;
 
-    const senses = result.sources
-      .flatMap((s) => s.senses ?? [])
+    const senses = result.entries
+      .flatMap((e) => e.senses)
       .map((sense) => ({
-        glosses: sense.glosses[this.config.locale] ?? Object.values(sense.glosses)[0] ?? [],
-        partsOfSpeech: sense.parts_of_speech,
+        glosses: sense.definitions.map((d) => d.text),
+        partsOfSpeech: sense.tags.filter((t) => t.category === "partOfSpeech").map((t) => t.label),
       }))
       .filter((s) => s.glosses.length > 0);
 
     return { headword: result.headword, reading: result.reading, senses };
   }
 
-  // ── SRS write-back (server endpoints pending; see docs/extension.md) ────────
-  // These are wired end-to-end on the client. They will start working the
-  // moment Shirabe exposes them under /v1; until then they surface a clear
-  // "not available yet" error rather than failing silently.
-  async save(lemma: string): Promise<void> {
-    await this.post("/v1/saves", { lemma });
+  // ── Device login (no key — this is how a client gets one) ───────────────────
+  // Start the handshake. The minted key gets WRITE_SRS so the reader can mine
+  // and grade, not just read.
+  async authorizeDevice(client: string): Promise<DeviceAuth> {
+    return this.post<DeviceAuth>(
+      "/v1/device/authorize",
+      { client, scopes: ["READ_DICTIONARY", "READ_PREFERENCES", "READ_ACCOUNT", "READ_SRS", "WRITE_SRS"] },
+      { auth: false },
+    );
   }
 
-  async setState(lemma: string, state: WordState): Promise<void> {
-    await this.post("/v1/word_states", { lemma, state });
+  // Poll once. The caller loops on `interval` until the status leaves "pending".
+  async pollDevice(deviceCode: string): Promise<DeviceToken> {
+    return this.post<DeviceToken>("/v1/device/token", { deviceCode }, { auth: false });
+  }
+
+  // ── SRS write-back (/v1/srs/*, requires a WRITE_SRS key) ────────────────────
+  // Save a word as a review card, optionally grading it on the spot (rating
+  // 1=Again…4=Easy). The server find-or-creates the card by lemma, so this is
+  // the one call that both mines a new word and reviews an existing one. Returns
+  // the resulting state so the caller can recolour the word in place.
+  async save(lemma: string, rating?: 1 | 2 | 3 | 4): Promise<WordState> {
+    const { card } = await this.post<{ card: { state: WordState } }>("/v1/srs/saves", { lemma, rating });
+    return card.state;
+  }
+
+  // Set a word's state directly: "known" parks it as learned, "reviewing"
+  // brings it into rotation.
+  async setState(lemma: string, state: "known" | "reviewing"): Promise<WordState> {
+    const { card } = await this.post<{ card: { state: WordState } }>("/v1/srs/states", { lemma, state });
+    return card.state;
+  }
+
+  // Connected account's display name + the scopes its key carries, for the
+  // settings UI. Needs READ_ACCOUNT (the device key has it).
+  async me(): Promise<{ name: string }> {
+    const data = await this.get<{ user: { displayName?: string; name?: string } }>("/v1/me");
+    return { name: data.user.displayName || data.user.name || "" };
   }
 
   // ── HTTP plumbing ───────────────────────────────────────────────────────
@@ -108,19 +154,20 @@ export class ShirabeApi {
     return this.request<T>(path, { method: "GET" });
   }
 
-  private async post<T>(path: string, body: unknown): Promise<T> {
-    return this.request<T>(path, { method: "POST", body: JSON.stringify(body) });
+  private async post<T>(path: string, body: unknown, opts: { auth?: boolean } = {}): Promise<T> {
+    return this.request<T>(path, { method: "POST", body: JSON.stringify(body) }, opts);
   }
 
-  private async request<T>(path: string, init: RequestInit): Promise<T> {
-    if (!this.config.apiKey) throw new ApiError("No API key set. Open the extension settings.", 401);
+  private async request<T>(path: string, init: RequestInit, opts: { auth?: boolean } = {}): Promise<T> {
+    const auth = opts.auth !== false; // device endpoints opt out — they mint the key
+    if (auth && !this.config.apiKey) throw new ApiError("Not connected. Open the extension and connect to Shirabe.", 401);
 
     const res = await fetch(this.config.apiBase.replace(/\/$/, "") + path, {
       ...init,
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.config.apiKey}`,
+        ...(auth ? { Authorization: `Bearer ${this.config.apiKey}` } : {}),
       },
     });
 

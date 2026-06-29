@@ -25,6 +25,7 @@ type WebExt = {
   tabs: {
     query(info: Record<string, unknown>): Promise<Array<{ id?: number }>>;
     sendMessage(tabId: number, message: unknown): Promise<unknown>;
+    create(props: { url: string; active?: boolean }): Promise<{ id?: number }>;
   };
   contextMenus?: {
     create(props: Record<string, unknown>): void;
