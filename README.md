@@ -17,7 +17,7 @@ What works today against the live `/v1` API:
 
 - **One-click login** with the device-grant flow — click **Connect**, approve
   the code on shirabe.org, done. No copy-pasting keys (still possible under
-  *Advanced* for scripts/CI). The minted key is scoped and revocable.
+  _Advanced_ for scripts/CI). The minted key is scoped and revocable.
 - **Tokenize + wrap** visible Japanese into per-word spans (Sudachi segmentation),
   including content the page loads later (a `MutationObserver` re-parses it).
 - **Per-user word-state colouring** — new / learning / due / known, stamped by
@@ -62,12 +62,12 @@ choose `dist/chrome`.
 
 1. Click the extension icon → **Connect to Shirabe**. A Shirabe tab opens
    showing a short code; sign in (if needed) and approve it. The popup flips to
-   *Connected as …* on its own. That's it — the extension never sees your
+   _Connected as …_ on its own. That's it — the extension never sees your
    password, only a scoped, revocable API key it mints for itself.
 2. Pick a **definition language** and whether the popup shows on hover or on
    **Alt/Option + hover**.
-3. Open a Japanese page and hit **Parse this page** (or enable *Parse pages
-   automatically*).
+3. Open a Japanese page and hit **Parse this page** (or enable _Parse pages
+   automatically_).
 
 For local dev, open **Advanced** and set the **API server** to
 `http://localhost:3000` before connecting; you can also paste a key made with
