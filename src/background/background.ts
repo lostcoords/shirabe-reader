@@ -1,6 +1,7 @@
-import { ApiError, ShirabeApi, type DeviceAuth } from "../common/api.js";
+import { ApiError, ShirabeApi } from "../common/api.js";
 import { ext } from "../common/browser.js";
 import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config } from "../common/config.js";
+import { refreshRemoteHostRules } from "../common/host-rules.js";
 import type { Request, Response, Status } from "../common/messages.js";
 import type { Definition, ParsedToken } from "../common/types.js";
 
@@ -11,10 +12,11 @@ let api: ShirabeApi;
 const ready = loadConfig().then((c) => {
   config = c;
   api = new ShirabeApi(c);
+  // Best-effort refresh of the server-maintained auto-parse site list, so we can
+  // add supported sites without shipping an extension update. No-ops if offline
+  // or the endpoint isn't live yet (the bundled built-ins stay in charge).
+  void refreshRemoteHostRules(c.apiBase);
 });
-// Resume an interrupted device handshake whenever the worker (re)starts — MV3
-// can suspend us mid-poll, so the source of truth is storage, not memory.
-ready.then(resumePolling);
 onConfigChanged((c) => {
   config = c;
   api?.update(c);
@@ -35,12 +37,35 @@ function enqueue<T>(task: () => Promise<T>): Promise<T> {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// In-flight (or queued) parse requests, keyed by the content script's requestId,
+// so a scrolled-away block can abort its outstanding request.
+const parseAborts = new Map<number, AbortController>();
+
 async function handle(request: Request): Promise<Response> {
   await ready;
   switch (request.type) {
     case "parse": {
       const tokens = await parseCache.fetch(request.text, () => enqueue(() => api.parse(request.text)));
       return { ok: true, type: "parse", tokens };
+    }
+    case "parseBatch": {
+      // A batch is (near-)unique per request, so it isn't worth caching; the
+      // enqueue gap still keeps requests polite. A requestId makes it abortable:
+      // lazy viewport parsing cancels a block's request when it scrolls away —
+      // even while still queued, since the controller exists before it runs.
+      const controller = request.requestId != null ? new AbortController() : undefined;
+      if (controller && request.requestId != null) parseAborts.set(request.requestId, controller);
+      try {
+        const tokens = await enqueue(() => api.parseBatch(request.texts, controller?.signal));
+        return { ok: true, type: "parseBatch", tokens };
+      } finally {
+        if (request.requestId != null) parseAborts.delete(request.requestId);
+      }
+    }
+    case "abortParse": {
+      parseAborts.get(request.requestId)?.abort();
+      parseAborts.delete(request.requestId);
+      return { ok: true, type: "abortParse" };
     }
     case "lookup": {
       const definition = await lookupCache.fetch(request.query, () => enqueue(() => api.lookup(request.query)));
@@ -55,7 +80,8 @@ async function handle(request: Request): Promise<Response> {
       return { ok: true, type: "setState", state };
     }
     case "connect":
-      return { ok: true, type: "connect", auth: await connect() };
+      await connect();
+      return { ok: true, type: "connect" };
     case "disconnect":
       await disconnect();
       return { ok: true, type: "disconnect" };
@@ -64,90 +90,88 @@ async function handle(request: Request): Promise<Response> {
   }
 }
 
-// ── Device login ─────────────────────────────────────────────────────────────
-// Begin an RFC 8628-style handshake, open the consent page, and poll until the
-// user approves — at which point we persist the minted key. The in-flight
-// handshake lives in storage so a suspended worker resumes it on restart; the
-// popup's status polling also wakes us, which restarts the loop.
-const PENDING = "pendingDevice";
-type Pending = { deviceCode: string; deadline: number; interval: number };
+// ── Redirect login (OAuth 2.0 authorization code + PKCE) ─────────────────────
+// A browser extension can receive a redirect, so instead of a user code + poll
+// we open the consent page in an auth window and let the browser hand a one-time
+// code straight back to us. We exchange it (with the PKCE verifier we kept) for a
+// scoped key — no visible code, no polling.
+async function connect(): Promise<void> {
+  const { verifier, challenge } = await pkce();
+  const state = randomToken(16);
+  const redirectUri = ext.identity.getRedirectURL();
+  const url = api.authorizeUrl({ redirectUri, state, challenge, client: clientLabel() });
 
-async function getPending(): Promise<Pending | null> {
-  return ((await ext.storage.local.get(PENDING))[PENDING] as Pending) ?? null;
-}
-async function setPending(p: Pending | null): Promise<void> {
-  if (p) await ext.storage.local.set({ [PENDING]: p });
-  else await ext.storage.local.remove(PENDING);
-}
+  const redirect = await ext.identity.launchWebAuthFlow({ url, interactive: true });
+  const params = new URL(redirect).searchParams;
+  const error = params.get("error");
+  if (error) throw new ApiError(error === "access_denied" ? "You denied the request." : `Sign-in failed (${error}).`, 400);
+  if (params.get("state") !== state) throw new ApiError("Sign-in was interrupted — please try again.", 400);
+  const code = params.get("code");
+  if (!code) throw new ApiError("No authorization code was returned.", 400);
 
-async function connect(): Promise<DeviceAuth> {
-  const auth = await api.authorizeDevice(clientLabel());
-  await setPending({ deviceCode: auth.deviceCode, deadline: Date.now() + auth.expiresIn * 1000, interval: auth.interval });
-  ext.tabs.create({ url: auth.verificationUriComplete }).catch(() => {});
-  resumePolling();
-  return auth;
-}
-
-let polling = false;
-
-async function resumePolling(): Promise<void> {
-  if (polling) return;
-  polling = true;
-  try {
-    for (;;) {
-      const pending = await getPending();
-      if (!pending) return;
-      if (Date.now() > pending.deadline) return void setPending(null);
-      await delay(pending.interval * 1000);
-      if (!(await getPending())) return; // disconnected/cleared while we waited
-
-      let res: Awaited<ReturnType<ShirabeApi["pollDevice"]>>;
-      try {
-        res = await api.pollDevice(pending.deviceCode);
-      } catch {
-        continue; // transient network error — keep polling until the deadline
-      }
-      if (res.status === "approved") {
-        await adopt(res.apiKey, res.scopes);
-        return void setPending(null);
-      }
-      if (res.status === "denied" || res.status === "expired") return void setPending(null);
-    }
-  } finally {
-    polling = false;
-  }
+  const { apiKey, scopes } = await api.exchangeCode({ code, verifier, redirectUri });
+  await adopt(apiKey, scopes);
 }
 
-// Persist a freshly-minted key and look up whose account it belongs to.
+// PKCE (S256): a random verifier the client keeps + the SHA-256 challenge the
+// server stores; at token exchange the verifier proves we started the flow.
+async function pkce(): Promise<{ verifier: string; challenge: string }> {
+  const verifier = randomToken(32);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return { verifier, challenge: base64url(new Uint8Array(digest)) };
+}
+
+function randomToken(bytes: number): string {
+  return base64url(crypto.getRandomValues(new Uint8Array(bytes)));
+}
+
+function base64url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// Persist a freshly-minted key, then look up whose account it belongs to.
 async function adopt(apiKey: string, scopes: string[]): Promise<void> {
-  const next: Config = { ...config, apiKey, scopes, account: "" };
+  const next: Config = { ...config, apiKey, scopes, account: "", entitled: false };
   await saveConfig(next);
   config = next;
   api.update(next);
+  await refreshAccount();
+}
+
+// Re-check the connected account's name + SRS entitlement against the server, so
+// a lapsed subscription (or a freshly-activated one) is reflected the next time
+// the popup opens. Best-effort: on a network hiccup the stored values stay
+// authoritative — the key still mines fine if /v1/me merely blips.
+async function refreshAccount(): Promise<void> {
+  if (!isConnected(config)) return;
   try {
-    const { name } = await api.me();
-    const named: Config = { ...next, account: name };
-    await saveConfig(named);
-    config = named;
+    const { name, entitled } = await api.me();
+    if (name === config.account && entitled === config.entitled) return;
+    const next: Config = { ...config, account: name, entitled };
+    await saveConfig(next);
+    config = next;
   } catch {
-    // The key still works for mining even if /v1/me hiccups; name is cosmetic.
+    // Offline or transient — keep the last-known account/entitlement.
   }
 }
 
 async function disconnect(): Promise<void> {
-  await setPending(null); // abandon any in-flight handshake too
-  const next: Config = { ...config, apiKey: "", account: "", scopes: [] };
+  const next: Config = { ...config, apiKey: "", account: "", scopes: [], entitled: false };
   await saveConfig(next);
   config = next;
   api.update(next);
 }
 
 async function status(): Promise<Status> {
+  await refreshAccount(); // freshen name + entitlement each time the popup asks
   return {
     connected: isConnected(config),
     account: config.account,
     canWrite: canWriteSrs(config),
-    connecting: (await getPending()) != null,
+    entitled: config.entitled,
+    connecting: false,
     apiBase: config.apiBase,
   };
 }

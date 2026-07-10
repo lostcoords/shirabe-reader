@@ -3,6 +3,12 @@
   --indigo-dark: #4338ca;
 }
 
+/* The `hidden` attribute must always win over layout rules like `.card > div`,
+   which would otherwise re-`display` a hidden pane and stack every state at once. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   width: 300px;
   margin: 0;
@@ -153,4 +159,80 @@ details#advanced form {
   min-height: 16px;
   font-size: 12px;
   color: #059669;
+}
+
+/* ── Per-site mode ──────────────────────────────────────────────────────────── */
+.site {
+  display: block;
+  margin-top: 14px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.site-host {
+  color: var(--indigo-dark);
+}
+.site select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+
+/* ── Keyboard shortcuts ─────────────────────────────────────────────────────── */
+details#shortcuts {
+  margin-top: 14px;
+  font-size: 13px;
+}
+details#shortcuts summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #6b7280;
+}
+#keybinds {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.kb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.kb-row span {
+  font-weight: 500;
+}
+.kb-btn {
+  font: inherit;
+  font-size: 12px;
+  min-width: 84px;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.kb-btn:hover {
+  border-color: var(--indigo);
+}
+.kb-btn.capturing {
+  border-color: var(--indigo);
+  color: var(--indigo);
+  background: #eef2ff;
+}
+
+/* ── Host-list textareas ────────────────────────────────────────────────────── */
+textarea {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  resize: vertical;
+}
+textarea:focus {
+  outline: 2px solid var(--indigo);
+  outline-offset: 0;
+  border-color: var(--indigo);
 }

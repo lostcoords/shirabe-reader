@@ -18,9 +18,39 @@ export type ParsedToken = {
   state: WordState;
 };
 
-// A definition as shown in the hover popup. Flattened from /v1/search.
+// One pitch-accent pattern: the downstep (0 = heiban), a type name, and the
+// pre-generated clip to play (null when we have no audio for it).
+export type PitchPattern = { downstep: number; audioUrl: string | null };
+
+// One dictionary sense, mirroring how shirabe.org renders a meaning: a source
+// label ("Español · JMdict"), POS chips, misc/field/dialect tags, and glosses.
+export type Sense = {
+  source: string;
+  partsOfSpeech: string[];
+  tags: string[];
+  glosses: string[];
+};
+
+// One token of an example sentence. Content words carry a word-page `url` (so
+// they're clickable); particles have `url: null` and render as plain text.
+// `matched` marks the looked-up word so we can highlight it.
+export type SentenceToken = { surface: string; url: string | null; matched: boolean };
+
+// An example sentence with its translation (from ?include=sentences). `tokens`
+// is the sentence rendered as clickable words; empty when the server didn't
+// tokenize it (older server), in which case the popup shows plain `japanese`.
+export type Example = { japanese: string; translation: string | null; tokens: SentenceToken[] };
+
+// A definition as shown in the hover popup — a faithful slice of the shirabe.org
+// word card. Flattened from /v1/search (which already returns all of this).
 export type Definition = {
   headword: string;
   reading: string | null;
-  senses: Array<{ glosses: string[]; partsOfSpeech: string[] }>;
+  url: string; // the word's page on shirabe.org
+  common: boolean;
+  jlpt: string | null; // e.g. "N3"
+  frequency: number | null; // corpus rank (lower = more common)
+  pitch: PitchPattern[];
+  senses: Sense[];
+  examples: Example[];
 };

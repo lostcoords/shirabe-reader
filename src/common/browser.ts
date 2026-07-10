@@ -23,7 +23,7 @@ type WebExt = {
   };
   storage: { local: StorageArea; onChanged: { addListener(fn: (changes: Record<string, { newValue?: unknown }>, area: string) => void): void } };
   tabs: {
-    query(info: Record<string, unknown>): Promise<Array<{ id?: number }>>;
+    query(info: Record<string, unknown>): Promise<Array<{ id?: number; url?: string }>>;
     sendMessage(tabId: number, message: unknown): Promise<unknown>;
     create(props: { url: string; active?: boolean }): Promise<{ id?: number }>;
   };
@@ -31,6 +31,12 @@ type WebExt = {
     create(props: Record<string, unknown>): void;
     onClicked: { addListener(fn: (info: { menuItemId: string | number }, tab?: { id?: number }) => void): void };
     removeAll(): Promise<void>;
+  };
+  identity: {
+    // The extension's own redirect URL (Chrome: <id>.chromiumapp.org, Firefox:
+    // <uuid>.extensions.allizom.org). Resolves the final redirect after login.
+    getRedirectURL(path?: string): string;
+    launchWebAuthFlow(details: { url: string; interactive?: boolean }): Promise<string>;
   };
 };
 

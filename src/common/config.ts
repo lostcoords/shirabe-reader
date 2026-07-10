@@ -1,47 +1,72 @@
 import { ext } from "./browser.js";
+import { DEFAULT_KEYBINDS, type Keybind, type KeybindAction } from "./keybind.js";
 
-// How the hover popup is summoned. "hover" shows it whenever the pointer rests
-// on a word; "modifier" requires holding a key (Alt/Option) too, so casual
-// reading isn't interrupted — the jpd-breader default.
-export type PopupTrigger = "hover" | "modifier";
+// Injected at build time by build.mjs (esbuild `define`): the default API host —
+// https://shirabe.localhost for dev/watch builds, https://shirabe.org for shipped
+// builds. The user can still override it under Advanced.
+declare const __DEFAULT_API_BASE__: string;
+
+// Which key must be held while hovering a word to open the popup — Yomitan's
+// "scan modifier" model. "none" shows it on plain hover; otherwise hold Alt /
+// Ctrl / Shift / Meta so casual reading isn't interrupted.
+export type ScanModifier = "none" | "alt" | "ctrl" | "shift" | "meta";
 
 // User settings, persisted in extension-local storage. The API key is the only
 // secret; everything else is a preference. Read/written from the background
 // worker and the action popup (settings UI). The key is normally minted by the
 // device-login flow (see api.ts) rather than pasted.
 export type Config = {
-  apiBase: string; // e.g. https://api.shirabe.org  (no trailing slash)
+  apiBase: string; // build-time default below; no trailing slash (/v1 is on every host)
   apiKey: string;
   account: string; // display name of the connected account (for the popup header)
   scopes: string[]; // scopes the connected key carries (gates mining buttons)
-  locale: string; // gloss language for definitions: en / es / ja …
+  entitled: boolean; // owner may write to the SRS (Pro or a school member) — gates the whole reader
   showFurigana: boolean;
-  autoParse: boolean; // parse pages automatically vs. on demand
-  popupTrigger: PopupTrigger;
+  showParseButton: boolean; // floating corner "Parse" button on manual-parse pages
+  scanModifier: ScanModifier; // which key (if any) opens the hover popup
+  keybinds: Record<KeybindAction, Keybind>; // rebindable shortcuts (parse + grade/save/known)
+  autoParseHosts: string[]; // domains/patterns to parse automatically on load
+  disabledHosts: string[]; // domains/patterns where the reader is turned off entirely
 };
 
 export const DEFAULTS: Config = {
-  apiBase: "https://api.shirabe.org",
+  apiBase: __DEFAULT_API_BASE__,
   apiKey: "",
   account: "",
   scopes: [],
-  locale: "en",
+  entitled: false,
   showFurigana: true,
-  autoParse: false,
-  popupTrigger: "hover",
+  showParseButton: true,
+  scanModifier: "none",
+  keybinds: DEFAULT_KEYBINDS,
+  autoParseHosts: [],
+  disabledHosts: [],
 };
 
 const KEY = "config";
 
+// Merge stored settings over defaults, deep-merging `keybinds` so a newly-added
+// action keeps its default when older stored settings don't mention it.
+function withDefaults(stored: Partial<Config> | undefined): Config {
+  const config = { ...DEFAULTS, ...(stored ?? {}) };
+  config.keybinds = { ...DEFAULT_KEYBINDS, ...(stored?.keybinds ?? {}) };
+  return config;
+}
+
 export async function loadConfig(): Promise<Config> {
   const stored = await ext.storage.local.get(KEY);
-  return { ...DEFAULTS, ...((stored[KEY] as Partial<Config>) ?? {}) };
+  return withDefaults(stored[KEY] as Partial<Config> | undefined);
 }
 
 // Signed in iff we hold a key. Mining (save/grade/known) additionally needs the
 // WRITE_SRS scope — a read-only key still colors and defines words.
 export const isConnected = (config: Config): boolean => config.apiKey.length > 0;
 export const canWriteSrs = (config: Config): boolean => config.scopes.includes("WRITE_SRS");
+
+// Usable iff signed in AND SRS-entitled (Pro or a school member). Without an
+// entitlement the reader can neither mine nor colour words by what you know, so
+// the popup shows an upgrade prompt instead of the reader UI.
+export const isUsable = (config: Config): boolean => isConnected(config) && config.entitled;
 
 export async function saveConfig(config: Config): Promise<void> {
   await ext.storage.local.set({ [KEY]: config });

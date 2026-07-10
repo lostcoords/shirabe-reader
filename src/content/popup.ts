@@ -1,5 +1,5 @@
 import { send, type Rating } from "../common/messages.js";
-import type { Definition } from "../common/types.js";
+import type { Definition, Example, Sense, SentenceToken } from "../common/types.js";
 import { grade, GRADES, markKnown, save, type Outcome } from "./actions.js";
 
 // One reused popup, shown next to whichever word the pointer (or keyboard) is
@@ -28,11 +28,56 @@ function element(): HTMLElement {
   style.textContent = CSS;
   box = document.createElement("div");
   box.className = "sb-popup";
-  box.addEventListener("mouseenter", () => window.clearTimeout(hideTimer));
-  box.addEventListener("mouseleave", () => scheduleHide());
   root.append(style, box);
   document.body.append(host);
+  installHoverGuards();
   return box;
+}
+
+// The popup stays open while the pointer is over the *safe zone* — the hovered
+// word OR the popup itself (across the shadow boundary) — and closes shortly
+// after the pointer leaves both, or immediately on a click elsewhere. Tracking
+// the whole zone (rather than the popup's own mouseenter/leave) means a popup
+// that repositions when its content loads no longer vanishes under the pointer.
+let guardsInstalled = false;
+function installHoverGuards(): void {
+  if (guardsInstalled) return;
+  guardsInstalled = true;
+
+  document.addEventListener("mouseover", (e) => {
+    if (visible() && inSafeZone(e)) window.clearTimeout(hideTimer);
+  });
+  document.addEventListener("mouseout", (e) => {
+    // Only when actually crossing *out* of the safe zone (word/popup → elsewhere),
+    // so moving around inside the popup or over other page content doesn't churn.
+    if (visible() && inSafeZone(e) && !nodeInSafeZone(e.relatedTarget as Node | null)) scheduleHide();
+  });
+  // A click anywhere outside the popup (and not on a word) dismisses it now.
+  document.addEventListener(
+    "mousedown",
+    (e) => {
+      if (visible() && !inSafeZone(e)) dismiss();
+    },
+    true,
+  );
+}
+
+const visible = (): boolean => !!box?.classList.contains("sb-visible");
+
+// Is the event's pointer over the popup or a word? Uses composedPath so a hover
+// inside the popup's shadow DOM counts.
+function inSafeZone(e: Event): boolean {
+  if (host && e.composedPath().includes(host)) return true;
+  return !!(e.target as Element | null)?.closest?.(".sb-word");
+}
+
+// Same test for a bare node (a mouseout's relatedTarget), retargeted to the host
+// when the pointer moves into the popup's shadow root.
+function nodeInSafeZone(node: Node | null): boolean {
+  if (!node) return false;
+  if (host && (node === host || host.contains(node))) return true;
+  const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+  return !!el?.closest?.(".sb-word");
 }
 
 export function scheduleShow(word: HTMLElement): void {
@@ -50,12 +95,19 @@ export function showNow(word: HTMLElement): void {
 
 export function scheduleHide(): void {
   window.clearTimeout(showTimer);
-  hideTimer = window.setTimeout(hide, 200);
+  hideTimer = window.setTimeout(hide, 250); // grace to cross the gap onto the popup
 }
 
 function hide(): void {
   box?.classList.remove("sb-visible");
   currentWord = null;
+}
+
+// Close now (a click outside): cancel any pending show/hide too.
+function dismiss(): void {
+  window.clearTimeout(showTimer);
+  window.clearTimeout(hideTimer);
+  hide();
 }
 
 async function show(word: HTMLElement): Promise<void> {
@@ -88,16 +140,24 @@ function position(word: HTMLElement): void {
   host.style.left = "0px";
   host.style.top = "0px";
   const { width, height } = host.getBoundingClientRect();
+  const viewW = document.documentElement.clientWidth;
+  const viewH = document.documentElement.clientHeight;
 
-  let left = window.scrollX + rect.left;
-  left = Math.min(left, window.scrollX + document.documentElement.clientWidth - width - margin);
-  left = Math.max(left, window.scrollX + margin);
+  let left = rect.left;
+  left = Math.min(left, viewW - width - margin);
+  left = Math.max(left, margin);
 
-  // Prefer below the word; flip above when there isn't room.
-  const below = rect.bottom + margin;
-  const top = below + height > document.documentElement.clientHeight ? rect.top - height - margin : below;
+  // Prefer below the word; flip above only when there's genuinely more room
+  // there. The popup's own max-height keeps it shorter than the viewport, so we
+  // then clamp it fully into view — the headword + reading at the top is always
+  // visible, and long entries scroll inside instead of spilling off-screen.
+  const roomBelow = viewH - rect.bottom - margin;
+  const roomAbove = rect.top - margin;
+  let top = rect.bottom + margin;
+  if (height > roomBelow && roomAbove > roomBelow) top = rect.top - height - margin;
+  top = Math.max(margin, Math.min(top, viewH - height - margin));
 
-  host.style.left = `${left}px`;
+  host.style.left = `${window.scrollX + left}px`;
   host.style.top = `${window.scrollY + top}px`;
   host.style.visibility = "";
 }
@@ -123,9 +183,34 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
     return rows;
   }
 
+  // A scrollable body (pinned head + actions) mirroring the shirabe.org card.
+  const body = document.createElement("div");
+  body.className = "sb-body";
+  const badges = badgeRow(def);
+  if (badges) body.append(badges);
+  if (def.pitch.length && def.reading) body.append(pitchRows(def.pitch, def.reading));
+  body.append(sensesList(def.senses));
+  const examples = examplesBlock(def.examples);
+  if (examples) body.append(examples);
+
+  const rows: Node[] = [headRow(def), body];
+  if (canWrite) rows.push(actions(word));
+  return rows;
+}
+
+// Headword (links to its shirabe.org page) + reading + a play-audio button.
+function headRow(def: Definition): Node {
   const head = document.createElement("div");
   head.className = "sb-popup-head";
-  head.textContent = def.headword;
+
+  const link = document.createElement("a");
+  link.className = "sb-headword";
+  link.href = def.url;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = def.headword;
+  head.append(link);
+
   if (def.reading) {
     const reading = document.createElement("span");
     reading.className = "sb-popup-reading";
@@ -133,55 +218,203 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
     head.append(reading);
   }
 
+  if (def.reading || def.pitch.length) {
+    const audio = button("🔊", "sb-audio", "", () => playAudio(def.pitch[0]?.audioUrl ?? null, def.reading ?? def.headword));
+    audio.title = "Play pronunciation";
+    head.append(audio);
+  }
+  return head;
+}
+
+// Common / JLPT / frequency badges, as on the web card. Null when none apply.
+function badgeRow(def: Definition): Node | null {
+  const items: Array<{ text: string; cls: string }> = [];
+  if (def.common) items.push({ text: "Common", cls: "sb-badge-common" });
+  if (def.jlpt) items.push({ text: def.jlpt, cls: "sb-badge-jlpt" });
+  if (def.frequency != null) items.push({ text: `#${def.frequency}`, cls: "sb-badge-freq" });
+  if (!items.length) return null;
+
+  const row = document.createElement("div");
+  row.className = "sb-badges";
+  for (const b of items) row.append(chip(`sb-badge ${b.cls}`, b.text));
+  return row;
+}
+
+// One NHK-style pitch graph + [downstep] per accent pattern.
+function pitchRows(pitch: Definition["pitch"], reading: string): Node {
+  const wrap = document.createElement("div");
+  wrap.className = "sb-pitch";
+  for (const p of pitch) {
+    const row = document.createElement("div");
+    row.className = "sb-pitch-item";
+    row.append(pitchGraph(reading, p.downstep), chip("sb-pitch-num", `[${p.downstep}]`));
+    wrap.append(row);
+  }
+  return wrap;
+}
+
+// The mora overline diagram (heiban L H H…; atamadaka H L L…; else H to the
+// downstep). Mirrors app/views/components/dictionary/_pitch_accent.html.erb.
+const SMALL_KANA = "ゃゅょャュョぁぃぅぇぉァィゥェォ";
+const SVG_NS = "http://www.w3.org/2000/svg";
+function pitchGraph(reading: string, downstep: number): SVGSVGElement {
+  const morae: string[] = [];
+  for (const c of reading) {
+    if (SMALL_KANA.includes(c) && morae.length) morae[morae.length - 1] += c;
+    else morae.push(c);
+  }
+  const n = morae.length;
+  const high = (i: number) => (downstep === 0 ? i > 0 : downstep === 1 ? i === 0 : i > 0 && i < downstep);
+  const step = 22;
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${n * step + 16} 46`);
+  svg.setAttribute("class", "sb-pitch-svg");
+  const x = (i: number) => 8 + i * step + step / 2;
+  const y = (i: number) => (high(i) ? 10 : 30);
+  for (let i = 0; i < n; i++) {
+    if (i < n - 1) {
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("x1", `${x(i)}`);
+      line.setAttribute("y1", `${y(i)}`);
+      line.setAttribute("x2", `${x(i + 1)}`);
+      line.setAttribute("y2", `${y(i + 1)}`);
+      svg.append(line);
+    }
+    const dot = document.createElementNS(SVG_NS, "circle");
+    dot.setAttribute("cx", `${x(i)}`);
+    dot.setAttribute("cy", `${y(i)}`);
+    dot.setAttribute("r", "3");
+    const label = document.createElementNS(SVG_NS, "text");
+    label.setAttribute("x", `${x(i)}`);
+    label.setAttribute("y", "44");
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("class", "sb-pitch-mora");
+    label.textContent = morae[i];
+    svg.append(dot, label);
+  }
+  return svg;
+}
+
+// Numbered senses: source label (lang · dict), POS chips, misc/field/dialect
+// tags, then glosses — the same anatomy as a web meaning.
+function sensesList(senses: Sense[]): Node {
   const list = document.createElement("ol");
   list.className = "sb-senses";
-  for (const sense of def.senses.slice(0, 6)) {
+  for (const sense of senses.slice(0, 8)) {
     const li = document.createElement("li");
-    if (sense.partsOfSpeech.length) {
-      const pos = document.createElement("span");
-      pos.className = "sb-pos";
-      pos.textContent = sense.partsOfSpeech.join(", ");
-      li.append(pos);
+    if (sense.source) li.append(block("sb-source", sense.source));
+    if (sense.partsOfSpeech.length) li.append(block("sb-pos", sense.partsOfSpeech.join(", ")));
+    if (sense.tags.length) {
+      const tags = document.createElement("i");
+      tags.className = "sb-tags";
+      tags.textContent = `${sense.tags.join(", ")} `;
+      li.append(tags);
     }
     li.append(sense.glosses.join("; "));
     list.append(li);
   }
-
-  const rows: Node[] = [head, list];
-  if (canWrite) rows.push(actions(word));
-  return rows;
+  return list;
 }
 
-// Mining + review controls. The grade row both mines a new word and reviews an
-// existing one (POST /v1/srs/saves with a rating). Save adds without grading;
-// Known parks it. Each recolours the word in place and surfaces any error
+// A couple of example sentences with translations (from include=sentences).
+function examplesBlock(examples: Example[]): Node | null {
+  if (!examples.length) return null;
+  const wrap = document.createElement("div");
+  wrap.className = "sb-examples";
+  for (const ex of examples) {
+    const fig = document.createElement("div");
+    fig.className = "sb-example";
+    const jp = document.createElement("div");
+    jp.className = "sb-example-jp";
+    jp.lang = "ja";
+    // Render the sentence as clickable word tokens (searched word highlighted);
+    // fall back to plain text if the server didn't tokenize it.
+    if (ex.tokens.length) {
+      for (const tok of ex.tokens) jp.append(sentenceToken(tok));
+    } else {
+      jp.textContent = ex.japanese;
+    }
+    fig.append(jp);
+    if (ex.translation) fig.append(block("sb-example-tr", ex.translation));
+    wrap.append(fig);
+  }
+  return wrap;
+}
+
+// One example-sentence token: a content word links to its shirabe.org page (new
+// tab), the searched word is highlighted, and particles stay plain text.
+function sentenceToken(tok: SentenceToken): Node {
+  if (!tok.url) return document.createTextNode(tok.surface);
+  const link = document.createElement("a");
+  link.className = tok.matched ? "sb-tok sb-tok-match" : "sb-tok";
+  link.href = tok.url;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = tok.surface;
+  return link;
+}
+
+// Play the pre-generated clip; fall back to the browser's speech synth when
+// there's no file (dev, or a word we never generated audio for).
+function playAudio(url: string | null, reading: string): void {
+  if (url) {
+    const audio = new Audio(url);
+    audio.addEventListener("error", () => speak(reading));
+    audio.play().catch(() => speak(reading));
+  } else {
+    speak(reading);
+  }
+}
+
+function speak(reading: string): void {
+  try {
+    const utterance = new SpeechSynthesisUtterance(reading);
+    utterance.lang = "ja-JP";
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utterance);
+  } catch {
+    // No speech synthesis available — nothing to play.
+  }
+}
+
+// Mining + review controls, gated by whether the word is already a card. An
+// untracked word (state "none") offers Save + Known; once it's a card the grade
+// row reviews it. Each action recolours every occurrence and surfaces any error
 // (e.g. the Pro card cap) inline rather than pretend.
-function actions(word: HTMLElement): Node {
+function actions(word: HTMLElement): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "sb-actions";
+  renderActions(word, wrap);
+  return wrap;
+}
 
-  const grades = document.createElement("div");
-  grades.className = "sb-grades";
-  for (const r of [1, 2, 3, 4] as Rating[]) {
-    grades.append(button(`${GRADES[r]}`, `sb-grade sb-g${r}`, `${r}`, () => run(wrap, () => grade(word, r))));
+function renderActions(word: HTMLElement, wrap: HTMLElement): void {
+  wrap.replaceChildren();
+  const saved = (word.dataset.state ?? "none") !== "none";
+
+  if (saved) {
+    const grades = document.createElement("div");
+    grades.className = "sb-grades";
+    for (const r of [1, 2, 3, 4] as Rating[]) {
+      grades.append(button(`${GRADES[r]}`, `sb-grade sb-g${r}`, `${r}`, () => run(word, wrap, () => grade(word, r))));
+    }
+    wrap.append(grades);
   }
 
   const extra = document.createElement("div");
   extra.className = "sb-extra";
-  extra.append(
-    button("＋ Save", "sb-btn-save", "S", () => run(wrap, () => save(word))),
-    button("✓ Known", "sb-btn-known", "K", () => run(wrap, () => markKnown(word))),
-  );
+  if (!saved) extra.append(button("＋ Save", "sb-btn-save", "S", () => run(word, wrap, () => save(word))));
+  extra.append(button("✓ Known", "sb-btn-known", "K", () => run(word, wrap, () => markKnown(word))));
+  wrap.append(extra);
 
   const note = document.createElement("span");
   note.className = "sb-feedback";
-
-  wrap.append(grades, extra, note);
-  return wrap;
+  wrap.append(note);
 }
 
-async function run(wrap: HTMLElement, action: () => Promise<Outcome>): Promise<void> {
+async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<Outcome>): Promise<void> {
   const { ok, message } = await action();
+  if (ok) renderActions(word, wrap); // state changed → re-render (Save → grade row)
   const note = wrap.querySelector<HTMLElement>(".sb-feedback");
   if (note) {
     note.textContent = message;
@@ -189,15 +422,33 @@ async function run(wrap: HTMLElement, action: () => Promise<Outcome>): Promise<v
   }
 }
 
+// Small DOM helpers.
+function block(className: string, text: string): HTMLElement {
+  const el = document.createElement("div");
+  el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+function chip(className: string, text: string): HTMLElement {
+  const el = document.createElement("span");
+  el.className = className;
+  el.textContent = text;
+  return el;
+}
+
 function button(label: string, className: string, hint: string, onClick: () => void): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.className = `sb-btn ${className}`;
-  btn.title = `Shortcut: ${hint}`;
   const text = document.createElement("span");
   text.textContent = label;
-  const kbd = document.createElement("kbd");
-  kbd.textContent = hint;
-  btn.append(text, kbd);
+  btn.append(text);
+  if (hint) {
+    btn.title = `Shortcut: ${hint}`;
+    const kbd = document.createElement("kbd");
+    kbd.textContent = hint;
+    btn.append(kbd);
+  }
   btn.addEventListener("click", onClick);
   return btn;
 }
@@ -213,8 +464,11 @@ const CSS = `
 }
 .sb-popup {
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   max-width: 360px;
   min-width: 200px;
+  max-height: min(60vh, 460px);
   padding: 12px 14px;
   background: #ffffff;
   color: #1f2937;
@@ -231,18 +485,63 @@ const CSS = `
 }
 .sb-popup.sb-visible { opacity: 1; visibility: visible; transform: translateY(0); }
 
-.sb-popup-head { font-size: 20px; font-weight: 700; color: #111827; }
-.sb-popup-reading { margin-left: 8px; font-size: 14px; font-weight: 500; color: #4f46e5; }
+/* Head + actions stay pinned; the body (badges, pitch, senses, examples)
+   scrolls (Yomitan-style) so the reading is always visible. min-height:0 lets
+   the flex child shrink below its content height. */
+.sb-popup-head { flex: 0 0 auto; display: flex; align-items: baseline; gap: 8px; font-size: 20px; font-weight: 700; }
+.sb-headword { color: #111827; text-decoration: none; cursor: pointer; }
+.sb-headword:hover { color: #4f46e5; text-decoration: underline; }
+.sb-popup-reading { font-size: 14px; font-weight: 500; color: #4f46e5; }
 .sb-popup-message { color: #6b7280; }
 
-.sb-senses { margin: 8px 0 0; padding-left: 18px; }
+.sb-body { flex: 0 1 auto; min-height: 0; overflow-y: auto; margin-top: 8px; }
+
+.sb-btn.sb-audio {
+  margin-left: auto; align-self: center; color: inherit; background: transparent;
+  padding: 2px 6px; border-radius: 8px; font-size: 15px; line-height: 1;
+}
+.sb-btn.sb-audio:hover { background: #f3f4f6; }
+
+.sb-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.sb-badge {
+  font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+.sb-badge-common { background: #dcfce7; color: #166534; }
+.sb-badge-jlpt { background: #e0e7ff; color: #3730a3; }
+.sb-badge-freq { background: #f3f4f6; color: #4b5563; font-variant-numeric: tabular-nums; }
+
+.sb-pitch { margin-bottom: 8px; }
+.sb-pitch-item { display: flex; align-items: center; gap: 8px; }
+.sb-pitch-svg { height: 46px; }
+.sb-pitch-svg line { stroke: #4f46e5; stroke-width: 2; }
+.sb-pitch-svg circle { fill: #4f46e5; }
+.sb-pitch-mora { fill: #6b7280; font-size: 11px; font-family: inherit; }
+.sb-pitch-num { font-size: 12px; font-weight: 600; color: #9ca3af; font-variant-numeric: tabular-nums; }
+
+.sb-senses { margin: 0; padding-left: 18px; }
 .sb-senses li { margin: 4px 0; }
+.sb-source { font-size: 11px; font-weight: 600; color: #6366f1; }
 .sb-pos {
   display: block; font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.04em; color: #9ca3af;
 }
+.sb-tags { color: #9ca3af; }
 
-.sb-actions { margin-top: 12px; padding-top: 10px; border-top: 1px solid #f3f4f6; }
+.sb-examples { margin-top: 10px; padding-top: 8px; border-top: 1px solid #f3f4f6; }
+.sb-example { margin: 6px 0; }
+.sb-example-jp { color: #111827; }
+.sb-example-tr { font-size: 13px; color: #6b7280; }
+/* Clickable sentence tokens: subtle until hovered; the searched word tinted. */
+.sb-tok {
+  color: inherit; text-decoration: none; cursor: pointer;
+  border-radius: 3px; text-underline-offset: 2px;
+}
+.sb-tok:hover { text-decoration: underline; background: #f3f4f6; }
+.sb-tok-match { color: #4f46e5; background: #eef2ff; }
+.sb-tok-match:hover { background: #e0e7ff; }
+
+.sb-actions { flex: 0 0 auto; margin-top: 12px; padding-top: 10px; border-top: 1px solid #f3f4f6; }
 .sb-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .sb-extra { display: flex; gap: 6px; margin-top: 6px; }
 .sb-extra .sb-btn { flex: 1; }

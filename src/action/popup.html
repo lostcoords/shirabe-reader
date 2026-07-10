@@ -12,23 +12,29 @@
       <h1>Shirabe Reader</h1>
     </header>
 
-    <!-- Connection card: swaps between connected / connecting / disconnected. -->
+    <!-- Connection card: swaps between connected / connecting / unentitled / disconnected. -->
     <section id="account" class="card" hidden>
-      <!-- connected -->
+      <!-- connected + subscribed -->
       <div data-state="connected" hidden>
         <p class="account-line">
           Connected<span id="accountName"></span>
         </p>
-        <button id="disconnect" class="ghost">Disconnect</button>
+        <button class="disconnect ghost">Disconnect</button>
       </div>
 
-      <!-- connecting: show the code to approve in the page we opened -->
+      <!-- connecting: an auth window is open for approval -->
       <div data-state="connecting" hidden>
-        <p class="muted">Approve this code in the Shirabe tab we just opened:</p>
-        <p class="code" id="userCode"></p>
-        <p class="muted">
-          Waiting for approval… <a id="verifyLink" href="#" target="_blank" rel="noopener">open again</a>
+        <p class="muted">Opening sign-in… approve access in the window that just opened, then reopen this popup.</p>
+      </div>
+
+      <!-- connected but no active subscription: the reader needs one, so nudge to upgrade -->
+      <div data-state="unentitled" hidden>
+        <p class="account-line">
+          Signed in<span id="unentitledName"></span>
         </p>
+        <p class="muted">The Reader needs an active Shirabe subscription to colour words and mine cards.</p>
+        <a id="upgradeLink" class="primary" href="#" target="_blank" rel="noopener">Upgrade to Pro</a>
+        <button class="disconnect ghost">Disconnect</button>
       </div>
 
       <!-- disconnected -->
@@ -38,44 +44,73 @@
       </div>
     </section>
 
-    <button id="parse" class="primary">Parse this page</button>
+    <!-- The reader itself — parse + preferences — is shown only once signed in AND
+         subscribed (see popup.ts). Hidden by default so it never flashes. -->
+    <div id="reader" hidden>
+      <button id="parse" class="primary">Parse this page</button>
 
-    <form id="prefs">
-      <label>
-        Definition language
-        <select id="locale">
-          <option value="en">English</option>
-          <option value="es">Español</option>
-          <option value="ja">日本語</option>
+      <!-- Per-site parsing mode for the active tab's domain. -->
+      <label class="site" id="siteRow" hidden>
+        On this site <span id="siteHost" class="site-host"></span>
+        <select id="siteMode">
+          <option value="manual">Manual — button &amp; shortcut</option>
+          <option value="auto">Auto-parse on load</option>
+          <option value="off">Off</option>
         </select>
       </label>
 
-      <fieldset class="seg">
-        <legend>Show popup on</legend>
-        <label class="row"><input type="radio" name="popupTrigger" value="hover" /> Hover</label>
-        <label class="row"><input type="radio" name="popupTrigger" value="modifier" /> Alt&nbsp;/&nbsp;Option&nbsp;+&nbsp;hover</label>
-      </fieldset>
+      <form id="prefs">
+        <label>
+          Open popup on hover
+          <select id="scanModifier">
+            <option value="none">Always</option>
+            <option value="alt">Hold Alt / Option</option>
+            <option value="ctrl">Hold Ctrl</option>
+            <option value="shift">Hold Shift</option>
+            <option value="meta">Hold ⌘ Cmd</option>
+          </select>
+        </label>
 
-      <label class="row">
-        <input id="showFurigana" type="checkbox" />
-        Show furigana
-      </label>
-      <label class="row">
-        <input id="autoParse" type="checkbox" />
-        Parse pages automatically
-      </label>
-    </form>
+        <label class="row">
+          <input id="showFurigana" type="checkbox" />
+          Show furigana
+        </label>
+        <label class="row">
+          <input id="showParseButton" type="checkbox" />
+          Show a Parse button on pages
+        </label>
+      </form>
 
-    <details id="advanced">
+      <details id="shortcuts">
+        <summary>Keyboard shortcuts</summary>
+        <div id="keybinds"></div>
+        <p class="muted">Click a shortcut, then press keys. Backspace clears it.</p>
+      </details>
+
+      <p class="muted prefs-note">
+        Definition language &amp; dictionaries follow your
+        <a id="settingsLink" href="#" target="_blank" rel="noopener">Shirabe settings</a>.
+      </p>
+    </div>
+
+    <details id="advanced" hidden>
       <summary>Advanced</summary>
       <form id="advancedForm">
         <label>
           API server
-          <input id="apiBase" type="url" placeholder="https://api.shirabe.org" />
+          <input id="apiBase" type="url" placeholder="https://shirabe.org" />
         </label>
         <label>
           API key (manual)
           <input id="apiKey" type="password" placeholder="Paste a key instead of connecting" autocomplete="off" />
+        </label>
+        <label>
+          Always auto-parse these sites
+          <textarea id="autoParseHosts" rows="2" placeholder="one domain per line, e.g. example.com"></textarea>
+        </label>
+        <label>
+          Never parse on these sites
+          <textarea id="disabledHosts" rows="2" placeholder="one domain per line"></textarea>
         </label>
         <button type="submit" class="ghost">Save advanced</button>
       </form>

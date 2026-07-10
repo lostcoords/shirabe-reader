@@ -9,7 +9,7 @@
     "48": "icons/logo_48.png",
     "128": "icons/logo_128.png"
   },
-  "permissions": ["storage", "contextMenus", "activeTab", "scripting"],
+  "permissions": ["storage", "contextMenus", "activeTab", "scripting", "identity"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_title": "Shirabe Reader",

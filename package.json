@@ -10,10 +10,13 @@
     "build:chrome": "node build.mjs chrome",
     "watch": "node build.mjs firefox --watch",
     "watch:chrome": "node build.mjs chrome --watch",
+    "dev": "node build.mjs firefox --watch --serve",
+    "dev:chrome": "node build.mjs chrome --watch --serve",
     "check": "tsc --noEmit"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "web-ext": "^8.0.0"
   }
 }
