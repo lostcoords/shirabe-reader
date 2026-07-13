@@ -34,6 +34,10 @@ What works today against the live `/v1` API:
   `1`–`4`, `s`, `k` act on whatever word you're hovering, popup or not.
 - **On-demand parsing** via the toolbar button, the right-click menu
   ("Parse this page" / "Parse selection"), or automatic on page load.
+- **asbplayer subtitles** — when [asbplayer](https://github.com/asbplayer/asbplayer)
+  is injecting JP subs (streaming or `app.asbplayer.dev`), lines are tokenized
+  for hover/save the same way as page text. No Anki required for lookups; clip
+  mining still goes through asbplayer→Anki until a Shirabe media ingress lands.
 
 ## Build
 
@@ -154,8 +158,8 @@ reference study of jiten/JitenReader and the phased build plan, lives in
   of per text node.
 - Paragraph/fragment rewrite + array `/v1/parse` (correct tokenization across
   inline elements, shared vocab) — see the parsing-engine doc.
-- Custom parsers via observer primitives — **YouTube captions first**, then
-  Netflix / manga, reusing this lookup core.
+- Custom parsers via observer primitives — **YouTube captions** and **asbplayer**
+  ship; broader host-rules / manga next.
 - Pitch-accent + frequency in the popup (via `POST /v1/parse` `include`).
 - An advanced mining dialog (editable sentence + translation) and per-deck
   targeting.

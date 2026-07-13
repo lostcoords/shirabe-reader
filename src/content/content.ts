@@ -5,6 +5,7 @@ import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
 import { grade, markKnown, save, type Outcome } from "./actions.js";
 import { hideParseButton, showParseButton } from "./parse-button.js";
 import { observeLazy, parse } from "./parser.js";
+import { startAsbplayer } from "./parsers/asbplayer.js";
 import { startYouTubeCaptions } from "./parsers/youtube.js";
 import { scheduleShow, setCanWrite, showNow } from "./popup.js";
 import { toast } from "./toast.js";
@@ -17,6 +18,7 @@ let rules: HostRule[] = [];
 let mode: "auto" | "manual" | "off" = "manual";
 let rule: HostRule | undefined;
 let parsed = false; // has this page been parsed? (don't re-offer the button after)
+const isTopFrame = window === window.top;
 
 function apply(config: Config): void {
   current = config;
@@ -31,6 +33,18 @@ function apply(config: Config): void {
   });
   mode = resolution.mode;
   rule = resolution.rule;
+
+  // asbplayer injects subtitle text into arbitrary video hosts (and iframes).
+  // Always watch when connected — no-op until `.asbplayer-offscreen` appears.
+  // Not an exclusive host rule: Wikipedia/Mokuro auto-parse still run above.
+  if (isConnected(config) && mode !== "off") startAsbplayer(showFurigana);
+
+  // Subframes only run the asbplayer watcher (above). Host-rule auto-parse and
+  // the floating button stay top-frame so nested ads/widgets don't get UI.
+  if (!isTopFrame) {
+    hideParseButton();
+    return;
+  }
 
   // Auto sites parse on load (once); manual sites offer the floating button;
   // off sites do nothing at all. A rule may name a dedicated custom parser
@@ -53,7 +67,7 @@ function startCustomParser(custom: NonNullable<HostRule["custom"]>): void {
 // on manual-mode pages, and only until the page has been parsed. Hidden on auto
 // and off pages, and when the user turns it off (showParseButton).
 function refreshParseButton(): void {
-  if (!current) return;
+  if (!current || !isTopFrame) return;
   const wanted = mode === "manual" && isConnected(current) && current.showParseButton && !parsed;
   if (wanted) showParseButton(parsePage);
   else hideParseButton();

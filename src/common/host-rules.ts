@@ -36,6 +36,9 @@ export const BUILTIN_RULES: HostRule[] = [
   { host: "*://www3.nhk.or.jp/news/easy/*" }, // NHK News Web Easy
   // ── Video captions (dedicated parser) ──
   { host: ["*://www.youtube.com/*", "*://m.youtube.com/*"], custom: "youtube" }, // on-screen JP subtitles
+  // asbplayer local player UI (subtitle list / app chrome). Streaming-site
+  // overlays are handled separately by parsers/asbplayer.ts on every host.
+  { host: ["*://app.asbplayer.dev/*", "*://*.asbplayer.dev/*"] },
 ];
 
 const REMOTE_KEY = "hostRules"; // storage cache of server-refreshed rules

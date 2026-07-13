@@ -4,6 +4,13 @@
    selectors are `sb-` prefixed and low-specificity so we colour our own words
    without bleeding into the host page. */
 
+/* asbplayer: keep the subtitle overlay above the video chrome so hover/mine
+   hits our .sb-word wraps (popup itself is z-index max in popup.ts). */
+.asbplayer-subtitles-container-bottom,
+.asbplayer-subtitles-container-top {
+  z-index: 2147483646;
+}
+
 .sb-word {
   cursor: help;
   border-radius: 3px;
