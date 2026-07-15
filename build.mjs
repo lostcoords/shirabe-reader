@@ -15,7 +15,7 @@
 import * as esbuild from "esbuild";
 import { spawn } from "node:child_process";
 import { watch as watchFiles } from "node:fs";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,6 +23,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 const target = process.argv[2] ?? "firefox";
 const watch = process.argv.includes("--watch");
 const serve = process.argv.includes("--serve");
+const baseManifest = JSON.parse(await readFile(join(root, "manifest.base.json"), "utf8"));
 
 // A Japanese page to open on launch so the dev browser is ready to test against.
 const START_URL = "https://ja.wikipedia.org/wiki/日本語";
@@ -32,7 +33,10 @@ if (!["firefox", "chrome"].includes(target)) {
   process.exit(1);
 }
 
-const outdir = join(root, "dist", target);
+const outputArg = process.argv.find((arg) => arg.startsWith("--outdir="));
+const outdir = outputArg
+  ? join(root, outputArg.slice("--outdir=".length))
+  : join(root, "dist", target);
 // A persistent, per-target dev profile so login + connection survive restarts
 // (gitignored). First run: log in once; every run after reuses it.
 const profileDir = join(root, ".web-ext-profile", target);
@@ -44,6 +48,8 @@ const entries = {
   background: "src/background/background.ts",
   content: "src/content/content.ts",
   "action/popup": "src/action/popup.ts",
+  "options/options": "src/options/options.ts",
+  "reader/reader": "src/reader/reader.ts",
 };
 
 const buildOptions = {
@@ -60,16 +66,31 @@ const buildOptions = {
   // production for shipped one-shot builds. Overridable at runtime via Advanced.
   define: {
     __DEFAULT_API_BASE__: JSON.stringify(watch ? "https://shirabe.localhost" : "https://shirabe.org"),
+    __EXTENSION_VERSION__: JSON.stringify(baseManifest.version),
   },
 };
 
 async function manifest() {
-  const base = JSON.parse(await readFile(join(root, "manifest.base.json"), "utf8"));
+  const base = structuredClone(baseManifest);
+
+  // Store packages must never request a development origin. Watch builds add
+  // the local Rails host because their baked-in API default points there.
+  if (watch) base.host_permissions.push("https://shirabe.localhost/*");
 
   if (target === "firefox") {
     base.background = { scripts: ["background.js"] };
     base.browser_specific_settings = {
-      gecko: { id: "reader@shirabe.org", strict_min_version: "115.0" },
+      gecko: {
+        // Keep temporary/watch storage isolated from the signed production
+        // extension. A stable dev ID preserves it across npm run dev restarts,
+        // while a broken dev origin can never poison a user's release data.
+        id: watch ? "reader-dev@shirabe.org" : "reader@shirabe.org",
+        strict_min_version: "142.0",
+        data_collection_permissions: {
+          required: ["authenticationInfo", "browsingActivity", "searchTerms", "websiteContent"],
+        },
+      },
+      gecko_android: {},
     };
   } else {
     base.background = { service_worker: "background.js" };
@@ -79,15 +100,33 @@ async function manifest() {
 }
 
 async function copyStatic() {
-  await cp(join(root, "src/content/content.css"), join(outdir, "content.css"));
-  await cp(join(root, "src/action/popup.html"), join(outdir, "action/popup.html"));
-  await cp(join(root, "src/action/popup.css"), join(outdir, "action/popup.css"));
+  // copyFile overwrites in place. fs.cp unlinks an existing destination first,
+  // which races with web-ext's reload watcher and can leave a temporarily
+  // missing asset (or throw ENOENT when another reload observes that gap).
+  await copyFile(join(root, "src/content/content.css"), join(outdir, "content.css"));
+  await copyFile(join(root, "src/action/popup.html"), join(outdir, "action/popup.html"));
+  await copyFile(join(root, "src/action/popup.css"), join(outdir, "action/popup.css"));
+  await copyFile(join(root, "src/options/options.html"), join(outdir, "options/options.html"));
+  await copyFile(join(root, "src/options/options.css"), join(outdir, "options/options.css"));
+  await copyFile(join(root, "src/reader/reader.html"), join(outdir, "reader/reader.html"));
+  await copyFile(join(root, "src/reader/reader.css"), join(outdir, "reader/reader.css"));
+  await copyFile(join(root, "src/licenses.html"), join(outdir, "licenses.html"));
+  await copyFile(join(root, "node_modules/pdfjs-dist/LICENSE"), join(outdir, "licenses/pdfjs-Apache-2.0.txt"));
+  await copyFile(join(root, "node_modules/@noble/hashes/LICENSE"), join(outdir, "licenses/noble-hashes-MIT.txt"));
+  // The extension is GPL-3.0 (Yomitan-derived deinflection); ship its terms and
+  // attribution with the package rather than only in the repository.
+  await copyFile(join(root, "LICENSE"), join(outdir, "licenses/gpl-3.0.txt"));
+  await copyFile(join(root, "NOTICE"), join(outdir, "licenses/NOTICE.txt"));
+  await copyFile(join(root, "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"), join(outdir, "reader/pdf.worker.min.mjs"));
   await cp(join(root, "src/icons"), join(outdir, "icons"), { recursive: true });
 }
 
 async function buildAll() {
   await rm(outdir, { recursive: true, force: true });
   await mkdir(join(outdir, "action"), { recursive: true });
+  await mkdir(join(outdir, "options"), { recursive: true });
+  await mkdir(join(outdir, "reader"), { recursive: true });
+  await mkdir(join(outdir, "licenses"), { recursive: true });
 
   if (watch) {
     const ctx = await esbuild.context(buildOptions);
@@ -108,12 +147,20 @@ async function buildAll() {
 // restart too.
 function watchStatic() {
   let timer;
+  let sync = Promise.resolve();
   const resync = () => {
     clearTimeout(timer);
-    timer = setTimeout(async () => {
-      await manifest();
-      await copyStatic();
-      console.log("↻ synced static assets + manifest");
+    timer = setTimeout(() => {
+      // File watchers can fire again while an earlier async copy is still in
+      // progress. Serialize runs so two fs.cp calls never race to replace the
+      // same destination and crash the dev watcher with an ENOENT unlink.
+      sync = sync.catch(() => undefined).then(async () => {
+        await manifest();
+        await copyStatic();
+        console.log("↻ synced static assets + manifest");
+      }).catch((error) => {
+        console.error("✗ static asset sync failed", error);
+      });
     }, 60);
   };
   watchFiles(join(root, "src"), { recursive: true }, (_event, file) => {
@@ -146,7 +193,7 @@ async function startWebExt() {
     // the rb-portless dev CA and every https://shirabe.localhost request fails.
     // Enterprise-roots pulls in the OS trust store (where `rb-portless trust` put
     // the CA). Chrome uses the keychain already, so this is Firefox-only.
-    args.push("--firefox-profile", profileDir, "--pref", "security.enterprise_roots.enabled=true");
+    args.push("--firefox-profile", profileDir, "--pref", "security.enterprise_roots.enabled=true", "--devtools");
   } else {
     args.push("--chromium-profile", profileDir);
   }

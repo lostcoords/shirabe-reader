@@ -1,3 +1,4 @@
 node_modules/
 dist/
+artifacts/
 .web-ext-profile/

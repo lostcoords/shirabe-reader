@@ -9,8 +9,29 @@
     "48": "icons/logo_48.png",
     "128": "icons/logo_128.png"
   },
-  "permissions": ["storage", "contextMenus", "activeTab", "scripting", "identity"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "contextMenus",
+    "activeTab",
+    "scripting",
+    "identity"
+  ],
+  "host_permissions": ["https://shirabe.org/*"],
+  "optional_host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
   "action": {
     "default_title": "Shirabe Reader",
     "default_popup": "action/popup.html",
@@ -21,18 +42,9 @@
       "128": "icons/logo_128.png"
     }
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["content.css"],
-      "run_at": "document_idle",
-      "all_frames": true
-    }
-  ],
   "web_accessible_resources": [
     {
-      "resources": ["content.css"],
+      "resources": ["content.css", "reader/pdf.worker.min.mjs"],
       "matches": ["<all_urls>"]
     }
   ]

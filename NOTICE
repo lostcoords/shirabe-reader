@@ -1,0 +1,44 @@
+Shirabe Reader
+Copyright (c) Shirabe
+
+This extension bundles a Japanese deinflection rule set and ports its algorithm
+from Yomitan, which are distributed under the GNU General Public License v3.
+Because of this lineage, Shirabe Reader itself is licensed under GPL-3.0 (see
+LICENSE). This applies to the browser extension only — it is the work that is
+distributed. The Shirabe web application and API are separate works, are not
+conveyed with this extension, and are not covered by the GPL.
+
+-------------------------------------------------------------------------------
+Yomitan
+-------------------------------------------------------------------------------
+The deinflection rule set vendored at src/common/resources/japanese-transforms.json
+and the transformer in src/common/deinflect.ts are ported from Yomitan's Japanese
+language transforms (ext/js/language/ja/japanese-transforms.js) and its
+LanguageTransformer, by way of daidai's Ruby port.
+
+    Yomitan — https://github.com/yomidevs/yomitan
+    Licensed under the GNU General Public License v3.
+
+-------------------------------------------------------------------------------
+daidai
+-------------------------------------------------------------------------------
+The vendored rule set and the inflection labels in src/common/deinflect.ts are
+taken from daidai, which is the same gem the Shirabe website uses to name
+inflections — so a chain reads identically in the extension and on the page.
+
+    daidai — https://github.com/davafons/daidai
+    Licensed under the GNU General Public License v3.
+
+-------------------------------------------------------------------------------
+Dictionary data
+-------------------------------------------------------------------------------
+The offline dictionary pack is not part of this program: it is downloaded
+separately and carries its own licenses (JMdict/JMnedict/KANJIDIC2 under
+CC BY-SA 4.0 from the EDRDG, plus Shirabe's Spanish adaptations). See the pack's
+manifest and the extension's in-product license notices for full attribution.
+
+-------------------------------------------------------------------------------
+Third-party libraries
+-------------------------------------------------------------------------------
+    PDF.js — Apache License 2.0 — https://github.com/mozilla/pdf.js
+    @noble/hashes — MIT License — https://github.com/paulmillr/noble-hashes

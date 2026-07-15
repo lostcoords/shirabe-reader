@@ -10,13 +10,27 @@
     "build:chrome": "node build.mjs chrome",
     "watch": "node build.mjs firefox --watch",
     "watch:chrome": "node build.mjs chrome --watch",
-    "dev": "node build.mjs firefox --watch --serve",
-    "dev:chrome": "node build.mjs chrome --watch --serve",
-    "check": "tsc --noEmit"
+    "prepare:dev-pack": "cd .. && LIMIT=1000 bin/rails dictionary_packs:build",
+    "dev": "npm run prepare:dev-pack && node build.mjs firefox --watch --serve",
+    "dev:chrome": "npm run prepare:dev-pack && node build.mjs chrome --watch --serve",
+    "check": "tsc --noEmit",
+    "test": "node test/run.mjs",
+    "verify:release": "node test/release-package.mjs",
+    "lint:firefox": "web-ext lint --source-dir dist/firefox",
+    "verify:build:firefox": "node build.mjs firefox --outdir=dist/verify/firefox",
+    "verify:build:chrome": "node build.mjs chrome --outdir=dist/verify/chrome",
+    "package:firefox": "node test/release-package.mjs firefox && web-ext build --source-dir dist/firefox --artifacts-dir artifacts/firefox --overwrite-dest --filename shirabe-reader-firefox.zip",
+    "package:chrome": "node test/release-package.mjs chrome && web-ext build --source-dir dist/chrome --artifacts-dir artifacts/chrome --overwrite-dest --filename shirabe-reader-chrome.zip"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.28.1",
+    "fake-indexeddb": "^6.2.4",
+    "happy-dom": "^20.10.6",
     "typescript": "^5.6.0",
-    "web-ext": "^8.0.0"
+    "web-ext": "^10.5.0"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "pdfjs-dist": "^5.7.284"
   }
 }
