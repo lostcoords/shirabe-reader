@@ -7,117 +7,156 @@
     <title>Shirabe Reader</title>
   </head>
   <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-book" viewBox="0 0 24 24"><path d="M2.25 3.75A2.25 2.25 0 0 1 4.5 1.5h4.125c1.24 0 2.25 1.01 2.25 2.25v16.5A2.25 2.25 0 0 0 8.625 18H4.5a2.25 2.25 0 0 0-2.25 2.25V3.75Zm19.5 0A2.25 2.25 0 0 0 19.5 1.5h-4.125a2.25 2.25 0 0 0-2.25 2.25v16.5A2.25 2.25 0 0 1 15.375 18H19.5a2.25 2.25 0 0 1 2.25 2.25V3.75Z" /></symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m2.1-5.4a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" /></symbol>
+      <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="M9.813 15.904 9 18.75l-.813-2.846A4.5 4.5 0 0 0 5.096 12.813L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.091-3.091L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.091 3.091L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.091 3.091Zm8.445-7.347L18 9.75l-.258-1.193a3.375 3.375 0 0 0-2.299-2.299L14.25 6l1.193-.258a3.375 3.375 0 0 0 2.299-2.299L18 2.25l.258 1.193a3.375 3.375 0 0 0 2.299 2.299L21.75 6l-1.193.258a3.375 3.375 0 0 0-2.299 2.299Z" /></symbol>
+      <symbol id="icon-document" viewBox="0 0 24 24"><path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5A3.375 3.375 0 0 0 10.125 2.25H8.25m0 13 2.25 2.25 3.75-4.5m-6-10.75H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9H8.25Z" /></symbol>
+      <symbol id="icon-cursor" viewBox="0 0 24 24"><path d="M15.042 21.672 13.684 16.6m0 0-2.51 2.225.57-8.966 5.227 7.296-3.287-.555Zm-7.84-13.11.806.22m-1.214 3.36-.806-.221m3.918-5.94-.57-.57m-2.4 7.335-.57-.57m8.52-5.9.22-.806m-3.36-1.214-.22.806m5.94 3.918.57-.57m-7.335-2.4.57-.57" /></symbol>
+      <symbol id="icon-globe" viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0 0-18m0 18c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m-8.69 6h17.38M3.31 15h17.38" /></symbol>
+      <symbol id="icon-adjustments" viewBox="0 0 24 24"><path d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0m-9.75 0h9.75" /></symbol>
+      <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m19.5 8.25-7.5 7.5-7.5-7.5" /></symbol>
+      <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" /></symbol>
+      <symbol id="icon-user" viewBox="0 0 24 24"><path d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.118a7.5 7.5 0 0 1 15 0A17.9 17.9 0 0 1 12 21.75a17.9 17.9 0 0 1-7.5-1.632Z" /></symbol>
+    </svg>
+
     <header class="head">
-      <img src="../icons/logo_48.png" alt="" width="28" height="28" />
-      <h1>Shirabe Reader</h1>
+      <div class="brand">
+        <span class="brand-mark"><img src="../icons/logo_48.png" alt="" width="26" height="26" /></span>
+        <span>
+          <strong>Shirabe</strong>
+          <small>Reader</small>
+        </span>
+      </div>
+      <span class="offline-badge"><span></span>Offline lookup</span>
     </header>
 
-    <!-- Connection card: swaps between connected / connecting / unentitled / disconnected. -->
-    <section id="account" class="card" hidden>
-      <!-- connected + subscribed -->
-      <div data-state="connected" hidden>
-        <p class="account-line">
-          Connected<span id="accountName"></span>
-        </p>
-        <button class="disconnect ghost">Disconnect</button>
-      </div>
+    <main>
+      <!-- ── Lookup: this page, and what you can read of it ─────────────── -->
+      <section id="panel-lookup" class="panel" role="tabpanel" aria-labelledby="tab-lookup">
+        <!-- Nothing works without a dictionary, so it outranks everything. -->
+        <section id="needsDictionary" class="card prompt-card" hidden>
+          <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-book" /></svg></span><p class="account-line">Install the dictionary first</p></div>
+          <p class="muted">Shirabe reads pages with a dictionary stored on this device. Install it once and lookup works offline, with no account.</p>
+          <button id="goInstallDictionary" class="primary"><svg><use href="#icon-document" /></svg>Install dictionary</button>
+        </section>
 
-      <!-- connecting: an auth window is open for approval -->
-      <div data-state="connecting" hidden>
-        <p class="muted">Opening sign-in… approve access in the window that just opened, then reopen this popup.</p>
-      </div>
+        <!-- Coverage is per-word study state, which is exactly what an account buys. -->
+        <aside id="signInBanner" class="card banner-card" hidden>
+          <div>
+            <p class="banner-title">Connect to see what you know</p>
+            <p class="muted">Coverage, colouring, mining and reviews need a Shirabe account. Lookup and parsing stay free either way.</p>
+          </div>
+          <button id="bannerConnect" class="ghost compact">Connect</button>
+        </aside>
 
-      <!-- connected but no active subscription: the reader needs one, so nudge to upgrade -->
-      <div data-state="unentitled" hidden>
-        <p class="account-line">
-          Signed in<span id="unentitledName"></span>
-        </p>
-        <p class="muted">The Reader needs an active Shirabe subscription to colour words and mine cards.</p>
-        <a id="upgradeLink" class="primary" href="#" target="_blank" rel="noopener">Upgrade to Pro</a>
-        <button class="disconnect ghost">Disconnect</button>
-      </div>
+        <section id="coverage" class="card coverage-card" hidden>
+          <div class="coverage-head">
+            <div>
+              <p class="eyebrow">You can read</p>
+              <p id="coverageValue" class="coverage-value">—</p>
+            </div>
+            <p id="coverageDetail" class="muted"></p>
+          </div>
+          <div id="coverageBar" class="coverage-bar" role="img" aria-label="Word states on this page">
+            <span data-band="known"></span><span data-band="due"></span><span data-band="learning"></span><span data-band="unknown"></span>
+          </div>
+          <ul id="coverageLegend" class="coverage-legend"></ul>
+        </section>
 
-      <!-- disconnected -->
-      <div data-state="disconnected" hidden>
-        <p class="muted">Connect your Shirabe account to colour words by what you know and mine cards.</p>
-        <button id="connect" class="primary">Connect to Shirabe</button>
-      </div>
-    </section>
+        <section class="card page-card">
+          <button id="parse" class="primary parse-button"><svg><use href="#icon-sparkles" /></svg>Parse this page</button>
+          <div class="reader-buttons">
+            <button id="readArticle" class="tool-button" type="button"><svg><use href="#icon-book" /></svg><span>Read article</span></button>
+            <button id="readSelection" class="tool-button" type="button"><svg><use href="#icon-cursor" /></svg><span>Read selection</span></button>
+            <button id="openPasteReader" class="tool-button" type="button"><svg><use href="#icon-document" /></svg><span>Paste / PDF</span></button>
+          </div>
 
-    <!-- The reader itself — parse + preferences — is shown only once signed in AND
-         subscribed (see popup.ts). Hidden by default so it never flashes. -->
-    <div id="reader" hidden>
-      <button id="parse" class="primary">Parse this page</button>
+          <div class="site" id="siteRow" hidden>
+            <label for="siteMode"><span><svg><use href="#icon-globe" /></svg>On this site</span><span id="siteHost" class="site-host"></span></label>
+            <select id="siteMode">
+              <option value="manual">Manual — button &amp; shortcut</option>
+              <option value="auto">Auto-parse on load</option>
+              <option value="off">Off</option>
+            </select>
+            <button id="enableSiteAccess" class="ghost site-access" type="button" hidden>Enable automatic access</button>
+          </div>
+        </section>
+        <p class="muted privacy-note">Lookup and parsing stay on this device. Page context is sent only when you save it. <a id="privacyLink" href="#" target="_blank" rel="noopener">Privacy</a></p>
+      </section>
 
-      <!-- Per-site parsing mode for the active tab's domain. -->
-      <label class="site" id="siteRow" hidden>
-        On this site <span id="siteHost" class="site-host"></span>
-        <select id="siteMode">
-          <option value="manual">Manual — button &amp; shortcut</option>
-          <option value="auto">Auto-parse on load</option>
-          <option value="off">Off</option>
-        </select>
-      </label>
+      <!-- ── Dictionary + account ───────────────────────────────────────── -->
+      <section id="panel-dictionary" class="panel" role="tabpanel" aria-labelledby="tab-dictionary" hidden>
+        <section id="dictionary" class="card status-card" aria-label="Offline dictionary">
+          <div data-dictionary-state="missing" hidden>
+            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-book" /></svg></span><p class="account-line">Offline dictionary</p></div>
+            <p class="muted">Install the compact English + Spanish pack for lookup without an account or connection.</p>
+            <button id="installDictionary" class="primary"><svg><use href="#icon-document" /></svg>Install dictionary</button>
+          </div>
+          <div data-dictionary-state="installing" hidden>
+            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-book" /></svg></span><p class="account-line">Installing dictionary…</p></div>
+            <progress id="dictionaryProgress" max="1" value="0"></progress>
+            <p id="dictionaryProgressLabel" class="muted">Downloading and checking the pack</p>
+            <button id="cancelDictionaryInstall" class="ghost">Cancel</button>
+          </div>
+          <div data-dictionary-state="installed" hidden>
+            <div class="card-heading"><span class="icon-box success"><svg><use href="#icon-book" /></svg></span><p class="account-line">Offline dictionary ready</p></div>
+            <p id="dictionaryVersion" class="muted"></p>
+            <details class="credits"><summary>Dictionary credits <svg><use href="#icon-chevron" /></svg></summary><ul id="dictionaryCredits"></ul><p><a id="licensesLink" href="#" target="_blank">Offline license notices</a></p></details>
+            <div class="button-row">
+              <button id="updateDictionary" class="ghost">Check for update</button>
+              <button id="removeDictionary" class="ghost danger">Remove</button>
+            </div>
+          </div>
+          <div data-dictionary-state="error" hidden>
+            <div class="card-heading"><span class="icon-box warning"><svg><use href="#icon-book" /></svg></span><p class="account-line">Dictionary install stopped</p></div>
+            <p id="dictionaryError" class="muted"></p>
+            <pre id="dictionaryDiagnostics" class="diagnostics" aria-label="Dictionary installer diagnostics"></pre>
+            <button id="retryDictionary" class="primary">Try again</button>
+          </div>
+        </section>
 
-      <form id="prefs">
-        <label>
-          Open popup on hover
-          <select id="scanModifier">
-            <option value="none">Always</option>
-            <option value="alt">Hold Alt / Option</option>
-            <option value="ctrl">Hold Ctrl</option>
-            <option value="shift">Hold Shift</option>
-            <option value="meta">Hold ⌘ Cmd</option>
-          </select>
-        </label>
-
-        <label class="row">
-          <input id="showFurigana" type="checkbox" />
-          Show furigana
-        </label>
-        <label class="row">
-          <input id="showParseButton" type="checkbox" />
-          Show a Parse button on pages
-        </label>
-      </form>
-
-      <details id="shortcuts">
-        <summary>Keyboard shortcuts</summary>
-        <div id="keybinds"></div>
-        <p class="muted">Click a shortcut, then press keys. Backspace clears it.</p>
-      </details>
-
-      <p class="muted prefs-note">
-        Definition language &amp; dictionaries follow your
-        <a id="settingsLink" href="#" target="_blank" rel="noopener">Shirabe settings</a>.
-      </p>
-    </div>
-
-    <details id="advanced" hidden>
-      <summary>Advanced</summary>
-      <form id="advancedForm">
-        <label>
-          API server
-          <input id="apiBase" type="url" placeholder="https://shirabe.org" />
-        </label>
-        <label>
-          API key (manual)
-          <input id="apiKey" type="password" placeholder="Paste a key instead of connecting" autocomplete="off" />
-        </label>
-        <label>
-          Always auto-parse these sites
-          <textarea id="autoParseHosts" rows="2" placeholder="one domain per line, e.g. example.com"></textarea>
-        </label>
-        <label>
-          Never parse on these sites
-          <textarea id="disabledHosts" rows="2" placeholder="one domain per line"></textarea>
-        </label>
-        <button type="submit" class="ghost">Save advanced</button>
-      </form>
-    </details>
+        <section id="account" class="card status-card" aria-label="Shirabe account" hidden>
+          <div data-state="connected" hidden>
+            <div class="card-heading"><span class="icon-box success"><svg><use href="#icon-user" /></svg></span><p class="account-line">Connected<span id="accountName"></span></p></div>
+            <label id="deckRow" class="deck-row">Save mined words to<select id="preferredDeck"><option value="">Default deck</option></select></label>
+            <button class="disconnect ghost">Disconnect</button>
+          </div>
+          <div data-state="connecting" hidden>
+            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-user" /></svg></span><p class="account-line">Connecting</p></div>
+            <p class="muted">Approve access in the window that just opened, then reopen this popup.</p>
+          </div>
+          <div data-state="unentitled" hidden>
+            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-user" /></svg></span><p class="account-line">Signed in<span id="unentitledName"></span></p></div>
+            <p class="muted">Pro adds word-state sync, sentence mining, and FSRS reviews.</p>
+            <a id="upgradeLink" class="primary" href="#" target="_blank" rel="noopener">Upgrade to Pro <svg><use href="#icon-arrow" /></svg></a>
+            <button class="disconnect ghost">Disconnect</button>
+          </div>
+          <div data-state="disconnected" hidden>
+            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-user" /></svg></span><p class="account-line">Optional Pro features</p></div>
+            <p class="muted">Search, parsing, and the offline dictionary need no account. Connect only to save words, mine sentences, review, and sync progress.</p>
+            <button id="connect" class="primary">Connect Pro account <svg><use href="#icon-arrow" /></svg></button>
+          </div>
+        </section>
+      </section>
+    </main>
 
     <p id="status" class="status" role="status"></p>
 
+    <nav class="tabbar">
+      <div class="tabs" role="tablist" aria-label="Shirabe Reader sections">
+        <button id="tab-lookup" class="tab" type="button" role="tab" aria-controls="panel-lookup" aria-selected="true" data-panel="lookup">
+          <svg><use href="#icon-search" /></svg><span>Lookup</span>
+        </button>
+        <button id="tab-dictionary" class="tab" type="button" role="tab" aria-controls="panel-dictionary" aria-selected="false" tabindex="-1" data-panel="dictionary">
+          <svg><use href="#icon-book" /></svg><span>Dictionary</span>
+          <span id="dictionaryDot" class="tab-dot" hidden></span>
+        </button>
+      </div>
+      <button id="openSettings" class="tab tab-link" type="button">
+        <svg><use href="#icon-adjustments" /></svg><span>Settings</span>
+      </button>
+    </nav>
     <script src="popup.js"></script>
   </body>
 </html>
