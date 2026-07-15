@@ -16,6 +16,7 @@ export type ParsedToken = {
   pos: string; // short POS label: "noun", "verb", "prt", …
   content: boolean; // true for meaning-bearing words (not particles/punctuation)
   state: WordState;
+  frequency?: number | null; // corpus rank, used for local i+1 filtering
 };
 
 // One pitch-accent pattern: the downstep (0 = heiban), a type name, and the
@@ -53,4 +54,7 @@ export type Definition = {
   pitch: PitchPattern[];
   senses: Sense[];
   examples: Example[];
+  sourceForm?: string;
+  inflection?: string[];
+  offline?: boolean;
 };

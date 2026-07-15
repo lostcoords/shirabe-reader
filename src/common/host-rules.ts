@@ -12,7 +12,7 @@ export type HostRule = {
   filter?: string; // CSS selector of elements to exclude
   allFrames?: boolean; // parse sub-frames (video/iframe overlays)
   collapseWhitespace?: boolean; // fold newlines for OCR/manga readers
-  custom?: "youtube"; // a dedicated parser for a site the generic one can't handle
+  custom?: "youtube" | "netflix" | "ttsu" | "mokuro"; // dedicated dynamic surfaces
 };
 
 // How the current page should behave. `rule` is the matched auto-rule (its
@@ -24,8 +24,8 @@ export type HostResolution = { mode: "auto" | "manual" | "off"; rule?: HostRule 
 // (see loadHostRules) so we can add sites without shipping an extension update.
 export const BUILTIN_RULES: HostRule[] = [
   // ── Dedicated reader apps (reading JP is the whole point) ──
-  { host: ["*://reader.ttsu.app/*", "*://ttu-ebook.web.app/*"] }, // ッツ epub reader
-  { host: ["*://reader.mokuro.app/*", "*://*.mokuro.app/*"], collapseWhitespace: true }, // Mokuro manga OCR
+  { host: ["*://reader.ttsu.app/*", "*://ttu-ebook.web.app/*"], custom: "ttsu" }, // ッツ epub reader
+  { host: ["*://reader.mokuro.app/*", "*://*.mokuro.app/*"], custom: "mokuro", collapseWhitespace: true }, // Mokuro manga OCR
   { host: "*://app.readwok.com/*" },
   { host: "*://app.yatsu.moe/*" },
   { host: "*://*.satorireader.com/articles/*" },
@@ -36,12 +36,14 @@ export const BUILTIN_RULES: HostRule[] = [
   { host: "*://www3.nhk.or.jp/news/easy/*" }, // NHK News Web Easy
   // ── Video captions (dedicated parser) ──
   { host: ["*://www.youtube.com/*", "*://m.youtube.com/*"], custom: "youtube" }, // on-screen JP subtitles
+  { host: ["*://www.netflix.com/watch/*", "*://www.netflix.com/browse*"], custom: "netflix" }, // native timed-text captions
   // asbplayer local player UI (subtitle list / app chrome). Streaming-site
   // overlays are handled separately by parsers/asbplayer.ts on every host.
   { host: ["*://app.asbplayer.dev/*", "*://*.asbplayer.dev/*"] },
 ];
 
 const REMOTE_KEY = "hostRules"; // storage cache of server-refreshed rules
+const REMOTE_VERSION_KEY = "hostRulesVersion";
 
 // Glob match: "*" → ".*", both scheme+host+path anchored. "<all_urls>" always
 // matches. Mirrors JitenReader's match-url semantics (only "*" wildcards).
@@ -122,10 +124,12 @@ export async function loadHostRules(): Promise<HostRule[]> {
 // live yet) or network error simply leaves the built-ins in charge.
 export async function refreshRemoteHostRules(apiBase: string): Promise<void> {
   try {
-    const res = await fetch(`${apiBase.replace(/\/$/, "")}/reader/host-rules.json`, { headers: { Accept: "application/json" } });
+    const res = await fetch(`${apiBase.replace(/\/$/, "")}/v1/reader/host-rules`, { headers: { Accept: "application/json" } });
     if (!res.ok) return;
-    const rules = (await res.json()) as HostRule[];
-    if (Array.isArray(rules)) await ext.storage.local.set({ [REMOTE_KEY]: rules });
+    const data = (await res.json()) as { version?: number; rules?: HostRule[] };
+    if (Number.isInteger(data.version) && Array.isArray(data.rules)) {
+      await ext.storage.local.set({ [REMOTE_KEY]: data.rules, [REMOTE_VERSION_KEY]: data.version });
+    }
   } catch {
     // Offline or endpoint absent — keep whatever is cached / the built-ins.
   }

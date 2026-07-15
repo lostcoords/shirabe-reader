@@ -1,5 +1,7 @@
 import type { Config } from "./config.js";
-import type { Definition, Example, ParsedToken, Sense, WordState } from "./types.js";
+import { glossLanguagesFrom, type GlossLanguage } from "./languages.js";
+import type { Definition, Example, Sense, WordState } from "./types.js";
+import type { Deck, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
 
 export class ApiError extends Error {
   constructor(
@@ -11,27 +13,11 @@ export class ApiError extends Error {
 }
 
 // ── Raw server shapes (subset of what /v1 returns) ───────────────────────────
-// /v1/parse: positioned tokens that point into a deduped vocab pool carrying
-// the caller's per-word state. Positions are UTF-16 code units (DOM-native),
-// so the content script never re-derives offsets.
-type RawParseToken = {
-  position: number;
-  length: number;
-  surface: string;
-  lemma?: string;
-  reading?: string; // katakana
-  pos?: string; // short label
-  primary?: boolean;
-  vocabIndex?: number; // index into `vocabulary`; absent for particles/punctuation
-};
-type RawVocab = { lemma: string; reading?: string; pos?: string; state: WordState };
-type RawParse = { tokens: RawParseToken[]; vocabulary: RawVocab[] };
-// Batch parse: one token list per input `texts` entry, over a shared vocab pool.
-type RawParseBatch = { tokens: RawParseToken[][]; vocabulary: RawVocab[] };
 
-// The scopes the reader asks for: the full read set plus WRITE_SRS so it can
-// mine and grade, not just look up. The user sees and approves these on consent.
-const OAUTH_SCOPES = ["READ_DICTIONARY", "READ_PREFERENCES", "READ_ACCOUNT", "READ_SRS", "WRITE_SRS"];
+// Dictionary lookup is public and local, so connecting must never ask for it.
+// OAuth exists only for the personal online layer: identify the account, read
+// its study state, and save/grade through the SRS.
+const OAUTH_SCOPES = ["READ_ACCOUNT", "READ_SRS", "WRITE_SRS"];
 
 // /v1/search: the server already returns a full word card — headword, reading,
 // pitch (with audio), common/JLPT/frequency, and nested entries → senses →
@@ -75,46 +61,12 @@ function sourceLabel(lang: string | undefined, dict: string): string {
   return langName ? `${langName} · ${dictName}` : dictName;
 }
 
-const KANJI = /[一-龯㐀-䶿]/;
 
 export class ShirabeApi {
   constructor(private config: Config) {}
 
   update(config: Config): void {
     this.config = config;
-  }
-
-  // Parse text into ParsedTokens. The server returns UTF-16 positions and a
-  // deduped vocab pool with the caller's per-word state, so each token's
-  // offsets map straight onto the DOM and its colour is known up front.
-  async parse(text: string): Promise<ParsedToken[]> {
-    const { tokens, vocabulary } = await this.post<RawParse>("/v1/parse", { text });
-    return this.mapTokens(tokens, vocabulary);
-  }
-
-  // Parse many texts (e.g. one per node/paragraph) in one request. Returns a
-  // token list per input, index-aligned with `texts`, over one shared vocab
-  // pool — so the server does the offset work and the client just wraps. An
-  // optional signal lets lazy viewport parsing abort a request scrolled away.
-  async parseBatch(texts: string[], signal?: AbortSignal): Promise<ParsedToken[][]> {
-    const { tokens, vocabulary } = await this.post<RawParseBatch>("/v1/parse", { texts }, { signal });
-    return tokens.map((list) => this.mapTokens(list, vocabulary));
-  }
-
-  private mapTokens(tokens: RawParseToken[], vocabulary: RawVocab[]): ParsedToken[] {
-    return tokens.map((t) => {
-      const vocab = t.vocabIndex != null ? vocabulary[t.vocabIndex] : undefined;
-      return {
-        start: t.position,
-        length: t.length,
-        surface: t.surface,
-        reading: furiganaFor(t.surface, t.reading),
-        lemma: t.lemma || t.surface,
-        pos: t.pos ?? "",
-        content: vocab != null, // only pooled (content) words are interactive
-        state: vocab?.state ?? "none",
-      };
-    });
   }
 
   // Hover-popup definition — a faithful slice of the shirabe.org word card. We
@@ -198,9 +150,25 @@ export class ShirabeApi {
   // 1=Again…4=Easy). The server find-or-creates the card by lemma, so this is
   // the one call that both mines a new word and reviews an existing one. Returns
   // the resulting state so the caller can recolour the word in place.
-  async save(lemma: string, rating?: 1 | 2 | 3 | 4): Promise<WordState> {
-    const { card } = await this.post<{ card: { state: WordState } }>("/v1/srs/saves", { lemma, rating });
-    return card.state;
+  async save(options: { lemma: string; surface?: string; reading?: string; deckId?: number; sentence?: SentenceCapture; rating?: 1 | 2 | 3 | 4; imageDataUrl?: string; audioDataUrl?: string }): Promise<SaveResult> {
+    const response = await this.post<{
+      card: { state: WordState }; created: boolean; memberships: Array<{ id: number; name: string }>;
+      intervals: { again: string; hard: string; good: string; easy: string };
+    }>("/v1/srs/saves", options);
+    return { state: response.card.state, created: response.created, decks: response.memberships, intervals: response.intervals };
+  }
+
+  async decks(): Promise<Deck[]> {
+    const { decks } = await this.get<{ decks: Deck[] }>("/v1/srs/decks");
+    return decks;
+  }
+
+  async states(lemmas: string[]): Promise<{ states: Record<string, WordState>; details: Record<string, StudyDetails> }> {
+    const { states } = await this.post<{ states: Array<{ lemma: string; state: WordState; decks: Array<{ id: number; name: string }>; intervals?: StudyDetails["intervals"] }> }>("/v1/srs/states/lookup", { words: lemmas });
+    return {
+      states: Object.fromEntries(states.map((item) => [item.lemma, item.state])),
+      details: Object.fromEntries(states.map((item) => [item.lemma, { state: item.state, decks: item.decks, ...(item.intervals ? { intervals: item.intervals } : {}) }])),
+    };
   }
 
   // Set a word's state directly: "known" parks it as learned, "reviewing"
@@ -213,14 +181,21 @@ export class ShirabeApi {
   // Connected account's display name + SRS entitlement, for the settings UI.
   // Needs READ_ACCOUNT (the device key has it). `entitled` mirrors the server's
   // srs_entitled? — the popup gates the whole reader on it.
-  async me(): Promise<{ name: string; entitled: boolean }> {
+  //
+  // `languages` is the account's ordered gloss stack (Prefs#languages, in UI
+  // codes like ["es","en"]). Carrying it here is what keeps the extension's
+  // meaning order identical to the website's for the same reader; it is empty
+  // for an account that has never customized it.
+  async me(): Promise<{ name: string; entitled: boolean; languages: GlossLanguage[] }> {
     const data = await this.get<{
       user: { displayName?: string; name?: string };
       entitlement?: { srs?: boolean };
+      preferences?: { languages?: string[] };
     }>("/v1/me");
     return {
       name: data.user.displayName || data.user.name || "",
       entitled: data.entitlement?.srs === true,
+      languages: glossLanguagesFrom(data.preferences?.languages ?? []),
     };
   }
 
@@ -257,8 +232,3 @@ export class ShirabeApi {
 
 // Katakana → hiragana, returning null when no furigana is warranted (kana-only
 // surface, or the reading just echoes the surface).
-function furiganaFor(surface: string, katakana?: string): string | null {
-  if (!katakana || !KANJI.test(surface)) return null;
-  const hira = katakana.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
-  return hira && hira !== surface ? hira : null;
-}
