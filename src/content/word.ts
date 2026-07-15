@@ -20,6 +20,8 @@ export function renderToken(token: ParsedToken, showFurigana: boolean): Node {
   word.dataset.lemma = token.lemma;
   word.dataset.surface = token.surface;
   word.dataset.state = token.state; // popup reads this to gate the review buttons
+  if (token.frequency != null) word.dataset.frequency = String(token.frequency);
+  if (token.reading) word.dataset.reading = token.reading;
 
   if (showFurigana && token.reading) {
     const ruby = document.createElement("ruby");

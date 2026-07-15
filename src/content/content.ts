@@ -2,12 +2,16 @@ import { ext } from "../common/browser.js";
 import { canWriteSrs, isConnected, loadConfig, onConfigChanged, type Config, type ScanModifier } from "../common/config.js";
 import { loadHostRules, resolveHostMode, type HostRule } from "../common/host-rules.js";
 import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
+import { send } from "../common/messages.js";
 import { grade, markKnown, save, type Outcome } from "./actions.js";
 import { hideParseButton, showParseButton } from "./parse-button.js";
-import { observeLazy, parse } from "./parser.js";
+import { observeLazy, parse, setParsingPaused } from "./parser.js";
+import { refreshStatusBar, setStatusOptions, showStatusBar } from "./status-bar.js";
 import { startAsbplayer } from "./parsers/asbplayer.js";
 import { startYouTubeCaptions } from "./parsers/youtube.js";
-import { scheduleShow, setCanWrite, showNow } from "./popup.js";
+import { startDynamicReader } from "./parsers/dynamic-reader.js";
+import { dismissPopup, scheduleHide, scheduleShow, scheduleTextLookup, setCanWrite, showNow } from "./popup.js";
+import { logicalTextAt } from "./dom-text.js";
 import { toast } from "./toast.js";
 
 let scanModifier: ScanModifier = "none";
@@ -18,12 +22,17 @@ let rules: HostRule[] = [];
 let mode: "auto" | "manual" | "off" = "manual";
 let rule: HostRule | undefined;
 let parsed = false; // has this page been parsed? (don't re-offer the button after)
+let localDictionaryReady = false;
 const isTopFrame = window === window.top;
 
 function apply(config: Config): void {
   current = config;
   scanModifier = config.scanModifier;
-  showFurigana = config.showFurigana;
+  showFurigana = config.furiganaMode !== "off";
+  document.documentElement.classList.toggle("sb-furigana-unknown", config.furiganaMode === "unknown");
+  document.documentElement.classList.toggle("sb-furigana-hover", config.furiganaMode === "hover");
+  document.documentElement.dataset.sbStatePreset = config.statePreset;
+  setStatusOptions({ includesLearning: config.iPlusOneIncludesLearning, frequencyMax: config.iPlusOneFrequencyMax });
   setCanWrite(canWriteSrs(config));
 
   const resolution = resolveHostMode(location.href, {
@@ -37,7 +46,7 @@ function apply(config: Config): void {
   // asbplayer injects subtitle text into arbitrary video hosts (and iframes).
   // Always watch when connected — no-op until `.asbplayer-offscreen` appears.
   // Not an exclusive host rule: Wikipedia/Mokuro auto-parse still run above.
-  if (isConnected(config) && mode !== "off") startAsbplayer(showFurigana);
+  if ((localDictionaryReady || isConnected(config)) && mode !== "off") startAsbplayer(showFurigana);
 
   // Subframes only run the asbplayer watcher (above). Host-rule auto-parse and
   // the floating button stay top-frame so nested ads/widgets don't get UI.
@@ -49,7 +58,7 @@ function apply(config: Config): void {
   // Auto sites parse on load (once); manual sites offer the floating button;
   // off sites do nothing at all. A rule may name a dedicated custom parser
   // (e.g. YouTube captions) instead of the generic page parser.
-  if (mode === "auto" && isConnected(config) && !parsed) {
+  if (mode === "auto" && (localDictionaryReady || isConnected(config)) && !parsed) {
     if (rule?.custom) startCustomParser(rule.custom);
     else parsePage();
   } else {
@@ -61,6 +70,7 @@ function startCustomParser(custom: NonNullable<HostRule["custom"]>): void {
   parsed = true;
   hideParseButton();
   if (custom === "youtube") startYouTubeCaptions(showFurigana);
+  else startDynamicReader(custom, showFurigana);
 }
 
 // The floating "Parse" button is the manual trigger: shown once we're connected,
@@ -68,7 +78,7 @@ function startCustomParser(custom: NonNullable<HostRule["custom"]>): void {
 // and off pages, and when the user turns it off (showParseButton).
 function refreshParseButton(): void {
   if (!current || !isTopFrame) return;
-  const wanted = mode === "manual" && isConnected(current) && current.showParseButton && !parsed;
+  const wanted = mode === "manual" && (localDictionaryReady || isConnected(current)) && current.showParseButton && !parsed;
   if (wanted) showParseButton(parsePage);
   else hideParseButton();
 }
@@ -79,7 +89,19 @@ Promise.all([loadHostRules(), loadConfig()]).then(([loadedRules, config]) => {
   rules = loadedRules;
   apply(config);
 });
+sendDictionaryStatus();
 onConfigChanged(apply);
+
+async function sendDictionaryStatus(): Promise<void> {
+  const res = await send({ type: "dictionaryStatus" });
+  localDictionaryReady = res.ok && res.dictionary.installed;
+  console.info("[Shirabe scanner] ready", {
+    page: location.href,
+    dictionaryInstalled: localDictionaryReady,
+    response: res.ok ? undefined : res.error,
+  });
+  if (current) apply(current);
+}
 
 // ── Hover → popup, gated by the scan modifier ────────────────────────────────
 // "none" opens on plain hover; otherwise the chosen modifier must be held. We
@@ -120,11 +142,84 @@ document.addEventListener("mouseout", (e) => {
   if ((e.target as Element | null)?.closest?.(".sb-word")) hovered = null;
 });
 
+// ── Local caret scanner ──────────────────────────────────────────────────────
+// This is the offline fast path: no page parse/wrapping and no network. Read a
+// short text window from the caret under the pointer; IndexedDB lookup decides
+// the longest/deinflected term. Existing parsed spans keep their richer state UI.
+let scanFrame = 0;
+let pendingPointer: MouseEvent | null = null;
+let lastPointer: MouseEvent | null = null;
+document.addEventListener("mousemove", (event) => {
+  lastPointer = event;
+  pendingPointer = event;
+  if (scanFrame) return;
+  scanFrame = requestAnimationFrame(() => {
+    scanFrame = 0;
+    const pointer = pendingPointer;
+    pendingPointer = null;
+    if (pointer) scanPointer(pointer);
+  });
+});
+
+function scanPointer(event: MouseEvent, force = false): void {
+  if (!localDictionaryReady || (!force && !wantPopup(event))) return;
+  const element = event.target as Element | null;
+  if (element?.closest?.(".sb-word, .sb-host, input, textarea, select, [contenteditable='true']")) return;
+  const caret = caretAt(event.clientX, event.clientY);
+  if (!caret || caret.node.nodeType !== Node.TEXT_NODE) return;
+  const logical = logicalTextAt(caret.node, caret.offset);
+  const text = logical.text;
+  if (!startsJapanese(text)) {
+    scheduleHide();
+    return;
+  }
+  const range = document.createRange();
+  range.setStart(caret.node, caret.offset);
+  range.setEnd(caret.node, Math.min(caret.offset + 1, caret.node.length));
+  const rect = range.getBoundingClientRect();
+  if (!rect.width && !rect.height) return;
+  const sentence = sentenceAround(logical.context, logical.contextOffset);
+  scheduleTextLookup(text, rect, sentence.text, sentence.targetStart);
+}
+
+document.addEventListener("pointerup", (event) => {
+  if (event.pointerType === "touch") scanPointer(event, true);
+});
+
+function caretAt(x: number, y: number): { node: Text; offset: number } | null {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  const position = doc.caretPositionFromPoint?.(x, y);
+  if (position?.offsetNode.nodeType === Node.TEXT_NODE) return { node: position.offsetNode as Text, offset: position.offset };
+  const range = doc.caretRangeFromPoint?.(x, y);
+  return range?.startContainer.nodeType === Node.TEXT_NODE ? { node: range.startContainer as Text, offset: range.startOffset } : null;
+}
+
+function startsJapanese(text: string): boolean {
+  return /^[々〇〻\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text);
+}
+
+function sentenceAround(text: string, offset: number): { text: string; targetStart: number } {
+  const boundaries = /[。！？!?\n]/;
+  let start = offset;
+  let end = offset;
+  while (start > 0 && !boundaries.test(text[start - 1])) start -= 1;
+  while (end < text.length && !boundaries.test(text[end])) end += 1;
+  const raw = text.slice(start, Math.min(text.length, end + 1));
+  const leading = raw.length - raw.trimStart().length;
+  return { text: raw.trim(), targetStart: Math.max(0, offset - start - leading) };
+}
+
 // Pressing the scan modifier while already hovering a word reveals it at once,
 // without moving the mouse. No-op in "none" mode.
 window.addEventListener("keydown", (e) => {
-  if (scanModifier !== "none" && e.key === MODIFIER_KEY[scanModifier] && hovered) {
-    showNow(hovered);
+  if (e.key === "Escape") dismissPopup();
+  if (scanModifier !== "none" && e.key === MODIFIER_KEY[scanModifier]) {
+    if (!localDictionaryReady) console.warn("[Shirabe scanner] modifier pressed before the local dictionary is ready");
+    if (hovered) showNow(hovered);
+    else if (lastPointer) scanPointer(lastPointer, true);
   }
 });
 
@@ -178,11 +273,13 @@ function initParse(): void {
 }
 
 function parsePage(): void {
+  setParsingPaused(false);
   parsed = true;
   hideParseButton(); // it's done its job; the observers keep new content parsed
   const root = rule?.parse ? (document.querySelector(rule.parse) ?? document.body) : document.body;
   observeLazy(root, showFurigana, ruleOptions());
   observeMutations();
+  showStatusBar(parsePage);
 }
 
 function ruleOptions() {
@@ -199,7 +296,16 @@ function parseSelection(): void {
 ext.runtime.onMessage.addListener((message: { command?: string }) => {
   if (message.command === "parsePage") parsePage();
   else if (message.command === "parseSelection") parseSelection();
+  else if (message.command === "lookupSelection") lookupSelection();
+  else if (message.command === "dictionaryChanged") void sendDictionaryStatus();
 });
+
+function lookupSelection(): void {
+  const selection = window.getSelection();
+  const text = selection?.toString().trim();
+  if (!selection || !text || !selection.rangeCount) return;
+  scheduleTextLookup(text.slice(0, 24), selection.getRangeAt(0).getBoundingClientRect(), text, 0);
+}
 
 // Re-parse content the page adds later (SPA navigations, infinite scroll,
 // lazy-loaded sections). Debounced; only fresh subtrees are queued, and the
@@ -232,5 +338,6 @@ function scheduleFlush(): void {
     for (const el of batch) {
       if (el.isConnected) observeLazy(el, showFurigana, ruleOptions()); // lazy: parse fresh blocks as they're seen
     }
+    refreshStatusBar();
   }, 350);
 }

@@ -11,6 +11,14 @@
   z-index: 2147483646;
 }
 
+/* Native Netflix captions default to a non-interactive overlay. Making only
+   timed text selectable enables lookup without changing playback controls. */
+.player-timedtext,
+.player-timedtext-text-container {
+  pointer-events: auto !important;
+  user-select: text !important;
+}
+
 .sb-word {
   cursor: help;
   border-radius: 3px;
@@ -26,6 +34,9 @@
   color: #6366f1;
   user-select: none;
 }
+.sb-furigana-unknown .sb-word:not(.sb-none) ruby rt,
+.sb-furigana-hover .sb-word ruby rt { display: none; }
+.sb-furigana-hover .sb-word:hover ruby rt { display: ruby-text; }
 
 /* State coloring — a left-to-right cue from "learn this" to "got it". Bottom
    border keeps host text legible where a full highlight would be noisy. */
@@ -44,4 +55,40 @@
 /* Not yet tracked — a faint dotted hint that it's interactive. */
 .sb-none {
   border-bottom: 1px dotted rgba(79, 70, 229, 0.5);
+}
+
+/* The color-vision preset pairs hue with a distinct line shape; the minimal
+   preset removes semantic color entirely while keeping state discernible. */
+[data-sb-state-preset="colorVision"] .sb-new { border-bottom: 3px double #0072b2; }
+[data-sb-state-preset="colorVision"] .sb-learning { border-bottom: 3px dashed #e69f00; }
+[data-sb-state-preset="colorVision"] .sb-due { border-bottom: 3px dotted #cc79a7; }
+[data-sb-state-preset="colorVision"] .sb-known { border-bottom: 2px solid transparent; }
+[data-sb-state-preset="minimal"] .sb-new { border-bottom: 3px double currentColor; }
+[data-sb-state-preset="minimal"] .sb-learning { border-bottom: 2px dashed currentColor; }
+[data-sb-state-preset="minimal"] .sb-due { border-bottom: 2px dotted currentColor; }
+[data-sb-state-preset="minimal"] .sb-known { border-bottom: 1px solid transparent; }
+[data-sb-state-preset="minimal"] .sb-none { border-bottom: 1px dotted currentColor; }
+
+.sb-status-bar {
+  position: fixed; z-index: 2147483645; left: 12px; bottom: 12px;
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border: 1px solid #d1d5db; border-radius: 10px; background: #fff; color: #374151;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14); font: 12px/1.4 system-ui, sans-serif;
+}
+.sb-status-bar button {
+  cursor: pointer; border: 1px solid #d1d5db; border-radius: 6px; background: #f9fafb; padding: 3px 7px;
+}
+.sb-status-bar button:hover { background: #eef2ff; }
+.sb-status-bar button:focus-visible { outline: 3px solid #4f46e5; outline-offset: 2px; }
+.sb-i-plus-one { outline: 2px solid rgba(79, 70, 229, 0.28); outline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-word { transition: none; }
+}
+@media (forced-colors: active) {
+  .sb-word { forced-color-adjust: auto; }
+  .sb-new { border-bottom: 3px double LinkText; }
+  .sb-learning { border-bottom: 2px dashed LinkText; }
+  .sb-due { border-bottom: 2px dotted LinkText; }
+  .sb-status-bar { border: 1px solid CanvasText; }
 }

@@ -1,6 +1,7 @@
 import { send, type Rating } from "../common/messages.js";
 import type { Definition, Example, Sense, SentenceToken } from "../common/types.js";
-import { grade, GRADES, markKnown, save, type Outcome } from "./actions.js";
+import { applyStudyDetails, grade, GRADES, markKnown, save, setMediaCapture, type MediaCapture, type Outcome } from "./actions.js";
+import { refreshStatusBar } from "./status-bar.js";
 
 // One reused popup, shown next to whichever word the pointer (or keyboard) is
 // over. It lives in a shadow root so the host page's CSS can never reach in —
@@ -9,11 +10,15 @@ import { grade, GRADES, markKnown, save, type Outcome } from "./actions.js";
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
 let box: HTMLElement | null = null;
-let currentWord: HTMLElement | null = null;
+let currentKey: string | null = null;
 let showTimer: number | undefined;
 let hideTimer: number | undefined;
 let token = 0; // guards against a slow lookup landing after we've moved on
 let canWrite = false; // key carries WRITE_SRS → render the mining controls
+const lookupHistory: PopupTarget[] = [];
+let historyIndex = -1;
+let navigatingHistory = false;
+let currentDepth = 0;
 
 export function setCanWrite(value: boolean): void {
   canWrite = value;
@@ -28,7 +33,14 @@ function element(): HTMLElement {
   style.textContent = CSS;
   box = document.createElement("div");
   box.className = "sb-popup";
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-label", "Shirabe dictionary");
   root.append(style, box);
+  box.addEventListener("dblclick", (event) => {
+    const selection = window.getSelection()?.toString().trim();
+    const target = event.target as HTMLElement | null;
+    if (selection && target) nestedLookup(selection, target.getBoundingClientRect(), currentDepth);
+  });
   document.body.append(host);
   installHoverGuards();
   return box;
@@ -83,14 +95,32 @@ function nodeInSafeZone(node: Node | null): boolean {
 export function scheduleShow(word: HTMLElement): void {
   window.clearTimeout(hideTimer);
   window.clearTimeout(showTimer);
-  showTimer = window.setTimeout(() => show(word), 180);
+  showTimer = window.setTimeout(() => showWord(word), 180);
 }
 
 // Show immediately (e.g. the modifier key was pressed while already hovering).
 export function showNow(word: HTMLElement): void {
   window.clearTimeout(hideTimer);
   window.clearTimeout(showTimer);
-  show(word);
+  showWord(word);
+}
+
+// Yomitan-style lookup without rewriting the page first. The scanner gives us
+// the text window beginning at the caret and the first character's rectangle;
+// the local dictionary chooses the longest/deinflected match. A detached word
+// element carries the same action data contract as parsed `.sb-word` spans.
+export function scheduleTextLookup(query: string, rect: DOMRect, sentence: string, targetStart = 0): void {
+  window.clearTimeout(hideTimer);
+  window.clearTimeout(showTimer);
+  showTimer = window.setTimeout(() => {
+    const word = document.createElement("span");
+    word.dataset.surface = query;
+    word.dataset.lemma = query;
+    word.dataset.state = "none";
+    word.dataset.sentence = sentence;
+    word.dataset.targetStart = String(targetStart);
+    void showTarget({ key: `scan:${query}:${Math.round(rect.left)}:${Math.round(rect.top)}`, query, rect, word, depth: 0 });
+  }, 120);
 }
 
 export function scheduleHide(): void {
@@ -100,7 +130,7 @@ export function scheduleHide(): void {
 
 function hide(): void {
   box?.classList.remove("sb-visible");
-  currentWord = null;
+  currentKey = null;
 }
 
 // Close now (a click outside): cancel any pending show/hide too.
@@ -110,31 +140,61 @@ function dismiss(): void {
   hide();
 }
 
-async function show(word: HTMLElement): Promise<void> {
-  if (word === currentWord && box?.classList.contains("sb-visible")) return;
-  currentWord = word;
+export function dismissPopup(): void {
+  dismiss();
+}
+
+function showWord(word: HTMLElement): void {
   const lemma = word.dataset.lemma ?? word.dataset.surface ?? "";
+  void showTarget({ key: `word:${lemma}`, query: lemma, rect: word.getBoundingClientRect(), word, depth: 0 });
+}
+
+type PopupTarget = { key: string; query: string; rect: DOMRect; word: HTMLElement; depth: number; kind?: "word" | "kanji" };
+
+async function showTarget(target: PopupTarget): Promise<void> {
+  if (target.key === currentKey && box?.classList.contains("sb-visible")) return;
+  currentKey = target.key;
+  currentDepth = target.depth;
+  if (!navigatingHistory) recordHistory(target);
+  navigatingHistory = false;
   const mine = ++token;
 
   const el = element();
-  el.replaceChildren(loadingRow(lemma));
-  position(word);
+  el.replaceChildren(loadingRow(target.query));
+  position(target.rect);
   el.classList.add("sb-visible");
 
-  const res = await send({ type: "lookup", query: lemma });
+  const res = await send({ type: "lookup", query: target.query, kind: target.kind ?? "word" });
   if (mine !== token) return; // user moved to another word meanwhile
 
   if (!res.ok) {
     el.replaceChildren(messageRow(res.error));
     return;
   }
-  el.replaceChildren(...definitionRows(res.definition, lemma, word));
-  position(word);
+  if (res.definition) {
+    target.word.dataset.lemma = res.definition.headword;
+    target.word.dataset.surface = res.definition.sourceForm ?? target.query;
+    if (res.definition.reading) target.word.dataset.reading = res.definition.reading;
+    const targetStart = Number(target.word.dataset.targetStart);
+    if (Number.isInteger(targetStart) && targetStart >= 0) {
+      target.word.dataset.targetEnd = String(targetStart + (res.definition.sourceForm ?? target.query).length);
+    }
+    if (canWrite) {
+      const states = await send({ type: "states", lemmas: [res.definition.headword] });
+      if (mine !== token) return;
+      if (states.ok) {
+        const details = states.details[res.definition.headword];
+        if (details) applyStudyDetails(target.word, details);
+        else target.word.dataset.state = states.states[res.definition.headword] ?? "none";
+      }
+    }
+  }
+  el.replaceChildren(...definitionRows(res.definition, target.query, target.word));
+  position(target.rect);
 }
 
-function position(word: HTMLElement): void {
+function position(rect: DOMRect): void {
   if (!host) return;
-  const rect = word.getBoundingClientRect();
   const margin = 8;
   host.style.visibility = "hidden";
   host.style.left = "0px";
@@ -186,16 +246,42 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
   // A scrollable body (pinned head + actions) mirroring the shirabe.org card.
   const body = document.createElement("div");
   body.className = "sb-body";
+  if (def.inflection?.length) body.append(block("sb-inflection", `${def.sourceForm ?? lemma} → ${def.headword} · ${def.inflection.join(" · ")}`));
   const badges = badgeRow(def);
   if (badges) body.append(badges);
   if (def.pitch.length && def.reading) body.append(pitchRows(def.pitch, def.reading));
   body.append(sensesList(def.senses));
+  const kanji = kanjiStrip(def.headword);
+  if (kanji) body.append(kanji);
   const examples = examplesBlock(def.examples);
   if (examples) body.append(examples);
 
   const rows: Node[] = [headRow(def), body];
   if (canWrite) rows.push(actions(word));
+  else rows.push(studyUnavailable());
   return rows;
+}
+
+function kanjiStrip(headword: string): HTMLElement | null {
+  const characters = [...new Set([...headword].filter((character) => /\p{Script=Han}/u.test(character)))];
+  if (!characters.length) return null;
+  const strip = document.createElement("div");
+  strip.className = "sb-kanji-strip";
+  strip.setAttribute("aria-label", "Kanji details");
+  for (const character of characters) {
+    const control = button(character, "sb-kanji-button", "", () => nestedLookup(character, control.getBoundingClientRect(), currentDepth, "kanji"));
+    control.title = `Look up ${character}`;
+    control.setAttribute("aria-label", `Look up kanji ${character}`);
+    strip.append(control);
+  }
+  return strip;
+}
+
+function studyUnavailable(): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "sb-study-unavailable";
+  row.textContent = "Offline lookup · Connect a Pro account to save and review";
+  return row;
 }
 
 // Headword (links to its shirabe.org page) + reading + a play-audio button.
@@ -218,13 +304,71 @@ function headRow(def: Definition): Node {
     head.append(reading);
   }
 
+  const navigation = document.createElement("span");
+  navigation.className = "sb-history-nav";
+  const back = button("←", "sb-history-button", "", () => navigateHistory(-1));
+  back.title = "Previous lookup";
+  back.setAttribute("aria-label", "Previous lookup");
+  back.toggleAttribute("disabled", historyIndex <= 0);
+  const forward = button("→", "sb-history-button", "", () => navigateHistory(1));
+  forward.title = "Next lookup";
+  forward.setAttribute("aria-label", "Next lookup");
+  forward.toggleAttribute("disabled", historyIndex >= lookupHistory.length - 1);
+  navigation.append(back, forward);
+  head.append(navigation);
+
   if (def.reading || def.pitch.length) {
     const audio = button("🔊", "sb-audio", "", () => playAudio(def.pitch[0]?.audioUrl ?? null, def.reading ?? def.headword));
     audio.title = "Play pronunciation";
+    audio.setAttribute("aria-label", "Play pronunciation");
     head.append(audio);
   }
   return head;
 }
+
+function recordHistory(target: PopupTarget): void {
+  lookupHistory.splice(historyIndex + 1);
+  lookupHistory.push(target);
+  if (lookupHistory.length > 50) lookupHistory.shift();
+  historyIndex = lookupHistory.length - 1;
+}
+
+function navigateHistory(delta: number): void {
+  const next = historyIndex + delta;
+  const target = lookupHistory[next];
+  if (!target) return;
+  historyIndex = next;
+  navigatingHistory = true;
+  currentKey = null;
+  void showTarget({ ...target, key: `${target.key}:history:${next}` });
+}
+
+function nestedLookup(query: string, rect: DOMRect, depth: number, kind: "word" | "kanji" = "word"): void {
+  const text = query.trim().slice(0, 24);
+  if (!text) return;
+  if (depth >= 5) {
+    element().replaceChildren(messageRow("Nested lookup is limited to five levels."));
+    return;
+  }
+  const word = document.createElement("span");
+  word.dataset.lemma = text;
+  word.dataset.surface = text;
+  word.dataset.state = "none";
+  void showTarget({ key: `nested:${kind}:${depth + 1}:${text}:${Date.now()}`, query: text, rect, word, depth: depth + 1, kind });
+}
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") dismiss();
+  else if (event.altKey && event.key === "ArrowLeft") navigateHistory(-1);
+  else if (event.altKey && event.key === "ArrowRight") navigateHistory(1);
+  else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    const body = box?.querySelector<HTMLElement>(".sb-body");
+    if (body && box?.classList.contains("sb-visible")) {
+      event.preventDefault();
+      body.scrollBy({ top: event.key === "ArrowDown" ? 80 : -80, behavior: "smooth" });
+    }
+  }
+});
 
 // Common / JLPT / frequency badges, as on the web card. Null when none apply.
 function badgeRow(def: Definition): Node | null {
@@ -392,11 +536,20 @@ function renderActions(word: HTMLElement, wrap: HTMLElement): void {
   wrap.replaceChildren();
   const saved = (word.dataset.state ?? "none") !== "none";
 
+  if (saved && word.dataset.deckNames) {
+    const membership = document.createElement("div");
+    membership.className = "sb-membership";
+    membership.textContent = `Saved in ${word.dataset.deckNames}`;
+    wrap.append(membership);
+  }
+
   if (saved) {
     const grades = document.createElement("div");
     grades.className = "sb-grades";
+    const intervals = intervalPreviews(word);
     for (const r of [1, 2, 3, 4] as Rating[]) {
-      grades.append(button(`${GRADES[r]}`, `sb-grade sb-g${r}`, `${r}`, () => run(word, wrap, () => grade(word, r))));
+      const key = (["again", "hard", "good", "easy"] as const)[r - 1];
+      grades.append(button(`${GRADES[r]}${intervals?.[key] ? ` ${intervals[key]}` : ""}`, `sb-grade sb-g${r}`, `${r}`, () => run(word, wrap, () => grade(word, r))));
     }
     wrap.append(grades);
   }
@@ -404,6 +557,7 @@ function renderActions(word: HTMLElement, wrap: HTMLElement): void {
   const extra = document.createElement("div");
   extra.className = "sb-extra";
   if (!saved) extra.append(button("＋ Save", "sb-btn-save", "S", () => run(word, wrap, () => save(word))));
+  if (!saved && word.dataset.sentence) extra.append(button("Edit context", "sb-btn-context", "", () => editContext(word, wrap)));
   extra.append(button("✓ Known", "sb-btn-known", "K", () => run(word, wrap, () => markKnown(word))));
   wrap.append(extra);
 
@@ -412,9 +566,86 @@ function renderActions(word: HTMLElement, wrap: HTMLElement): void {
   wrap.append(note);
 }
 
+function intervalPreviews(word: HTMLElement): { again: string; hard: string; good: string; easy: string } | null {
+  try {
+    return word.dataset.intervals ? JSON.parse(word.dataset.intervals) : null;
+  } catch {
+    return null;
+  }
+}
+
+function editContext(word: HTMLElement, wrap: HTMLElement): void {
+  const editor = document.createElement("form");
+  editor.className = "sb-context-editor";
+  const sentence = document.createElement("textarea");
+  sentence.value = word.dataset.sentence ?? "";
+  sentence.setAttribute("aria-label", "Sentence context");
+  const translation = document.createElement("input");
+  translation.value = word.dataset.translation ?? "";
+  translation.placeholder = "Translation (optional)";
+  const screenshotLabel = document.createElement("label");
+  screenshotLabel.className = "sb-context-check";
+  const screenshot = document.createElement("input");
+  screenshot.type = "checkbox";
+  screenshotLabel.append(screenshot, " Attach a screenshot of the visible page");
+  const mediaLabel = document.createElement("label");
+  mediaLabel.className = "sb-context-file";
+  mediaLabel.textContent = "Or attach an image/audio clip";
+  const mediaInput = document.createElement("input");
+  mediaInput.type = "file";
+  mediaInput.accept = "image/png,image/jpeg,image/webp,audio/mpeg,audio/mp4,audio/ogg,audio/webm,audio/wav";
+  mediaLabel.append(mediaInput);
+  const media: MediaCapture = {};
+  const mediaFeedback = document.createElement("span");
+  mediaFeedback.className = "sb-context-media-feedback";
+  mediaInput.addEventListener("change", async () => {
+    const file = mediaInput.files?.[0];
+    delete media.imageDataUrl;
+    delete media.audioDataUrl;
+    if (!file) return;
+    const max = file.type.startsWith("image/") ? 5 * 1024 * 1024 : 2 * 1024 * 1024;
+    if (file.size > max) {
+      mediaFeedback.textContent = `Choose a ${file.type.startsWith("image/") ? "picture under 5 MB" : "clip under 2 MB"}.`;
+      mediaInput.value = "";
+      return;
+    }
+    const dataUrl = await fileDataUrl(file);
+    if (file.type.startsWith("image/")) media.imageDataUrl = dataUrl;
+    else media.audioDataUrl = dataUrl;
+    mediaFeedback.textContent = file.name;
+  });
+  const saveButton = document.createElement("button");
+  saveButton.type = "submit";
+  saveButton.textContent = "Use this context";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", () => renderActions(word, wrap));
+  editor.append(sentence, translation, screenshotLabel, mediaLabel, mediaFeedback, saveButton, cancel);
+  editor.addEventListener("submit", (event) => {
+    event.preventDefault();
+    word.dataset.sentence = sentence.value.trim();
+    word.dataset.translation = translation.value.trim();
+    setMediaCapture(word, { ...media, captureScreenshot: screenshot.checked && !media.imageDataUrl });
+    renderActions(word, wrap);
+  });
+  wrap.replaceChildren(editor);
+  sentence.focus();
+}
+
+function fileDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read media."));
+    reader.readAsDataURL(file);
+  });
+}
+
 async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<Outcome>): Promise<void> {
   const { ok, message } = await action();
   if (ok) renderActions(word, wrap); // state changed → re-render (Save → grade row)
+  if (ok) refreshStatusBar();
   const note = wrap.querySelector<HTMLElement>(".sb-feedback");
   if (note) {
     note.textContent = message;
@@ -489,10 +720,16 @@ const CSS = `
    scrolls (Yomitan-style) so the reading is always visible. min-height:0 lets
    the flex child shrink below its content height. */
 .sb-popup-head { flex: 0 0 auto; display: flex; align-items: baseline; gap: 8px; font-size: 20px; font-weight: 700; }
+.sb-history-nav { display: inline-flex; gap: 3px; margin-left: auto; }
+.sb-btn.sb-history-button { cursor: pointer; border: 0; border-radius: 5px; padding: 3px 6px; background: #f3f4f6; color: #4b5563; }
+.sb-btn.sb-history-button:hover { background: #e5e7eb; }
+.sb-btn.sb-history-button:disabled { cursor: default; opacity: .35; }
 .sb-headword { color: #111827; text-decoration: none; cursor: pointer; }
 .sb-headword:hover { color: #4f46e5; text-decoration: underline; }
 .sb-popup-reading { font-size: 14px; font-weight: 500; color: #4f46e5; }
 .sb-popup-message { color: #6b7280; }
+.sb-inflection { margin-bottom: 7px; color: #6b7280; font-size: 12px; }
+.sb-study-unavailable { flex: 0 0 auto; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 11px; }
 
 .sb-body { flex: 0 1 auto; min-height: 0; overflow-y: auto; margin-top: 8px; }
 
@@ -518,6 +755,9 @@ const CSS = `
 .sb-pitch-svg circle { fill: #4f46e5; }
 .sb-pitch-mora { fill: #6b7280; font-size: 11px; font-family: inherit; }
 .sb-pitch-num { font-size: 12px; font-weight: 600; color: #9ca3af; font-variant-numeric: tabular-nums; }
+.sb-kanji-strip { display: flex; gap: 5px; margin: 8px 0; }
+.sb-btn.sb-kanji-button { cursor: pointer; min-width: 30px; border: 1px solid #d1d5db; border-radius: 7px; padding: 4px 7px; background: #fff; color: #312e81; font-size: 17px; }
+.sb-btn.sb-kanji-button:hover { background: #eef2ff; border-color: #a5b4fc; }
 
 .sb-senses { margin: 0; padding-left: 18px; }
 .sb-senses li { margin: 4px 0; }
@@ -542,6 +782,7 @@ const CSS = `
 .sb-tok-match:hover { background: #e0e7ff; }
 
 .sb-actions { flex: 0 0 auto; margin-top: 12px; padding-top: 10px; border-top: 1px solid #f3f4f6; }
+.sb-membership { margin-bottom: 6px; color: #4b5563; font-size: 11px; }
 .sb-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .sb-extra { display: flex; gap: 6px; margin-top: 6px; }
 .sb-extra .sb-btn { flex: 1; }
@@ -564,7 +805,28 @@ const CSS = `
 .sb-btn-save { background: #4f46e5; } .sb-btn-save:hover { background: #4338ca; }
 .sb-btn-known { background: #6b7280; } .sb-btn-known:hover { background: #4b5563; }
 .sb-btn-known kbd, .sb-btn-save kbd { background: rgba(255, 255, 255, 0.22); }
+.sb-btn-context { background: #fff; color: #4b5563; border-color: #d1d5db; }
+.sb-btn-context:hover { background: #f3f4f6; }
+.sb-context-editor { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.sb-context-editor textarea, .sb-context-editor input { grid-column: 1 / -1; width: 100%; border: 1px solid #d1d5db; border-radius: 7px; padding: 7px; font: 13px/1.45 system-ui,sans-serif; }
+.sb-context-editor textarea { min-height: 72px; resize: vertical; }
+.sb-context-editor button { cursor: pointer; border: 1px solid #d1d5db; border-radius: 7px; padding: 6px 8px; background: #fff; }
+.sb-context-check, .sb-context-file, .sb-context-media-feedback { grid-column: 1 / -1; font: 12px/1.4 system-ui,sans-serif; color: #4b5563; }
+.sb-context-check { cursor: pointer; }
+.sb-context-check input { width: auto; }
+.sb-context-file input { margin-top: 4px; }
 
 .sb-feedback { display: block; margin-top: 8px; font-size: 12px; color: #6b7280; }
 .sb-feedback.sb-error { color: #b91c1c; }
+.sb-btn:focus-visible, .sb-headword:focus-visible, .sb-tok:focus-visible,
+.sb-context-editor input:focus-visible, .sb-context-editor textarea:focus-visible {
+  outline: 3px solid #4f46e5; outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sb-popup { transition: none; }
+}
+@media (forced-colors: active) {
+  .sb-popup, .sb-btn, .sb-context-editor input, .sb-context-editor textarea { border: 1px solid ButtonText; }
+  .sb-popup { box-shadow: none; }
+}
 `;
