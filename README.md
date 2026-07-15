@@ -1,5 +1,12 @@
 # Shirabe Reader
 
+**License: GPL-3.0.** The deinflection rules and transformer are ported from
+Yomitan (via [daidai](https://github.com/davafons/daidai), the same rules the
+website uses to name inflections), which is GPL-3.0 — so this extension is too,
+and its source is published. This covers the extension only: the Shirabe web app
+and API are separate works, are not distributed with it, and are not GPL. See
+[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+
 A browser extension that parses Japanese on any web page and looks it up with
 Shirabe — hover any word for its reading and definition, colour it by what you
 already know, and mine or review it into your SRS without leaving the page.
@@ -11,22 +18,47 @@ tag what they already know, without needing a second integration.
 
 [jpd-breader]: https://github.com/max-kamps/jpd-breader
 
+## Product boundary
+
+Normal lookup and page parsing are free, local, and offline after installing the
+maintained Shirabe EN/ES dictionary pack. Connecting an account is optional;
+**Pro + online** adds exact-context sentence mining, FSRS grading, deck selection,
+sync, and knowledge-state colouring. Full product spec:
+[`docs/specs/browser-extension.md`](../docs/specs/browser-extension.md). Phased
+hand-off: [`docs/plans/offline-browser-extension.md`](../docs/plans/offline-browser-extension.md).
+
 ## Status (v1)
 
-What works today against the live `/v1` API:
+What works in the current build:
+
+- **Atomic offline dictionary install/update** — compressed, checksummed pack;
+  staged IndexedDB generations keep the previous dictionary on corruption or
+  interruption. The **Dictionary** tab shows version, size, progress, removal, and
+  credits.
+- **Phone-shaped popup** — a bottom navigation bar over three panels: **Search**
+  (typed lookup + history), **Page** (parse, reader entry points, per-site mode),
+  and **Dictionary** (pack + optional account). **Settings** opens a full options
+  page in its own tab (reading preferences, shortcuts, Advanced), the way Yomitan
+  splits popup from settings.
+- **Local lookup and parsing** — Shift-hover scanning without page rewrites,
+  typed/selection lookup, EN/ES glosses in your account's language order, local
+  prefix segmentation, and readable deinflection paths named exactly as the
+  website names them. Words and kanji are separate corpora, as on the web: a word
+  search never answers with a kanji; the popup's kanji strip is the explicit
+  breakdown.
 
 - **One-click login** — click **Connect**, a sign-in window opens, you approve
   access, and it closes on its own (OAuth 2.0 + PKCE via
   `identity.launchWebAuthFlow`; no code to copy, nothing to poll). Pasting a key
-  by hand still works under _Advanced_ for scripts/CI. The minted key is scoped
+  by hand still works under _Settings → Advanced_ for scripts/CI. The key is scoped
   and revocable.
-- **Tokenize + wrap** visible Japanese into per-word spans (Sudachi segmentation),
+- **Tokenize + wrap** visible Japanese into per-word spans locally,
   including content the page loads later (a `MutationObserver` re-parses it).
 - **Per-user word-state colouring** — new / learning / due / known, stamped by
   `POST /v1/parse` and recoloured across the whole page after every review.
 - **Furigana** on kanji words (toggleable).
 - **Hover popup** with headword, reading, and definitions in your chosen
-  language (`POST /v1/search`), isolated in a shadow root so it renders the same
+  language from IndexedDB, isolated in a shadow root so it renders the same
   on every site. Show it on plain hover, or only on **Alt/Option + hover**.
 - **Mine & review inline** — grade a word **Again / Hard / Good / Easy** (which
   both mines a new card and reviews an existing one via `POST /v1/srs/saves`),
@@ -34,14 +66,23 @@ What works today against the live `/v1` API:
   `1`–`4`, `s`, `k` act on whatever word you're hovering, popup or not.
 - **On-demand parsing** via the toolbar button, the right-click menu
   ("Parse this page" / "Parse selection"), or automatic on page load.
+- **Page awareness** — coverage and known/learning/unknown/due counts, i+1
+  paragraph highlighting, occurrence/unique coverage, a toolbar badge,
+  accessible state presets, and Pause/Reparse/Revert controls.
+- **Dedicated reading shell** — extracted article/selection, pasted text, and
+  local PDF faithful/reflow views with typography, theme, and vertical writing.
 - **asbplayer subtitles** — when [asbplayer](https://github.com/asbplayer/asbplayer)
   is injecting JP subs (streaming or `app.asbplayer.dev`), lines are tokenized
   for hover/save the same way as page text. No Anki required for lookups; clip
   mining still goes through asbplayer→Anki until a Shirabe media ingress lands.
+- **Target surfaces** — ordinary pages and Wikipedia, native YouTube captions,
+  native Netflix timed text, Ttsu Reader novel pages, and Mokuro OCR text boxes
+  each have an explicit dynamic parser and maintained DOM fixture. asbplayer can
+  remain layered over Netflix or YouTube.
 
 ## Build
 
-Requires Node 18+.
+Requires Node 22.12+ (the version pinned by the repository).
 
 ```bash
 cd extension
@@ -63,13 +104,21 @@ npm run dev:chrome     # Chrome / Chromium
 ```
 
 `dev` runs the esbuild watcher **and** launches a browser (via [`web-ext`]) with
-the extension loaded, opened on a Japanese page. **Launch it once and leave it
+the extension loaded, opened on a Japanese page. It first builds a small local
+dictionary pack automatically, so **Install dictionary** works without a separate
+pack-build command. Keep `bin/dev` running from the repository root; restart it
+after changing middleware or boot configuration. **Launch the extension once and leave it
 open** — edits hot-reload in place, no relaunch:
 
 - **TS** (background / content / popup logic) → esbuild rebuilds `dist/<target>`
   → `web-ext` reloads the extension.
 - **CSS, popup HTML, icons, `manifest.base.json`** → `build.mjs` re-syncs them
   into `dist/<target>` on change, so those hot-reload too.
+
+When a dev watcher is running, use `npm run verify:build:firefox` or
+`npm run verify:build:chrome` for a separate one-shot build. The regular
+production build writes to the live `dist/<target>` directory and would replace
+the watch manifest, including its localhost permission.
 
 Content-script changes re-register on reload, so **refresh the tab (`Cmd/Ctrl+R`)**
 to re-inject them into already-open pages; background-worker and popup changes
@@ -82,7 +131,7 @@ survive restarts. Dev/watch builds also default the **API server** to
 just click **Connect** (the API is on every host, no `api.` subdomain). Firefox
 launches with `security.enterprise_roots.enabled=true` so its cert store trusts
 the `rb-portless` dev CA from your OS keychain (Chrome uses the keychain already).
-To point at a different server, override it under **Advanced** once signed in.
+To point at a different server, override it under **Settings → Advanced**.
 
 [`web-ext`]: https://github.com/mozilla/web-ext
 
@@ -97,16 +146,18 @@ choose `dist/chrome`.
 
 ## Configure
 
-1. Click the extension icon → **Connect to Shirabe**. A sign-in window opens;
-   sign in (if needed) and approve access — it closes on its own and the popup
-   flips to _Connected as …_. The extension never sees your password, only a
+1. Click the extension icon → **Dictionary** → **Install dictionary**. Lookup then
+   works without an account or network connection.
+2. Optionally, on the same tab, click **Connect Pro account**. A sign-in window
+   opens; sign in (if needed) and approve access — it closes on its own and the
+   panel flips to _Connected as …_. The extension never sees your password, only a
    scoped, revocable API key it exchanges for itself (OAuth 2.0 + PKCE).
-2. Pick a **definition language** and whether the popup shows on hover or on
-   **Alt/Option + hover**.
-3. Open a Japanese page and hit **Parse this page** (or enable _Parse pages
-   automatically_).
+3. Open **Settings** (bottom bar) to pick a **definition language** and scan
+   modifier (Shift by default).
+4. Open a Japanese page and hit **Page** → **Parse this page** (or set that site to
+   _Auto-parse on load_).
 
-Alternatively, open **Advanced** and paste a key made with
+Alternatively, open **Settings → Advanced** and paste a key made with
 `bin/rails api_keys:create` instead of connecting. Either way the key is stored
 in extension-local storage and sent as `Authorization: Bearer …`. `/v1/*` allows
 cross-origin requests (`config/initializers/cors.rb`), so no extra setup is
@@ -119,31 +170,29 @@ needed. (For local dev the API server already defaults to `https://shirabe.local
 src/
   common/
     browser.ts    one promise-based `ext` for Firefox + Chrome
-    api.ts        ShirabeApi — parse, search→Definition, save/grade, OAuth login
+    offline-dictionary.ts  IndexedDB pack install, lookup, deinflection, parsing
+    api.ts        connected state, save/grade/decks, OAuth login
     config.ts     settings persisted in storage.local
     messages.ts   typed content ↔ background protocol
     types.ts      ParsedToken, Definition, WordState
   background/
     background.ts owns the key + OAuth redirect login; rate-limits + caches
   content/
-    parser.ts     TreeWalker over text nodes → /v1/parse → wrapped words
+    parser.ts     TreeWalker over text nodes → local parse → wrapped words
     word.ts       renders one token; lemma→spans index for live recolour
     popup.ts      shadow-DOM hover popup; lazy lookup + grade/mine controls
     actions.ts    save / grade / mark-known, shared by popup + keyboard
     content.ts    hover + modifier gating, keyboard shortcuts, MutationObserver
     toast.ts      fleeting feedback for keyboard-driven actions
   action/         toolbar popup = Connect + preferences + Advanced
+  reader/         article/paste/PDF reading shell
 ```
 
-Content scripts never touch the network or storage directly — everything flows
-through the background worker, which holds the key, owns the device-login poll
-loop (persisted to storage so a suspended MV3 worker resumes it), serializes
-requests with a small gap to respect the server's per-minute budget, and caches
-parses and lookups (pages re-request the same paragraphs and words constantly).
-
-`POST /v1/parse` returns tokens with UTF-16 positions and a deduped vocab pool
-carrying each word's per-user SRS state, so the content script maps offsets
-straight onto the DOM and colours words without extra round-trips.
+Content scripts never touch storage or remote APIs directly. The background
+worker owns the offline dictionary, scoped key, state hydration, connected
+writes, and caches. Installed-pack lookup and local page parsing send no page
+text. If no pack is installed, a connected user can use the legacy server
+fallback. URL/title/sentence context is sent only on an explicit save action.
 
 ## Parsing engine
 
@@ -152,14 +201,5 @@ paragraphs/fragments, batched, parsed, and mapped back onto the DOM — plus the
 reference study of jiten/JitenReader and the phased build plan, lives in
 [`docs/specs/extension-parsing.md`](../docs/specs/extension-parsing.md).
 
-## Roadmap
-
-- **Done:** batched parsing — one `/v1/parse` request per ~8k-char batch instead
-  of per text node.
-- Paragraph/fragment rewrite + array `/v1/parse` (correct tokenization across
-  inline elements, shared vocab) — see the parsing-engine doc.
-- Custom parsers via observer primitives — **YouTube captions** and **asbplayer**
-  ship; broader host-rules / manga next.
-- Pitch-accent + frequency in the popup (via `POST /v1/parse` `include`).
-- An advanced mining dialog (editable sentence + translation) and per-deck
-  targeting.
+Remaining release work and browser/platform verification are tracked in
+[`docs/plans/offline-browser-extension.md`](../docs/plans/offline-browser-extension.md).
