@@ -3,8 +3,9 @@ import type { ParsedToken } from "../common/types.js";
 import { renderToken } from "./word.js";
 
 const JAPANESE = /[぀-ヿ一-龯㐀-䶿ｦ-ﾟ]/;
-const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "CODE", "PRE", "RUBY"]);
+const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "CODE", "PRE", "RUBY", "RT", "RP"]);
 const PARSED_FLAG = "sbParsed"; // dataset key on the wrapper we insert
+let paused = false;
 
 // One /v1/parse request covers many text nodes at once: we send their text as a
 // `texts[]` array (capped at this many combined chars) and the server returns one
@@ -84,16 +85,35 @@ function buildWrapper(text: string, tokens: ParsedToken[], showFurigana: boolean
   let cursor = 0;
   for (const token of tokens) {
     if (token.start > cursor) wrapper.append(text.slice(cursor, token.start));
-    wrapper.append(renderToken(token, showFurigana));
+    const rendered = renderToken(token, showFurigana);
+    if (rendered instanceof HTMLElement) {
+      const sentence = sentenceAt(text, token.start);
+      rendered.dataset.sentence = sentence.text;
+      rendered.dataset.targetStart = String(token.start - sentence.start);
+      rendered.dataset.targetEnd = String(token.start - sentence.start + token.length);
+    }
+    wrapper.append(rendered);
     cursor = token.start + token.length;
   }
   if (cursor < text.length) wrapper.append(text.slice(cursor));
   return wrapper;
 }
 
+function sentenceAt(text: string, offset: number): { text: string; start: number } {
+  let start = offset;
+  let end = offset;
+  const boundary = /[。！？!?\n]/;
+  while (start > 0 && !boundary.test(text[start - 1])) start -= 1;
+  while (end < text.length && !boundary.test(text[end])) end += 1;
+  const raw = text.slice(start, Math.min(text.length, end + 1));
+  const leading = raw.length - raw.trimStart().length;
+  return { text: raw.trim(), start: start + leading };
+}
+
 // Parse everything under `root` eagerly (used for a selection, where the user
 // wants it now). Returns how many text nodes were processed.
 export async function parse(root: Node, showFurigana: boolean, opts: ParseOptions = {}): Promise<number> {
+  if (paused) return 0;
   const nodes = collectTextNodes(root, opts.filter);
   // Sequential batches: the background worker rate-limits, and serial requests
   // keep memory flat on long pages. A failed batch doesn't sink the rest.
@@ -140,6 +160,7 @@ function collectBlocks(root: Node, filter?: string): Element[] {
 // Observe every text block under `root`, parsing on approach. Reuses one shared
 // IntersectionObserver so later calls (dynamic content) add to the same pool.
 export function observeLazy(root: Node, showFurigana: boolean, opts: ParseOptions = {}): void {
+  if (paused) return;
   lazyShowFurigana = showFurigana;
   lazyOpts = opts;
   if (!io) io = new IntersectionObserver(onIntersect, { rootMargin: "300px 0px" });
@@ -157,7 +178,7 @@ function onIntersect(entries: IntersectionObserverEntry[]): void {
 }
 
 async function enterBlock(block: HTMLElement): Promise<void> {
-  if (block.dataset[LAZY_BLOCK_FLAG] || pendingBlocks.has(block)) return;
+  if (paused || block.dataset[LAZY_BLOCK_FLAG] || pendingBlocks.has(block)) return;
   const requestId = nextRequestId++;
   pendingBlocks.set(block, requestId);
   try {
@@ -177,11 +198,88 @@ function exitBlock(block: HTMLElement): void {
   if (requestId != null) void send({ type: "abortParse", requestId });
 }
 
+export function setParsingPaused(value: boolean): void {
+  paused = value;
+  if (!value) return;
+  for (const requestId of pendingBlocks.values()) void send({ type: "abortParse", requestId });
+  pendingBlocks.clear();
+}
+
+export function revertParsedPage(): void {
+  setParsingPaused(true);
+  io?.disconnect();
+  io = null;
+  for (const wrapper of document.querySelectorAll<HTMLElement>("[data-sb-parsed]")) {
+    wrapper.replaceWith(document.createTextNode(visibleSource(wrapper)));
+  }
+  for (const block of document.querySelectorAll<HTMLElement>("[data-sb-block]")) delete block.dataset[LAZY_BLOCK_FLAG];
+}
+
+function visibleSource(wrapper: HTMLElement): string {
+  const clone = wrapper.cloneNode(true) as HTMLElement;
+  for (const reading of clone.querySelectorAll("rt")) reading.remove();
+  return clone.textContent ?? "";
+}
+
 // Parse just the text this block directly owns (nested blocks parse themselves
 // when they scroll in), as one abortable request per block.
 async function parseBlock(block: HTMLElement, requestId: number): Promise<void> {
-  const nodes = collectTextNodes(block, lazyOpts.filter).filter((node) => ownerBlock(node) === block);
-  for (const batch of batchNodes(nodes)) {
-    await parseBatch(batch, lazyShowFurigana, requestId);
+  const nodes = collectFragmentTextNodes(block, lazyOpts.filter).filter((node) => ownerBlock(node) === block);
+  if (!nodes.length) return;
+  const starts: number[] = [];
+  let text = "";
+  for (const node of nodes) {
+    starts.push(text.length);
+    text += node.nodeValue ?? "";
   }
+  const response = await send({ type: "parseBatch", texts: [text], requestId });
+  if (!response.ok) throw new Error(response.error);
+  const tokens = response.tokens[0] ?? [];
+  const replacements = nodes.map((node, index) => mappedWrapper(node.nodeValue ?? "", starts[index], text, tokens, lazyShowFurigana));
+  nodes.forEach((node, index) => {
+    if (node.parentNode) node.parentNode.replaceChild(replacements[index], node);
+  });
+}
+
+function collectFragmentTextNodes(root: Node, filter?: string): Text[] {
+  const nodes: Text[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+      const parent = node.parentElement;
+      if (!parent || SKIP_TAGS.has(parent.tagName) || parent.closest("ruby") || parent.isContentEditable) return NodeFilter.FILTER_REJECT;
+      if (parent.closest("[data-sb-parsed], .sb-word, .sb-popup")) return NodeFilter.FILTER_REJECT;
+      if (filter && parent.closest(filter)) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) nodes.push(node as Text);
+  return nodes;
+}
+
+export function mappedWrapper(nodeText: string, nodeStart: number, context: string, tokens: ParsedToken[], showFurigana: boolean): HTMLElement {
+  const wrapper = document.createElement("span");
+  wrapper.dataset[PARSED_FLAG] = "1";
+  const nodeEnd = nodeStart + nodeText.length;
+  let cursor = 0;
+  for (const token of tokens) {
+    const tokenEnd = token.start + token.length;
+    const start = Math.max(token.start, nodeStart);
+    const end = Math.min(tokenEnd, nodeEnd);
+    if (start >= end) continue;
+    const localStart = start - nodeStart;
+    if (localStart > cursor) wrapper.append(nodeText.slice(cursor, localStart));
+    const surface = nodeText.slice(localStart, end - nodeStart);
+    const rendered = renderToken({ ...token, start: localStart, length: surface.length, surface }, showFurigana);
+    if (rendered instanceof HTMLElement) {
+      const sentence = sentenceAt(context, token.start);
+      rendered.dataset.sentence = sentence.text;
+      rendered.dataset.targetStart = String(token.start - sentence.start);
+      rendered.dataset.targetEnd = String(token.start - sentence.start + token.length);
+    }
+    wrapper.append(rendered);
+    cursor = end - nodeStart;
+  }
+  if (cursor < nodeText.length) wrapper.append(nodeText.slice(cursor));
+  return wrapper;
 }

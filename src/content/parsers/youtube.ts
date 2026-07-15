@@ -1,4 +1,5 @@
 import { parse } from "../parser.js";
+type ParseTarget = (root: Node, showFurigana: boolean) => Promise<number>;
 
 // YouTube captions parser. The generic page parser can't handle YouTube: the
 // on-screen subtitle text is injected into an overlay that's rebuilt on every
@@ -21,11 +22,11 @@ export function startYouTubeCaptions(showFurigana: boolean): void {
     container = el;
     captionObserver = new MutationObserver(() => {
       window.clearTimeout(debounce);
-      debounce = window.setTimeout(() => parseSegments(el, showFurigana), 60);
+      debounce = window.setTimeout(() => void parseYouTubeSegments(el, showFurigana), 60);
     });
     // Cues change via childList and text updates, so watch both.
     captionObserver.observe(el, { childList: true, subtree: true, characterData: true });
-    parseSegments(el, showFurigana);
+    void parseYouTubeSegments(el, showFurigana);
   };
 
   const existing = root.querySelector(CONTAINER);
@@ -39,10 +40,16 @@ export function startYouTubeCaptions(showFurigana: boolean): void {
   }).observe(root, { childList: true, subtree: true });
 }
 
-function parseSegments(container: Element, showFurigana: boolean): void {
+export async function parseYouTubeSegments(container: Element, showFurigana: boolean, parseTarget: ParseTarget = parse): Promise<number> {
+  let parsed = 0;
   for (const segment of container.querySelectorAll(SEGMENT)) {
     // Skip a segment we've already wrapped; YouTube swaps in fresh nodes per cue.
     if (segment.querySelector(".sb-word") || (segment as HTMLElement).querySelector("[data-sb-parsed]")) continue;
-    void parse(segment, showFurigana);
+    const context = segment as HTMLElement;
+    context.dataset.integration = "youtube_captions";
+    const video = document.querySelector("video");
+    if (video) context.dataset.mediaTimestamp = String(Math.round(video.currentTime * 1000));
+    parsed += await parseTarget(segment, showFurigana);
   }
+  return parsed;
 }

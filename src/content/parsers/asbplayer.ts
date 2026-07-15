@@ -1,4 +1,5 @@
 import { parse } from "../parser.js";
+type ParseTarget = (root: Node, showFurigana: boolean) => Promise<number>;
 
 // asbplayer subtitle parser. asbplayer injects an offscreen DOM cache of
 // subtitle lines (`.asbplayer-offscreen > div`) on any streaming page or on
@@ -33,10 +34,10 @@ export function startAsbplayer(showFurigana: boolean): void {
     offscreen = root;
     lineObserver = new MutationObserver(() => {
       window.clearTimeout(debounce);
-      debounce = window.setTimeout(() => parseLines(), 60);
+      debounce = window.setTimeout(() => void parseAsbplayerLines(document, furigana), 60);
     });
     lineObserver.observe(root, { childList: true, subtree: true, characterData: true });
-    parseLines();
+    void parseAsbplayerLines(document, furigana);
   };
 
   const tryAttach = (): boolean => {
@@ -61,15 +62,21 @@ export function startAsbplayer(showFurigana: boolean): void {
   }).observe(document.documentElement, { childList: true, subtree: true });
 }
 
-function parseLines(): void {
+export async function parseAsbplayerLines(root: Document | Element, showFurigana: boolean, parseTarget: ParseTarget = parse): Promise<number> {
   const nodes = new Set<Element>();
-  for (const el of document.querySelectorAll(LINE)) nodes.add(el);
-  for (const el of document.querySelectorAll(VISIBLE)) nodes.add(el);
+  for (const el of root.querySelectorAll(LINE)) nodes.add(el);
+  for (const el of root.querySelectorAll(VISIBLE)) nodes.add(el);
 
+  let parsed = 0;
   for (const el of nodes) {
     if (el.querySelector(".sb-word") || (el as HTMLElement).dataset.sbParsed) continue;
     // Skip empty / non-Japanese shells the cache may hold briefly.
     if (!el.textContent?.trim()) continue;
-    void parse(el, furigana);
+    const context = el as HTMLElement;
+    context.dataset.integration = "asbplayer";
+    const video = document.querySelector("video");
+    if (video) context.dataset.mediaTimestamp = String(Math.round(video.currentTime * 1000));
+    parsed += await parseTarget(el, showFurigana);
   }
+  return parsed;
 }
