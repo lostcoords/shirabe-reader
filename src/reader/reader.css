@@ -1,0 +1,24 @@
+:root { color-scheme: light dark; --paper:#fff; --ink:#202124; --muted:#6b7280; }
+:root[data-theme="dark"] { --paper:#16181d; --ink:#eceff4; --muted:#aeb5c1; color-scheme:dark; }
+:root[data-theme="light"] { color-scheme:light; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font:14px/1.5 system-ui,sans-serif; }
+header { position:sticky; top:0; z-index:20; display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid color-mix(in srgb,var(--ink) 18%,transparent); background:var(--paper); }
+button,.file,select,input[type="range"] { cursor:pointer; }
+button,.file,select { border:1px solid color-mix(in srgb,var(--ink) 22%,transparent); border-radius:7px; padding:6px 9px; background:var(--paper); color:var(--ink); }
+button:hover,.file:hover,select:hover { background:color-mix(in srgb,var(--ink) 8%,var(--paper)); }
+button:focus-visible,.file:focus-within,select:focus-visible,input:focus-visible,textarea:focus-visible { outline:3px solid #4f46e5; outline-offset:2px; }
+.file input { display:none; }
+main { max-width:900px; margin:auto; padding:32px 24px 120px; }
+#document { margin-inline:auto; max-width:55ch; font-family:"Noto Serif JP","Yu Mincho",serif; font-size:22px; line-height:1.8; white-space:pre-wrap; }
+#document[data-font="sans"] { font-family:"Noto Sans JP","Yu Gothic",sans-serif; }
+#document[data-font="system"] { font-family:system-ui,sans-serif; }
+#document.vertical { writing-mode:vertical-rl; max-height:calc(100vh - 140px); overflow-x:auto; }
+.pdf-page { min-height:35vh; margin-block:0 3rem; padding-block:1rem; border-bottom:1px solid color-mix(in srgb,var(--ink) 15%,transparent); }
+#editor { display:grid; gap:10px; }
+#pasteText { min-height:55vh; width:100%; padding:16px; font:20px/1.8 "Noto Serif JP",serif; }
+#pdfFrame { width:100%; height:calc(100vh - 130px); border:0; }
+#progress { color:var(--muted); }
+@media (prefers-color-scheme:dark) { :root:not([data-theme="light"]) { --paper:#16181d; --ink:#eceff4; --muted:#aeb5c1; } }
+@media (forced-colors:active) { button,.file,select,.pdf-page { border:1px solid ButtonText; } }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; transition:none !important; animation:none !important; } }
