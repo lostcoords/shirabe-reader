@@ -16,8 +16,8 @@ export type HostRule = {
 };
 
 // How the current page should behave. `rule` is the matched auto-rule (its
-// selectors/flags drive the parser); absent for plain manual/global-auto.
-export type HostResolution = { mode: "auto" | "manual" | "off"; rule?: HostRule };
+// selectors/flags drive the parser); absent for plain generic auto-parsing.
+export type HostResolution = { mode: "auto" | "off"; rule?: HostRule };
 
 // Bundled defaults: dedicated reader apps + common Japanese sites (the user chose
 // "reader apps + common JP sites"). This list is also refreshable from the server
@@ -76,26 +76,23 @@ export function parseHostList(text: string): string[] {
     .filter(Boolean);
 }
 
-// Resolve the page's mode. Precedence: the user "off" list wins over everything;
-// then the user "auto" list; then a matching built-in/remote rule; else manual.
-// There is deliberately no "auto-parse everywhere" switch — auto-parsing every
-// page would send a lot of text needlessly; auto is always per-domain opt-in.
-// `off` built-in rules (e.g. video apps we never want to touch) win over auto.
+// Resolve the page's mode. Parsing is local, so reader-on means auto everywhere:
+// the old manual default existed only to avoid sending arbitrary page text to
+// the server. User and built-in off rules still win; matching rules contribute
+// selectors/integration behavior, while bare pages use the generic parser.
 export function resolveHostMode(
   url: string,
-  opts: { autoHosts: string[]; disabledHosts: string[]; rules: HostRule[] },
+  opts: { disabledHosts: string[]; rules: HostRule[] },
 ): HostResolution {
   if (opts.disabledHosts.some((p) => matchUrl(normalizePattern(p), url))) return { mode: "off" };
 
   const offRule = opts.rules.find((r) => r.mode === "off" && ruleMatches(r, url));
   if (offRule) return { mode: "off", rule: offRule };
 
-  if (opts.autoHosts.some((p) => matchUrl(normalizePattern(p), url))) return { mode: "auto" };
-
   const autoRule = opts.rules.find((r) => r.mode !== "off" && ruleMatches(r, url));
   if (autoRule) return { mode: "auto", rule: autoRule };
 
-  return { mode: "manual" };
+  return { mode: "auto" };
 }
 
 // The domain we'd add to the auto/off list for a "do this on this whole site"

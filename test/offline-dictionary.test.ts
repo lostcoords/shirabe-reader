@@ -3,15 +3,20 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
-import { cancelDictionaryInstall, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
+import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
 
 const records = [
-  { type: "header", schemaVersion: 1, languages: ["eng", "spa"], source: "Shirabe open-core" },
+  { type: "header", schemaVersion: 2, languages: ["eng", "spa"], source: "Shirabe open-core" },
   {
     type: "term", id: "jmdict:1", dictionary: "jmdict", headword: "食べる",
     expressions: [{ text: "食べる", script: "mixed", common: true, tags: [] }],
     readings: [{ text: "たべる", kind: "kana" }],
     senses: [{ glosses: { eng: ["to eat"], spa: ["comer"] }, partsOfSpeech: ["verb"], fields: [], misc: [], dialects: [], restrictions: [] }],
+    pitch: [
+      { text: "食べる", reading: "たべる", downstep: 2, audioUrl: `https://cdn.shirabe.org/audio/${"a".repeat(64)}.m4a` },
+      { text: "たべる", reading: "たべる", downstep: 2, audioUrl: `https://cdn.shirabe.org/audio/${"b".repeat(64)}.m4a` },
+      { text: "たべる", reading: "たべる", downstep: 0, audioUrl: `https://cdn.shirabe.org/audio/${"c".repeat(64)}.m4a` },
+    ],
     frequencies: [{ source: "jiten-global", rank: 100 }],
   },
   ...[
@@ -56,7 +61,7 @@ const checksum = createHash("sha256").update(compressed).digest("hex");
 
 function manifest(revision: string, sha256 = checksum) {
   return {
-    schemaVersion: 1, buildRecipeVersion: 2, minimumExtensionVersion: "0.1.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
+    schemaVersion: 2, buildRecipeVersion: 4, minimumExtensionVersion: "0.1.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
     artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
     bytes: compressed.byteLength, sha256, counts: { terms: 11, kanji: 3 }, languages: ["eng", "spa"],
     dictionaries: [{ slug: "jmdict", version: "test" }], modifications: [], sources: [], downloadUrl: "https://packs.test/dictionary.gz",
@@ -86,6 +91,8 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal(definition?.headword, "食べる");
   assert.equal(definition?.sourceForm, "食べました");
   assert.deepEqual(definition?.senses[0]?.glosses, ["comer"]);
+  assert.equal(definition?.pitch[0]?.audioUrl, `https://cdn.shirabe.org/audio/${"a".repeat(64)}.m4a`);
+  assert.deepEqual(definition?.pitch.map((pitch) => pitch.downstep), [2], "alternate-spelling pitch rows do not leak into the displayed headword");
 
   const tokens = await parseOffline("昨日、食べました。", ["eng"], "https://shirabe.test");
   assert.ok(tokens.some((token) => token.lemma === "食べる" && token.surface === "食べました"));
@@ -193,6 +200,14 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   await assert.rejects(installDictionary("https://api.test"), /executable/i);
   assert.equal((await dictionaryStatus()).revision, "v1");
 
+  const externalAudioRecords = structuredClone(records);
+  (externalAudioRecords[1] as typeof records[1]).pitch[0].audioUrl = "https://example.com/local-tts.mp3";
+  archive = gzipSync(externalAudioRecords.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  const externalAudioChecksum = createHash("sha256").update(archive).digest("hex");
+  current = { ...manifest("v-external-audio", externalAudioChecksum), bytes: archive.byteLength };
+  await assert.rejects(installDictionary("https://api.test"), /term record is invalid/i);
+  assert.equal((await dictionaryStatus()).revision, "v1");
+
   archive = compressed;
   current = { ...manifest("v-future"), minimumExtensionVersion: "9.0.0" };
   await assert.rejects(installDictionary("https://api.test"), /9\.0\.0 or newer/i);
@@ -213,6 +228,6 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   globalThis.fetch = (async (input: string | URL | Request) => String(input).endsWith("/current")
     ? new Response(JSON.stringify(current), { headers: { "Content-Type": "application/json" } })
     : new Response(archive, { headers: { "Content-Type": "application/gzip" } })) as typeof fetch;
-  await installDictionary("https://api.test");
+  await checkDictionaryUpdate("https://api.test");
   assert.equal((await dictionaryStatus()).revision, "v3");
 });

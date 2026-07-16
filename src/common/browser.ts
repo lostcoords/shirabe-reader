@@ -67,7 +67,7 @@ type WebExt = {
     // The extension's own redirect URL (Chrome: <id>.chromiumapp.org, Firefox:
     // <uuid>.extensions.allizom.org). Resolves the final redirect after login.
     getRedirectURL(path?: string): string;
-    launchWebAuthFlow(details: { url: string; interactive?: boolean; redirect_uri?: string }): Promise<string>;
+    launchWebAuthFlow(details: { url: string; interactive?: boolean }): Promise<string>;
   };
 };
 

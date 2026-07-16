@@ -1,46 +1,10 @@
 import { ext } from "../common/browser.js";
-import { DEFAULTS, loadConfig, saveConfig, type Config } from "../common/config.js";
+import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage } from "../common/config.js";
+import { sendDictionary } from "../common/dictionary-port.js";
 import { loadHostRules, matchUrl, normalizePattern, resolveHostMode, siteScopeFor, type HostRule } from "../common/host-rules.js";
-import { send, type Request, type Response } from "../common/messages.js";
+import { send } from "../common/messages.js";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-
-type DictionaryRequest = Extract<Request, { type: "dictionaryStatus" | "installDictionary" | "removeDictionary" | "cancelDictionaryInstall" }>;
-type DictionaryReply = Extract<Response, { type: DictionaryRequest["type"] }> | { ok: false; error: string };
-type DictionaryReplyFor<R extends DictionaryRequest> = Extract<Response, { type: R["type"] }> | { ok: false; error: string };
-const dictionaryPort = ext.runtime.connect({ name: "shirabe-dictionary" });
-const dictionaryReplies = new Map<number, { resolve: (response: DictionaryReply) => void; timer: number }>();
-let dictionaryMessageId = 0;
-
-dictionaryPort.onMessage.addListener((message: { id?: unknown; response?: DictionaryReply }) => {
-  if (!Number.isInteger(message.id) || !message.response) return;
-  const id = message.id as number;
-  const pending = dictionaryReplies.get(id);
-  if (!pending) return;
-  window.clearTimeout(pending.timer);
-  dictionaryReplies.delete(id);
-  pending.resolve(message.response);
-});
-
-dictionaryPort.onDisconnect.addListener(() => {
-  for (const { resolve, timer } of dictionaryReplies.values()) {
-    window.clearTimeout(timer);
-    resolve({ ok: false, error: "Firefox disconnected the dictionary background port." });
-  }
-  dictionaryReplies.clear();
-});
-
-function sendDictionary<R extends DictionaryRequest>(request: R): Promise<DictionaryReplyFor<R>> {
-  const id = ++dictionaryMessageId;
-  return new Promise((resolve) => {
-    const timer = window.setTimeout(() => {
-      dictionaryReplies.delete(id);
-      resolve({ ok: false, error: `Dictionary background timed out while handling ${request.type}.` });
-    }, request.type === "installDictionary" ? 10 * 60 * 1000 : 15_000);
-    dictionaryReplies.set(id, { resolve: resolve as (response: DictionaryReply) => void, timer });
-    dictionaryPort.postMessage({ id, request });
-  });
-}
 
 let config: Config;
 let rules: HostRule[] = [];
@@ -52,12 +16,20 @@ Promise.all([loadConfig(), loadHostRules(), activeTabUrl()]).then(([c, r, url]) 
   siteUrl = url;
   $<HTMLAnchorElement>("privacyLink").href = c.apiBase.replace(/\/$/, "") + "/privacy";
   $<HTMLAnchorElement>("licensesLink").href = ext.runtime.getURL("licenses.html");
+  $<HTMLSelectElement>("dictionaryLanguages").value = c.languages.join(",");
+  $<HTMLSelectElement>("lookupFuriganaMode").value = c.furiganaMode;
   void renderHostControls();
   void renderPageState();
   // Opening the action is the user's activation gesture. Use its activeTab
   // grant to install the lightweight scanner on this page immediately; parsing
   // remains a separate opt-in action and is not required for hover lookup.
   void activateScannerOnActiveTab();
+});
+
+onConfigChanged((next) => {
+  config = next;
+  $<HTMLSelectElement>("dictionaryLanguages").value = next.languages.join(",");
+  $<HTMLSelectElement>("lookupFuriganaMode").value = next.furiganaMode;
 });
 
 // ── Bottom navigation ────────────────────────────────────────────────────────
@@ -116,45 +88,81 @@ async function patch(change: Partial<Config>): Promise<void> {
   await saveConfig(config);
 }
 
+$<HTMLSelectElement>("dictionaryLanguages").addEventListener("change", async (event) => {
+  const select = event.currentTarget as HTMLSelectElement;
+  const languages = select.value.split(",") as GlossLanguage[];
+  if (config.apiKey) {
+    const response = await send({ type: "updateLanguages", languages });
+    if (!response.ok) {
+      select.value = config.languages.join(",");
+      status(response.error);
+      return;
+    }
+  } else {
+    await patch({ languages });
+  }
+  status(config.apiKey ? "Language synced with your profile" : "Definition language saved");
+});
+
+$<HTMLSelectElement>("lookupFuriganaMode").addEventListener("change", async (event) => {
+  const furiganaMode = (event.currentTarget as HTMLSelectElement).value as FuriganaMode;
+  await patch({ furiganaMode, showFurigana: furiganaMode !== "off" });
+  status("Furigana setting saved");
+});
+
 // ── Per-site parsing mode ────────────────────────────────────────────────────
-// The select reflects the current page's effective mode; changing it edits the
-// user's auto/off host lists for this domain. (A built-in auto site can't be
-// forced back to Manual — only turned Off — which is fine for our reader sites.)
+// The select reflects the current page's effective mode. Reader-on always parses
+// locally; persistent site access is requested so this also works after reload.
 const siteRow = $<HTMLElement>("siteRow");
 const siteMode = $<HTMLSelectElement>("siteMode");
 const enableSiteAccess = $<HTMLButtonElement>("enableSiteAccess");
+const readerToggle = $<HTMLButtonElement>("readerToggle");
 
 async function renderHostControls(): Promise<void> {
   const scope = siteScopeFor(siteUrl);
   if (!scope || !/^https?:/.test(siteUrl)) {
     siteRow.hidden = true;
+    readerToggle.hidden = true;
     return;
   }
   siteRow.hidden = false;
-  $<HTMLElement>("siteHost").textContent = new URL(siteUrl).hostname;
+  readerToggle.hidden = false;
+  const host = new URL(siteUrl).hostname;
+  $<HTMLElement>("siteHost").textContent = host;
+  $<HTMLElement>("readerToggleHost").textContent = host;
   const resolution = resolveHostMode(siteUrl, {
-    autoHosts: config.autoParseHosts,
     disabledHosts: config.disabledHosts,
     rules,
   });
+  const readerOn = resolution.mode !== "off";
+  readerToggle.setAttribute("aria-pressed", String(readerOn));
+  readerToggle.setAttribute("aria-label", `Turn reader ${readerOn ? "off" : "on"} for ${host}`);
+  $<HTMLElement>("readerToggleLabel").textContent = `Reader is ${readerOn ? "on" : "off"}`;
   siteMode.value = resolution.mode;
   enableSiteAccess.hidden = resolution.mode !== "auto" || await hasSiteAccess(siteUrl);
 }
 
-siteMode.addEventListener("change", async () => {
-  // Drop any user pattern that currently applies to this page, then add the
-  // scope to the chosen list (Manual = in neither list).
+readerToggle.addEventListener("click", async () => {
   const scope = siteScopeFor(siteUrl);
-  const autoHosts = config.autoParseHosts.filter((p) => !matchUrl(normalizePattern(p), siteUrl));
+  if (!scope) return;
+  const readerOn = readerToggle.getAttribute("aria-pressed") === "true";
+  const disabledHosts = config.disabledHosts.filter((pattern) => !matchUrl(normalizePattern(pattern), siteUrl));
+  if (readerOn) disabledHosts.push(scope);
+  await patch({ disabledHosts });
+  await renderHostControls();
+});
+
+siteMode.addEventListener("change", async () => {
+  // Drop any user pattern that currently applies to this page, then persist the
+  // enabled or disabled state for the whole site.
+  const scope = siteScopeFor(siteUrl);
+  const enabledHosts = config.enabledHosts.filter((p) => !matchUrl(normalizePattern(p), siteUrl));
   const disabledHosts = config.disabledHosts.filter((p) => !matchUrl(normalizePattern(p), siteUrl));
-  if (siteMode.value === "auto" && !(await requestSiteAccess(siteUrl))) {
-    status("Site access was not granted");
-    siteMode.value = "manual";
-    return;
-  }
-  if (siteMode.value === "auto") autoHosts.push(scope);
+  const siteAccess = siteMode.value !== "auto" || await requestSiteAccess(siteUrl);
+  if (!siteAccess) status("Automatic access was not granted; this tab still works while open");
+  if (siteMode.value === "auto" && siteAccess) enabledHosts.push(scope);
   else if (siteMode.value === "off") disabledHosts.push(scope);
-  await patch({ autoParseHosts: autoHosts, disabledHosts });
+  await patch({ enabledHosts, disabledHosts });
   if (siteMode.value === "auto") await sendToActiveTab({ command: "parsePage" });
   await renderHostControls();
 });
@@ -165,10 +173,10 @@ enableSiteAccess.addEventListener("click", async () => {
     return;
   }
   const scope = siteScopeFor(siteUrl);
-  const autoHosts = config.autoParseHosts.filter((pattern) => !matchUrl(normalizePattern(pattern), siteUrl));
-  autoHosts.push(scope);
+  const enabledHosts = config.enabledHosts.filter((pattern) => !matchUrl(normalizePattern(pattern), siteUrl));
+  enabledHosts.push(scope);
   const disabledHosts = config.disabledHosts.filter((pattern) => !matchUrl(normalizePattern(pattern), siteUrl));
-  await patch({ autoParseHosts: autoHosts, disabledHosts });
+  await patch({ enabledHosts, disabledHosts });
   await sendToActiveTab({ command: "parsePage" });
   await renderHostControls();
 });
@@ -246,6 +254,15 @@ async function refreshDecks(): Promise<void> {
 $<HTMLSelectElement>("preferredDeck").addEventListener("change", (event) => {
   const value = (event.currentTarget as HTMLSelectElement).value;
   void patch({ preferredDeckId: value ? Number(value) : null });
+});
+
+$<HTMLButtonElement>("syncProfile").addEventListener("click", async (event) => {
+  const button = event.currentTarget as HTMLButtonElement;
+  button.disabled = true;
+  const res = await send({ type: "syncProfile" });
+  button.disabled = false;
+  status(res.ok ? "Profile synced" : res.error);
+  if (res.ok) await refresh();
 });
 
 $<HTMLButtonElement>("connect").addEventListener("click", async () => {
@@ -439,8 +456,6 @@ async function renderPageState(): Promise<void> {
 
   $("needsDictionary").hidden = hasDictionary;
   $("signInBanner").hidden = !hasDictionary || connected;
-  $<HTMLButtonElement>("parse").disabled = !hasDictionary;
-
   const coverage = $("coverage");
   if (!hasDictionary || !connected) {
     coverage.hidden = true;
@@ -478,23 +493,9 @@ async function renderPageState(): Promise<void> {
 
 $<HTMLButtonElement>("goInstallDictionary").addEventListener("click", () => selectTab("dictionary"));
 $<HTMLButtonElement>("bannerConnect").addEventListener("click", () => {
-  selectTab("dictionary");
+  selectTab("account");
   $<HTMLButtonElement>("connect").click();
 });
-
-// ── Parse this page ──────────────────────────────────────────────────────────
-$<HTMLButtonElement>("parse").addEventListener("click", async () => {
-  await sendToActiveTab({ command: "parsePage" });
-  window.close();
-});
-
-for (const [id, source] of [["readArticle", "article"], ["readSelection", "selection"], ["openPasteReader", "blank"]] as const) {
-  $<HTMLButtonElement>(id).addEventListener("click", async () => {
-    const res = await send({ type: "openReader", source });
-    if (!res.ok) status(res.error);
-    else window.close();
-  });
-}
 
 function status(text: string): void {
   const el = $<HTMLParagraphElement>("status");

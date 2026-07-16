@@ -12,7 +12,6 @@
       <symbol id="icon-search" viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m2.1-5.4a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" /></symbol>
       <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="M9.813 15.904 9 18.75l-.813-2.846A4.5 4.5 0 0 0 5.096 12.813L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.091-3.091L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.091 3.091L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.091 3.091Zm8.445-7.347L18 9.75l-.258-1.193a3.375 3.375 0 0 0-2.299-2.299L14.25 6l1.193-.258a3.375 3.375 0 0 0 2.299-2.299L18 2.25l.258 1.193a3.375 3.375 0 0 0 2.299 2.299L21.75 6l-1.193.258a3.375 3.375 0 0 0-2.299 2.299Z" /></symbol>
       <symbol id="icon-document" viewBox="0 0 24 24"><path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5A3.375 3.375 0 0 0 10.125 2.25H8.25m0 13 2.25 2.25 3.75-4.5m-6-10.75H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9H8.25Z" /></symbol>
-      <symbol id="icon-cursor" viewBox="0 0 24 24"><path d="M15.042 21.672 13.684 16.6m0 0-2.51 2.225.57-8.966 5.227 7.296-3.287-.555Zm-7.84-13.11.806.22m-1.214 3.36-.806-.221m3.918-5.94-.57-.57m-2.4 7.335-.57-.57m8.52-5.9.22-.806m-3.36-1.214-.22.806m5.94 3.918.57-.57m-7.335-2.4.57-.57" /></symbol>
       <symbol id="icon-globe" viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0 0-18m0 18c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m-8.69 6h17.38M3.31 15h17.38" /></symbol>
       <symbol id="icon-adjustments" viewBox="0 0 24 24"><path d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0m-9.75 0h9.75" /></symbol>
       <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m19.5 8.25-7.5 7.5-7.5-7.5" /></symbol>
@@ -20,18 +19,15 @@
       <symbol id="icon-user" viewBox="0 0 24 24"><path d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.118a7.5 7.5 0 0 1 15 0A17.9 17.9 0 0 1 12 21.75a17.9 17.9 0 0 1-7.5-1.632Z" /></symbol>
     </svg>
 
-    <header class="head">
-      <div class="brand">
-        <span class="brand-mark"><img src="../icons/logo_48.png" alt="" width="26" height="26" /></span>
-        <span>
-          <strong>Shirabe</strong>
-          <small>Reader</small>
-        </span>
-      </div>
-      <span class="offline-badge"><span></span>Offline lookup</span>
-    </header>
-
     <main>
+      <button id="readerToggle" class="reader-toggle" type="button" aria-pressed="true" hidden>
+        <span class="reader-toggle-copy">
+          <strong id="readerToggleLabel">Reader is on</strong>
+          <span id="readerToggleHost"></span>
+        </span>
+        <span class="reader-switch" aria-hidden="true"><span></span></span>
+      </button>
+
       <!-- ── Lookup: this page, and what you can read of it ─────────────── -->
       <section id="panel-lookup" class="panel" role="tabpanel" aria-labelledby="tab-lookup">
         <!-- Nothing works without a dictionary, so it outranks everything. -->
@@ -65,32 +61,37 @@
         </section>
 
         <section class="card page-card">
-          <button id="parse" class="primary parse-button"><svg><use href="#icon-sparkles" /></svg>Parse this page</button>
-          <div class="reader-buttons">
-            <button id="readArticle" class="tool-button" type="button"><svg><use href="#icon-book" /></svg><span>Read article</span></button>
-            <button id="readSelection" class="tool-button" type="button"><svg><use href="#icon-cursor" /></svg><span>Read selection</span></button>
-            <button id="openPasteReader" class="tool-button" type="button"><svg><use href="#icon-document" /></svg><span>Paste / PDF</span></button>
-          </div>
-
           <div class="site" id="siteRow" hidden>
             <label for="siteMode"><span><svg><use href="#icon-globe" /></svg>On this site</span><span id="siteHost" class="site-host"></span></label>
             <select id="siteMode">
-              <option value="manual">Manual — button &amp; shortcut</option>
-              <option value="auto">Auto-parse on load</option>
+              <option value="auto">On — parse automatically</option>
               <option value="off">Off</option>
             </select>
             <button id="enableSiteAccess" class="ghost site-access" type="button" hidden>Enable automatic access</button>
           </div>
         </section>
+        <section class="card language-card" aria-labelledby="lookupFuriganaLabel">
+          <div>
+            <p id="lookupFuriganaLabel" class="account-line">Furigana</p>
+            <p class="muted">Choose when readings appear above parsed words.</p>
+          </div>
+          <label class="sr-only" for="lookupFuriganaMode">Furigana</label>
+          <select id="lookupFuriganaMode">
+            <option value="all">All words</option>
+            <option value="unknown">Unknown words</option>
+            <option value="hover">On hover</option>
+            <option value="off">Off</option>
+          </select>
+        </section>
         <p class="muted privacy-note">Lookup and parsing stay on this device. Page context is sent only when you save it. <a id="privacyLink" href="#" target="_blank" rel="noopener">Privacy</a></p>
       </section>
 
-      <!-- ── Dictionary + account ───────────────────────────────────────── -->
+      <!-- ── Offline dictionary ─────────────────────────────────────────── -->
       <section id="panel-dictionary" class="panel" role="tabpanel" aria-labelledby="tab-dictionary" hidden>
         <section id="dictionary" class="card status-card" aria-label="Offline dictionary">
           <div data-dictionary-state="missing" hidden>
             <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-book" /></svg></span><p class="account-line">Offline dictionary</p></div>
-            <p class="muted">Install the compact English + Spanish pack for lookup without an account or connection.</p>
+            <p class="muted">Install the full English + Spanish pack for lookup without an account or connection.</p>
             <button id="installDictionary" class="primary"><svg><use href="#icon-document" /></svg>Install dictionary</button>
           </div>
           <div data-dictionary-state="installing" hidden>
@@ -115,12 +116,31 @@
             <button id="retryDictionary" class="primary">Try again</button>
           </div>
         </section>
+        <section class="card language-card" aria-labelledby="definitionLanguageLabel">
+          <div>
+            <p id="definitionLanguageLabel" class="account-line">Definition language</p>
+            <p class="muted">Choose which definitions appear first in offline lookup.</p>
+          </div>
+          <label class="sr-only" for="dictionaryLanguages">Definition language</label>
+          <select id="dictionaryLanguages">
+            <option value="eng">English</option>
+            <option value="spa">Español</option>
+            <option value="spa,eng">Español, then English</option>
+            <option value="eng,spa">English, then Español</option>
+          </select>
+        </section>
+      </section>
 
-        <section id="account" class="card status-card" aria-label="Shirabe account" hidden>
+      <!-- ── Account and profile ────────────────────────────────────────── -->
+      <section id="panel-account" class="panel" role="tabpanel" aria-labelledby="tab-account" hidden>
+        <section id="account" class="card status-card" aria-label="Shirabe account">
           <div data-state="connected" hidden>
             <div class="card-heading"><span class="icon-box success"><svg><use href="#icon-user" /></svg></span><p class="account-line">Connected<span id="accountName"></span></p></div>
             <label id="deckRow" class="deck-row">Save mined words to<select id="preferredDeck"><option value="">Default deck</option></select></label>
-            <button class="disconnect ghost">Disconnect</button>
+            <div class="button-row">
+              <button id="syncProfile" class="ghost">Sync profile</button>
+              <button class="disconnect ghost">Disconnect</button>
+            </div>
           </div>
           <div data-state="connecting" hidden>
             <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-user" /></svg></span><p class="account-line">Connecting</p></div>
@@ -133,9 +153,8 @@
             <button class="disconnect ghost">Disconnect</button>
           </div>
           <div data-state="disconnected" hidden>
-            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-user" /></svg></span><p class="account-line">Optional Pro features</p></div>
-            <p class="muted">Search, parsing, and the offline dictionary need no account. Connect only to save words, mine sentences, review, and sync progress.</p>
-            <button id="connect" class="primary">Connect Pro account <svg><use href="#icon-arrow" /></svg></button>
+            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-user" /></svg></span><p class="account-line">Not connected</p></div>
+            <button id="connect" class="primary">Connect account <svg><use href="#icon-arrow" /></svg></button>
           </div>
         </section>
       </section>
@@ -151,6 +170,9 @@
         <button id="tab-dictionary" class="tab" type="button" role="tab" aria-controls="panel-dictionary" aria-selected="false" tabindex="-1" data-panel="dictionary">
           <svg><use href="#icon-book" /></svg><span>Dictionary</span>
           <span id="dictionaryDot" class="tab-dot" hidden></span>
+        </button>
+        <button id="tab-account" class="tab" type="button" role="tab" aria-controls="panel-account" aria-selected="false" tabindex="-1" data-panel="account">
+          <svg><use href="#icon-user" /></svg><span>Account</span>
         </button>
       </div>
       <button id="openSettings" class="tab tab-link" type="button">

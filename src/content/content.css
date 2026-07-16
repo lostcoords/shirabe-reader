@@ -6,15 +6,15 @@
 
 /* asbplayer: keep the subtitle overlay above the video chrome so hover/mine
    hits our .sb-word wraps (popup itself is z-index max in popup.ts). */
-.asbplayer-subtitles-container-bottom,
-.asbplayer-subtitles-container-top {
+html:not(.sb-reader-off) .asbplayer-subtitles-container-bottom,
+html:not(.sb-reader-off) .asbplayer-subtitles-container-top {
   z-index: 2147483646;
 }
 
 /* Native Netflix captions default to a non-interactive overlay. Making only
    timed text selectable enables lookup without changing playback controls. */
-.player-timedtext,
-.player-timedtext-text-container {
+html:not(.sb-reader-off) .player-timedtext,
+html:not(.sb-reader-off) .player-timedtext-text-container {
   pointer-events: auto !important;
   user-select: text !important;
 }
@@ -37,6 +37,19 @@
 .sb-furigana-unknown .sb-word:not(.sb-none) ruby rt,
 .sb-furigana-hover .sb-word ruby rt { display: none; }
 .sb-furigana-hover .sb-word:hover ruby rt { display: ruby-text; }
+.sb-furigana-off .sb-word ruby rt { display: none; }
+
+/* Off is a visual suspension, not a destructive revert. Keep the parsed DOM
+   cached so re-enabling is instant, while making the page look and behave as
+   though Shirabe had not decorated it. */
+.sb-reader-off .sb-word,
+.sb-reader-off .sb-word:hover {
+  cursor: inherit;
+  border-bottom: 0 !important;
+  background-color: transparent !important;
+}
+.sb-reader-off .sb-word ruby rt { display: none !important; }
+.sb-reader-off .sb-i-plus-one { outline: 0 !important; }
 
 /* State coloring — a left-to-right cue from "learn this" to "got it". Bottom
    border keeps host text legible where a full highlight would be noisy. */

@@ -26,6 +26,7 @@ export type Config = {
   apiBase: string; // build-time default below; no trailing slash (/v1 is on every host)
   apiKey: string;
   account: string; // display name of the connected account (for the popup header)
+  accountCheckedAt: string; // last successful /v1/me refresh
   scopes: string[]; // scopes the connected key carries (gates mining buttons)
   entitled: boolean; // owner may write to the SRS (Pro or a school member)
   showFurigana: boolean;
@@ -34,10 +35,9 @@ export type Config = {
   // Prefs#languages. Synced from GET /v1/me while connected; edited locally
   // otherwise. Renders one meaning block per language, in this order.
   languages: GlossLanguage[];
-  showParseButton: boolean; // floating corner "Parse" button on manual-parse pages
   scanModifier: ScanModifier; // which key (if any) opens the hover popup
   keybinds: Record<KeybindAction, Keybind>; // rebindable shortcuts (parse + grade/save/known)
-  autoParseHosts: string[]; // domains/patterns to parse automatically on load
+  enabledHosts: string[]; // sites granted persistent reader access
   disabledHosts: string[]; // domains/patterns where the reader is turned off entirely
   preferredDeckId: number | null; // connected mining target; null uses the server default
   statePreset: StatePreset;
@@ -49,15 +49,15 @@ export const DEFAULTS: Config = {
   apiBase: __DEFAULT_API_BASE__,
   apiKey: "",
   account: "",
+  accountCheckedAt: "",
   scopes: [],
   entitled: false,
   showFurigana: true,
   furiganaMode: "all",
   languages: ["eng"],
-  showParseButton: true,
   scanModifier: "shift",
   keybinds: DEFAULT_KEYBINDS,
-  autoParseHosts: [],
+  enabledHosts: [],
   disabledHosts: [],
   preferredDeckId: null,
   statePreset: "standard",

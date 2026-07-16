@@ -1,6 +1,7 @@
 import { ext } from "./browser.js";
 import type { Definition, ParsedToken, WordState } from "./types.js";
 import type { DictionaryStatus, PackManifest } from "./offline-dictionary.js";
+import type { GlossLanguage } from "./languages.js";
 
 // A grade on Shirabe's 1–4 FSRS scale, matching POST /v1/srs/reviews.
 export type Rating = 1 | 2 | 3 | 4;
@@ -46,9 +47,7 @@ export type Status = {
 // directly — the background worker owns the API key, the device-login
 // handshake, and rate limiting. Everything goes through these.
 export type Request =
-  | { type: "parse"; text: string }
-  | { type: "parseBatch"; texts: string[]; requestId?: number } // requestId → abortable (lazy viewport parsing)
-  | { type: "abortParse"; requestId: number }
+  | { type: "parseBatch"; texts: string[] }
   // Words and kanji are separate corpora, as on the web: a word search never
   // answers with a kanji. `kind: "kanji"` is the explicit kanji-breakdown path.
   | { type: "lookup"; query: string; kind?: "word" | "kanji" }
@@ -62,7 +61,6 @@ export type Request =
     }
   | { type: "decks" }
   | { type: "states"; lemmas: string[] }
-  | { type: "openReader"; source: "article" | "selection" | "blank" }
   | { type: "lookupHistory" }
   | { type: "clearLookupHistory" }
   | { type: "pageMetrics"; metrics: PageMetrics }
@@ -70,13 +68,13 @@ export type Request =
   | { type: "setState"; lemma: string; state: "known" | "reviewing" }
   | { type: "connect" } // begin device login; resolves with the code to show
   | { type: "disconnect" }
+  | { type: "syncProfile" }
+  | { type: "updateLanguages"; languages: GlossLanguage[] }
   | { type: "status" };
 
 export type Response =
-  | { ok: true; type: "parse"; tokens: ParsedToken[] }
-  | { ok: true; type: "parseBatch"; tokens: ParsedToken[][] }
-  | { ok: true; type: "abortParse" }
-  | { ok: true; type: "lookup"; definition: Definition | null }
+  | { ok: true; type: "parseBatch"; tokens: ParsedToken[][]; dictionaryInstalling?: boolean }
+  | { ok: true; type: "lookup"; definition: Definition | null; dictionaryInstalling?: boolean }
   | { ok: true; type: "dictionaryStatus"; dictionary: DictionaryStatus }
   | { ok: true; type: "installDictionary"; manifest: PackManifest }
   | { ok: true; type: "removeDictionary" }
@@ -84,7 +82,6 @@ export type Response =
   | { ok: true; type: "save"; result: SaveResult }
   | { ok: true; type: "decks"; decks: Deck[] }
   | { ok: true; type: "states"; states: Record<string, WordState>; details: Record<string, StudyDetails> }
-  | { ok: true; type: "openReader" }
   | { ok: true; type: "lookupHistory"; history: LookupHistoryItem[] }
   | { ok: true; type: "clearLookupHistory" }
   | { ok: true; type: "pageMetrics" }
@@ -92,6 +89,8 @@ export type Response =
   | { ok: true; type: "setState"; state: WordState }
   | { ok: true; type: "connect" }
   | { ok: true; type: "disconnect" }
+  | { ok: true; type: "syncProfile" }
+  | { ok: true; type: "updateLanguages"; languages: GlossLanguage[] }
   | { ok: true; type: "status"; status: Status }
   | { ok: false; error: string };
 

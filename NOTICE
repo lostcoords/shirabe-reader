@@ -40,5 +40,4 @@ manifest and the extension's in-product license notices for full attribution.
 -------------------------------------------------------------------------------
 Third-party libraries
 -------------------------------------------------------------------------------
-    PDF.js — Apache License 2.0 — https://github.com/mozilla/pdf.js
     @noble/hashes — MIT License — https://github.com/paulmillr/noble-hashes

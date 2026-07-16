@@ -60,17 +60,14 @@ What works in the current build:
 - **Hover popup** with headword, reading, and definitions in your chosen
   language from IndexedDB, isolated in a shadow root so it renders the same
   on every site. Show it on plain hover, or only on **Alt/Option + hover**.
-- **Mine & review inline** — grade a word **Again / Hard / Good / Easy** (which
-  both mines a new card and reviews an existing one via `POST /v1/srs/saves`),
-  **＋ Save** without grading, or **✓ Known** to park it. Keyboard shortcuts
-  `1`–`4`, `s`, `k` act on whatever word you're hovering, popup or not.
-- **On-demand parsing** via the toolbar button, the right-click menu
-  ("Parse this page" / "Parse selection"), or automatic on page load.
+- **Mine & review inline** — **＋ Save** creates a card without grading it;
+  **Again / Hard / Good / Easy** appear only when that card is due. **✓ Known**
+  parks it. Keyboard shortcuts `1`–`4` are likewise due-only.
+- **Automatic local parsing** whenever the reader is on. The right-click menu
+  can reparse a page or parse a selection explicitly.
 - **Page awareness** — coverage and known/learning/unknown/due counts, i+1
   paragraph highlighting, occurrence/unique coverage, a toolbar badge,
   accessible state presets, and Pause/Reparse/Revert controls.
-- **Dedicated reading shell** — extracted article/selection, pasted text, and
-  local PDF faithful/reflow views with typography, theme, and vertical writing.
 - **asbplayer subtitles** — when [asbplayer](https://github.com/asbplayer/asbplayer)
   is injecting JP subs (streaming or `app.asbplayer.dev`), lines are tokenized
   for hover/save the same way as page text. No Anki required for lookups; clip
@@ -154,8 +151,7 @@ choose `dist/chrome`.
    scoped, revocable API key it exchanges for itself (OAuth 2.0 + PKCE).
 3. Open **Settings** (bottom bar) to pick a **definition language** and scan
    modifier (Shift by default).
-4. Open a Japanese page and hit **Page** → **Parse this page** (or set that site to
-   _Auto-parse on load_).
+4. Open a Japanese page. Shirabe parses it locally while the reader toggle is on.
 
 Alternatively, open **Settings → Advanced** and paste a key made with
 `bin/rails api_keys:create` instead of connecting. Either way the key is stored
@@ -185,7 +181,6 @@ src/
     content.ts    hover + modifier gating, keyboard shortcuts, MutationObserver
     toast.ts      fleeting feedback for keyboard-driven actions
   action/         toolbar popup = Connect + preferences + Advanced
-  reader/         article/paste/PDF reading shell
 ```
 
 Content scripts never touch storage or remote APIs directly. The background

@@ -4,22 +4,22 @@ import { loadHostRules, resolveHostMode, type HostRule } from "../common/host-ru
 import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
 import { send } from "../common/messages.js";
 import { grade, markKnown, save, type Outcome } from "./actions.js";
-import { hideParseButton, showParseButton } from "./parse-button.js";
-import { observeLazy, parse, setParsingPaused } from "./parser.js";
-import { refreshStatusBar, setStatusOptions, showStatusBar } from "./status-bar.js";
+import { observeLazy, parse, refreshRenderedStates, setParsingPaused } from "./parser.js";
+import { hideStatusBar, refreshStatusBar, setStatusOptions, showStatusBar } from "./status-bar.js";
 import { startAsbplayer } from "./parsers/asbplayer.js";
 import { startYouTubeCaptions } from "./parsers/youtube.js";
 import { startDynamicReader } from "./parsers/dynamic-reader.js";
 import { dismissPopup, scheduleHide, scheduleShow, scheduleTextLookup, setCanWrite, showNow } from "./popup.js";
 import { logicalTextAt } from "./dom-text.js";
 import { toast } from "./toast.js";
+import { ensureFurigana } from "./word.js";
 
 let scanModifier: ScanModifier = "none";
 let showFurigana = true;
 let hovered: HTMLElement | null = null; // the .sb-word under the pointer, popup or not
 let current: Config | null = null;
 let rules: HostRule[] = [];
-let mode: "auto" | "manual" | "off" = "manual";
+let mode: "auto" | "off" = "auto";
 let rule: HostRule | undefined;
 let parsed = false; // has this page been parsed? (don't re-offer the button after)
 let localDictionaryReady = false;
@@ -31,56 +31,56 @@ function apply(config: Config): void {
   showFurigana = config.furiganaMode !== "off";
   document.documentElement.classList.toggle("sb-furigana-unknown", config.furiganaMode === "unknown");
   document.documentElement.classList.toggle("sb-furigana-hover", config.furiganaMode === "hover");
+  document.documentElement.classList.toggle("sb-furigana-off", config.furiganaMode === "off");
+  if (showFurigana) ensureFurigana();
   document.documentElement.dataset.sbStatePreset = config.statePreset;
   setStatusOptions({ includesLearning: config.iPlusOneIncludesLearning, frequencyMax: config.iPlusOneFrequencyMax });
   setCanWrite(canWriteSrs(config));
 
   const resolution = resolveHostMode(location.href, {
-    autoHosts: config.autoParseHosts,
     disabledHosts: config.disabledHosts,
     rules,
   });
   mode = resolution.mode;
   rule = resolution.rule;
+  document.documentElement.classList.toggle("sb-reader-off", mode === "off");
+
+  if (mode === "off") {
+    hovered = null;
+    pendingPointer = null;
+    dismissPopup();
+    setParsingPaused(true);
+    hideStatusBar();
+  } else {
+    setParsingPaused(false);
+    if (parsed && isTopFrame) showStatusBar(parsePage);
+  }
 
   // asbplayer injects subtitle text into arbitrary video hosts (and iframes).
   // Always watch when connected — no-op until `.asbplayer-offscreen` appears.
-  // Not an exclusive host rule: Wikipedia/Mokuro auto-parse still run above.
+  // Not an exclusive host rule: Wikipedia/Mokuro parsing still runs above.
   if ((localDictionaryReady || isConnected(config)) && mode !== "off") startAsbplayer(showFurigana);
 
-  // Subframes only run the asbplayer watcher (above). Host-rule auto-parse and
-  // the floating button stay top-frame so nested ads/widgets don't get UI.
+  // Subframes only run the asbplayer watcher (above). Host-rule page parsing
+  // stays top-frame so nested ads/widgets don't get UI.
   if (!isTopFrame) {
-    hideParseButton();
     return;
   }
 
-  // Auto sites parse on load (once); manual sites offer the floating button;
-  // off sites do nothing at all. A rule may name a dedicated custom parser
+  // Reader-on pages parse on load once; off pages do nothing. A rule may name
+  // a dedicated custom parser
   // (e.g. YouTube captions) instead of the generic page parser.
   if (mode === "auto" && (localDictionaryReady || isConnected(config)) && !parsed) {
     if (rule?.custom) startCustomParser(rule.custom);
     else parsePage();
-  } else {
-    refreshParseButton();
   }
 }
 
 function startCustomParser(custom: NonNullable<HostRule["custom"]>): void {
+  setParsingPaused(false);
   parsed = true;
-  hideParseButton();
   if (custom === "youtube") startYouTubeCaptions(showFurigana);
   else startDynamicReader(custom, showFurigana);
-}
-
-// The floating "Parse" button is the manual trigger: shown once we're connected,
-// on manual-mode pages, and only until the page has been parsed. Hidden on auto
-// and off pages, and when the user turns it off (showParseButton).
-function refreshParseButton(): void {
-  if (!current || !isTopFrame) return;
-  const wanted = mode === "manual" && (localDictionaryReady || isConnected(current)) && current.showParseButton && !parsed;
-  if (wanted) showParseButton(parsePage);
-  else hideParseButton();
 }
 
 // Resolve host rules first (they gate the mode), then apply config; re-apply on
@@ -130,6 +130,7 @@ function wantPopup(e: Mods): boolean {
 }
 
 document.addEventListener("mouseover", (e) => {
+  if (mode === "off") return;
   const word = (e.target as Element | null)?.closest?.(".sb-word");
   if (word instanceof HTMLElement) {
     hovered = word;
@@ -162,7 +163,7 @@ document.addEventListener("mousemove", (event) => {
 });
 
 function scanPointer(event: MouseEvent, force = false): void {
-  if (!localDictionaryReady || (!force && !wantPopup(event))) return;
+  if (mode === "off" || !localDictionaryReady || (!force && !wantPopup(event))) return;
   const element = event.target as Element | null;
   if (element?.closest?.(".sb-word, .sb-host, input, textarea, select, [contenteditable='true']")) return;
   const caret = caretAt(event.clientX, event.clientY);
@@ -216,7 +217,7 @@ function sentenceAround(text: string, offset: number): { text: string; targetSta
 // without moving the mouse. No-op in "none" mode.
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") dismissPopup();
-  if (scanModifier !== "none" && e.key === MODIFIER_KEY[scanModifier]) {
+  if (mode !== "off" && scanModifier !== "none" && e.key === MODIFIER_KEY[scanModifier]) {
     if (!localDictionaryReady) console.warn("[Shirabe scanner] modifier pressed before the local dictionary is ready");
     if (hovered) showNow(hovered);
     else if (lastPointer) scanPointer(lastPointer, true);
@@ -275,7 +276,6 @@ function initParse(): void {
 function parsePage(): void {
   setParsingPaused(false);
   parsed = true;
-  hideParseButton(); // it's done its job; the observers keep new content parsed
   const root = rule?.parse ? (document.querySelector(rule.parse) ?? document.body) : document.body;
   observeLazy(root, showFurigana, ruleOptions());
   observeMutations();
@@ -298,6 +298,7 @@ ext.runtime.onMessage.addListener((message: { command?: string }) => {
   else if (message.command === "parseSelection") parseSelection();
   else if (message.command === "lookupSelection") lookupSelection();
   else if (message.command === "dictionaryChanged") void sendDictionaryStatus();
+  else if (message.command === "profileChanged") void refreshRenderedStates();
 });
 
 function lookupSelection(): void {
@@ -319,8 +320,8 @@ function observeMutations(): void {
   observer = new MutationObserver((records) => {
     for (const record of records) {
       for (const node of record.addedNodes) {
-        if (node.nodeType !== Node.ELEMENT_NODE) continue;
-        const el = node as Element;
+        const el = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
+        if (!el) continue;
         if (el.closest("[data-sb-parsed], .sb-word, .sb-host")) continue;
         pending.add(el);
       }
@@ -333,10 +334,11 @@ function observeMutations(): void {
 function scheduleFlush(): void {
   window.clearTimeout(flushTimer);
   flushTimer = window.setTimeout(() => {
-    const batch = [...pending];
+    const candidates = [...pending].filter((el) => el.isConnected);
+    const batch = candidates.filter((el) => !candidates.some((parent) => parent !== el && parent.contains(el)));
     pending.clear();
     for (const el of batch) {
-      if (el.isConnected) observeLazy(el, showFurigana, ruleOptions()); // lazy: parse fresh blocks as they're seen
+      observeLazy(el, showFurigana, ruleOptions()); // lazy: parse fresh blocks as they're seen
     }
     refreshStatusBar();
   }, 350);

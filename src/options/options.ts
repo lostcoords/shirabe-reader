@@ -1,13 +1,25 @@
 import { ext } from "../common/browser.js";
-import { DEFAULTS, loadConfig, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type ScanModifier, type StatePreset } from "../common/config.js";
+import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type ScanModifier, type StatePreset } from "../common/config.js";
 import { parseHostList } from "../common/host-rules.js";
 import { formatKeybind, KEYBIND_ACTIONS, KEYBIND_LABELS, keybindFromEvent, type Keybind, type KeybindAction } from "../common/keybind.js";
+import { send } from "../common/messages.js";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
+const settingsLinks = [...document.querySelectorAll<HTMLAnchorElement>(".settings-nav a")];
+function selectSettingsSection(id: string): void {
+  for (const link of settingsLinks) link.setAttribute("aria-current", String(link.hash === `#${id}`));
+}
+for (const link of settingsLinks) link.addEventListener("click", () => selectSettingsSection(link.hash.slice(1)));
+
+const sectionObserver = new IntersectionObserver((entries) => {
+  const visible = entries.find((entry) => entry.isIntersecting);
+  if (visible?.target.id) selectSettingsSection(visible.target.id);
+}, { rootMargin: "-15% 0px -70%", threshold: 0 });
+for (const id of ["reading", "keyboard", "advanced"]) sectionObserver.observe($(id));
+
 const prefs = {
   furiganaMode: $<HTMLSelectElement>("furiganaMode"),
-  showParseButton: $<HTMLInputElement>("showParseButton"),
   scanModifier: $<HTMLSelectElement>("scanModifier"),
   languages: $<HTMLSelectElement>("languages"),
   statePreset: $<HTMLSelectElement>("statePreset"),
@@ -17,7 +29,7 @@ const prefs = {
 const advanced = {
   apiBase: $<HTMLInputElement>("apiBase"),
   apiKey: $<HTMLInputElement>("apiKey"),
-  autoParseHosts: $<HTMLTextAreaElement>("autoParseHosts"),
+  enabledHosts: $<HTMLTextAreaElement>("enabledHosts"),
   disabledHosts: $<HTMLTextAreaElement>("disabledHosts"),
 };
 
@@ -26,7 +38,6 @@ let config: Config;
 loadConfig().then((loaded) => {
   config = loaded;
   prefs.furiganaMode.value = config.furiganaMode;
-  prefs.showParseButton.checked = config.showParseButton;
   prefs.scanModifier.value = config.scanModifier;
   prefs.languages.value = config.languages.join(",");
   prefs.statePreset.value = config.statePreset;
@@ -34,7 +45,7 @@ loadConfig().then((loaded) => {
   prefs.iPlusOneFrequencyMax.value = String(config.iPlusOneFrequencyMax);
   advanced.apiBase.value = config.apiBase;
   advanced.apiKey.value = config.apiKey;
-  advanced.autoParseHosts.value = config.autoParseHosts.join("\n");
+  advanced.enabledHosts.value = config.enabledHosts.join("\n");
   advanced.disabledHosts.value = config.disabledHosts.join("\n");
   const base = config.apiBase.replace(/\/$/, "");
   $<HTMLAnchorElement>("settingsLink").href = `${base}/settings`;
@@ -43,23 +54,36 @@ loadConfig().then((loaded) => {
   renderKeybinds();
 });
 
+onConfigChanged((next) => {
+  config = next;
+  prefs.languages.value = next.languages.join(",");
+});
+
 async function patch(change: Partial<Config>): Promise<void> {
   config = { ...config, ...change };
   await saveConfig(config);
 }
 
-$<HTMLFormElement>("prefs").addEventListener("change", () => {
-  void patch({
+$<HTMLFormElement>("prefs").addEventListener("change", async (event) => {
+  const languages = prefs.languages.value.split(",") as GlossLanguage[];
+  if (event.target === prefs.languages && config.apiKey) {
+    const response = await send({ type: "updateLanguages", languages });
+    if (!response.ok) {
+      prefs.languages.value = config.languages.join(",");
+      status(response.error);
+      return;
+    }
+  }
+  await patch({
     furiganaMode: prefs.furiganaMode.value as FuriganaMode,
     showFurigana: prefs.furiganaMode.value !== "off",
-    showParseButton: prefs.showParseButton.checked,
     scanModifier: prefs.scanModifier.value as ScanModifier,
-    languages: prefs.languages.value.split(",") as GlossLanguage[],
+    languages,
     statePreset: prefs.statePreset.value as StatePreset,
     iPlusOneIncludesLearning: prefs.iPlusOneIncludesLearning.checked,
     iPlusOneFrequencyMax: Math.max(1, Number(prefs.iPlusOneFrequencyMax.value) || DEFAULTS.iPlusOneFrequencyMax),
   });
-  status("Saved");
+  status(event.target === prefs.languages && config.apiKey ? "Synced with your profile" : "Saved");
 });
 
 // ── Keyboard shortcuts ───────────────────────────────────────────────────────
@@ -111,9 +135,9 @@ $<HTMLFormElement>("advancedForm").addEventListener("submit", async (event) => {
   await patch({
     apiBase: advanced.apiBase.value.trim() || DEFAULTS.apiBase,
     apiKey,
-    scopes: apiKey ? ["READ_ACCOUNT", "READ_SRS", "WRITE_SRS"] : [],
+    scopes: apiKey ? ["READ_ACCOUNT", "READ_PREFERENCES", "WRITE_PREFERENCES", "READ_SRS", "WRITE_SRS"] : [],
     account: apiKey ? config.account : "",
-    autoParseHosts: parseHostList(advanced.autoParseHosts.value),
+    enabledHosts: parseHostList(advanced.enabledHosts.value),
     disabledHosts: parseHostList(advanced.disabledHosts.value),
   });
   status("Saved");

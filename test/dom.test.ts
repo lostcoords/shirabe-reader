@@ -49,7 +49,7 @@ test("page metrics distinguish occurrences and unique words and apply the i+1 ca
     <p><span class="sb-word" data-lemma="猫" data-state="known"></span><span class="sb-word" data-lemma="猫" data-state="known"></span></p>
     <p id="candidate"><span class="sb-word" data-lemma="食べる" data-state="none" data-frequency="1200"></span><span class="sb-word" data-lemma="猫" data-state="known"></span></p>
   `);
-  const { isIPlusOne, measurePageWords } = await import("../src/content/page-metrics.js");
+  const { isIPlusOne, measurePageWords, PageMetricIndex } = await import("../src/content/page-metrics.js");
   const words = [...window.document.querySelectorAll<HTMLElement>(".sb-word")];
   const metrics = measurePageWords(words);
   assert.equal(metrics.occurrenceCoverage, 75);
@@ -57,18 +57,28 @@ test("page metrics distinguish occurrences and unique words and apply the i+1 ca
   const candidate = [...window.document.querySelectorAll<HTMLElement>("#candidate .sb-word")];
   assert.equal(isIPlusOne(candidate, { includesLearning: true, frequencyMax: 2000 }), true);
   assert.equal(isIPlusOne(candidate, { includesLearning: true, frequencyMax: 1000 }), false);
+
+  const index = new PageMetricIndex();
+  for (const word of words) index.update(word);
+  assert.deepEqual(index.metrics(), metrics);
+  candidate[0].dataset.state = "known";
+  index.update(candidate[0]);
+  assert.equal(index.metrics().occurrenceCoverage, 100);
+  index.remove(words[0]);
+  assert.equal(index.metrics().total, 3);
+  assert.equal(index.metrics().unique, 2);
 });
 
 test("the release host matrix resolves to maintained parsing paths", async () => {
   installDom("");
   const { BUILTIN_RULES, resolveHostMode } = await import("../src/common/host-rules.js");
-  const resolve = (url: string) => resolveHostMode(url, { autoHosts: [], disabledHosts: [], rules: BUILTIN_RULES });
+  const resolve = (url: string) => resolveHostMode(url, { disabledHosts: [], rules: BUILTIN_RULES });
   assert.equal(resolve("https://ja.wikipedia.org/wiki/日本語").rule?.parse, "#mw-content-text");
   assert.equal(resolve("https://www.youtube.com/watch?v=1").rule?.custom, "youtube");
   assert.equal(resolve("https://www.netflix.com/watch/1").rule?.custom, "netflix");
   assert.equal(resolve("https://reader.ttsu.app/b?id=1").rule?.custom, "ttsu");
   assert.equal(resolve("https://reader.mokuro.app/reader/1").rule?.custom, "mokuro");
-  assert.equal(resolve("https://news.example.jp/story").mode, "manual");
+  assert.equal(resolve("https://news.example.jp/story").mode, "auto");
 });
 
 test("Japanese Wikipedia fixture scopes logical text to article content", async () => {
@@ -77,7 +87,7 @@ test("Japanese Wikipedia fixture scopes logical text to article content", async 
     <main id="mw-content-text"><p id="wiki-line">日本<ruby>語<rt>ご</rt></ruby>を<a href="/wiki/勉強">勉強する</a>。</p></main>
   `);
   const { BUILTIN_RULES, resolveHostMode } = await import("../src/common/host-rules.js");
-  const rule = resolveHostMode("https://ja.wikipedia.org/wiki/日本語", { autoHosts: [], disabledHosts: [], rules: BUILTIN_RULES }).rule;
+  const rule = resolveHostMode("https://ja.wikipedia.org/wiki/日本語", { disabledHosts: [], rules: BUILTIN_RULES }).rule;
   const root = window.document.querySelector(rule?.parse ?? "body") as HTMLElement;
   const first = root.querySelector("p")?.firstChild as Text;
   const { logicalTextAt } = await import("../src/content/dom-text.js");

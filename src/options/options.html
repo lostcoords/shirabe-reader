@@ -7,69 +7,63 @@
     <title>Shirabe Reader settings</title>
   </head>
   <body>
-    <svg class="icon-sprite" aria-hidden="true">
-      <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m19.5 8.25-7.5 7.5-7.5-7.5" /></symbol>
-    </svg>
-
-    <header class="head">
-      <div class="brand">
-        <span class="brand-mark"><img src="../icons/logo_48.png" alt="" width="34" height="34" /></span>
-        <span>
-          <strong>Shirabe Reader</strong>
-          <small>Settings</small>
-        </span>
-      </div>
+    <header class="page-header">
+      <h1>Reader settings</h1>
+      <p>Changes save automatically on this device.</p>
     </header>
 
-    <main>
-      <section class="card">
-        <div class="section-title">
-          <h2>Reading</h2>
-          <p>Saved automatically on this device.</p>
-        </div>
-        <form id="prefs" class="prefs-grid">
-          <label>Open popup on hover<select id="scanModifier"><option value="none">Always</option><option value="alt">Hold Alt / Option</option><option value="ctrl">Hold Ctrl</option><option value="shift">Hold Shift</option><option value="meta">Hold ⌘ Cmd</option></select></label>
-          <label>Definition language<select id="languages"><option value="eng">English</option><option value="spa">Español</option><option value="spa,eng">Español, then English</option><option value="eng,spa">English, then Español</option></select></label>
-          <label>Furigana<select id="furiganaMode"><option value="all">All words</option><option value="unknown">Unknown words</option><option value="hover">On hover</option><option value="off">Off</option></select></label>
-          <label>Word-state colors<select id="statePreset"><option value="standard">Standard</option><option value="colorVision">Color-vision safe</option><option value="minimal">Minimal underlines</option></select></label>
-          <label class="frequency-field">i+1 maximum frequency rank<input id="iPlusOneFrequencyMax" type="number" min="1" max="1000000" step="1000" /></label>
-          <div class="check-stack">
-            <label class="check-row"><input id="iPlusOneIncludesLearning" type="checkbox" /><span>Count learning words as known for i+1</span></label>
-            <label class="check-row"><input id="showParseButton" type="checkbox" /><span>Show a Parse button on pages</span></label>
-          </div>
-        </form>
-      </section>
+    <main class="settings-shell">
+      <nav class="settings-nav" aria-label="Reader settings">
+        <p>Settings</p>
+        <a href="#reading" aria-current="true">Reading</a>
+        <a href="#keyboard">Keyboard shortcuts</a>
+        <a href="#advanced">Advanced</a>
+      </nav>
 
-      <section class="card">
+      <article class="settings-content">
+        <section id="reading" class="card">
+          <div class="section-title">
+            <h2>Reading</h2>
+            <p>Lookup, furigana, and page parsing.</p>
+          </div>
+          <form id="prefs" class="prefs-grid">
+            <label>Open popup on hover<select id="scanModifier"><option value="none">Always</option><option value="alt">Hold Alt / Option</option><option value="ctrl">Hold Ctrl</option><option value="shift">Hold Shift</option><option value="meta">Hold ⌘ Cmd</option></select></label>
+            <label>Definition language<select id="languages"><option value="eng">English</option><option value="spa">Español</option><option value="spa,eng">Español, then English</option><option value="eng,spa">English, then Español</option></select></label>
+            <label>Furigana<select id="furiganaMode"><option value="all">All words</option><option value="unknown">Unknown words</option><option value="hover">On hover</option><option value="off">Off</option></select></label>
+            <label>Word-state colors<select id="statePreset"><option value="standard">Standard</option><option value="colorVision">Color-vision safe</option><option value="minimal">Minimal underlines</option></select></label>
+            <label class="frequency-field">i+1 maximum frequency rank<input id="iPlusOneFrequencyMax" type="number" min="1" max="1000000" step="1000" /></label>
+            <div class="check-stack">
+              <label class="check-row"><input id="iPlusOneIncludesLearning" type="checkbox" /><span>Count learning words as known for i+1</span></label>
+            </div>
+          </form>
+        </section>
+
+        <section id="keyboard" class="card">
         <div class="section-title">
           <h2>Keyboard shortcuts</h2>
           <p>Click a shortcut, then press keys. Backspace clears it.</p>
         </div>
         <div id="keybinds"></div>
-      </section>
+        </section>
 
-      <section class="card">
-        <details id="advanced">
-          <summary class="section-title advanced-summary">
-            <div><h2>Advanced</h2><p>Server, manual key, and per-site lists.</p></div>
-            <svg class="chevron"><use href="#icon-chevron" /></svg>
-          </summary>
+        <section id="advanced" class="card">
+          <div class="section-title"><h2>Advanced</h2><p>Server, manual key, and per-site lists.</p></div>
           <form id="advancedForm">
             <label>API server<input id="apiBase" type="url" placeholder="https://shirabe.org" /></label>
             <label>API key (manual)<input id="apiKey" type="password" placeholder="Paste a key instead of connecting" autocomplete="off" /></label>
-            <label>Always auto-parse these sites<textarea id="autoParseHosts" rows="3" placeholder="one domain per line, e.g. example.com"></textarea></label>
+            <label>Automatically enable Shirabe on these sites<textarea id="enabledHosts" rows="3" placeholder="one domain per line, e.g. example.com"></textarea></label>
             <label>Never parse on these sites<textarea id="disabledHosts" rows="3" placeholder="one domain per line"></textarea></label>
             <button type="submit" class="ghost">Save advanced</button>
           </form>
-        </details>
-      </section>
+        </section>
 
-      <p class="muted footer-note">
+        <p class="muted footer-note">
         Dictionary lookup and parsing stay on this device. Page context is sent only when you save it.
         <a id="privacyLink" href="#" target="_blank" rel="noopener">Privacy</a> ·
         <a id="settingsLink" href="#" target="_blank" rel="noopener">Shirabe settings</a> ·
         <a id="licensesLink" href="#" target="_blank" rel="noopener">Offline license notices</a>
-      </p>
+        </p>
+      </article>
     </main>
 
     <p id="status" class="status" role="status"></p>

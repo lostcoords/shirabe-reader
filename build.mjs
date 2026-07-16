@@ -14,8 +14,8 @@
 // background `scripts` array plus a `browser_specific_settings.gecko` block.
 import * as esbuild from "esbuild";
 import { spawn } from "node:child_process";
-import { watch as watchFiles } from "node:fs";
-import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { rmSync, watch as watchFiles } from "node:fs";
+import { copyFile, cp, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,6 +40,7 @@ const outdir = outputArg
 // A persistent, per-target dev profile so login + connection survive restarts
 // (gitignored). First run: log in once; every run after reuses it.
 const profileDir = join(root, ".web-ext-profile", target);
+const watchLock = join(root, ".web-ext-profile", `${target}.watch.lock`);
 
 // Each entry becomes a standalone classic (IIFE) bundle. Content scripts and
 // MV3 background workers can't be ES modules across both browsers, so we let
@@ -49,7 +50,6 @@ const entries = {
   content: "src/content/content.ts",
   "action/popup": "src/action/popup.ts",
   "options/options": "src/options/options.ts",
-  "reader/reader": "src/reader/reader.ts",
 };
 
 const buildOptions = {
@@ -96,7 +96,10 @@ async function manifest() {
     base.background = { service_worker: "background.js" };
   }
 
-  await writeFile(join(outdir, "manifest.json"), JSON.stringify(base, null, 2));
+  const destination = join(outdir, "manifest.json");
+  const temporary = `${destination}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(temporary, JSON.stringify(base, null, 2));
+  await rename(temporary, destination);
 }
 
 async function copyStatic() {
@@ -108,24 +111,20 @@ async function copyStatic() {
   await copyFile(join(root, "src/action/popup.css"), join(outdir, "action/popup.css"));
   await copyFile(join(root, "src/options/options.html"), join(outdir, "options/options.html"));
   await copyFile(join(root, "src/options/options.css"), join(outdir, "options/options.css"));
-  await copyFile(join(root, "src/reader/reader.html"), join(outdir, "reader/reader.html"));
-  await copyFile(join(root, "src/reader/reader.css"), join(outdir, "reader/reader.css"));
   await copyFile(join(root, "src/licenses.html"), join(outdir, "licenses.html"));
-  await copyFile(join(root, "node_modules/pdfjs-dist/LICENSE"), join(outdir, "licenses/pdfjs-Apache-2.0.txt"));
   await copyFile(join(root, "node_modules/@noble/hashes/LICENSE"), join(outdir, "licenses/noble-hashes-MIT.txt"));
   // The extension is GPL-3.0 (Yomitan-derived deinflection); ship its terms and
   // attribution with the package rather than only in the repository.
   await copyFile(join(root, "LICENSE"), join(outdir, "licenses/gpl-3.0.txt"));
   await copyFile(join(root, "NOTICE"), join(outdir, "licenses/NOTICE.txt"));
-  await copyFile(join(root, "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"), join(outdir, "reader/pdf.worker.min.mjs"));
   await cp(join(root, "src/icons"), join(outdir, "icons"), { recursive: true });
 }
 
 async function buildAll() {
+  if (watch) await acquireWatchLock();
   await rm(outdir, { recursive: true, force: true });
   await mkdir(join(outdir, "action"), { recursive: true });
   await mkdir(join(outdir, "options"), { recursive: true });
-  await mkdir(join(outdir, "reader"), { recursive: true });
   await mkdir(join(outdir, "licenses"), { recursive: true });
 
   if (watch) {
@@ -139,6 +138,35 @@ async function buildAll() {
   await copyStatic();
   if (watch) watchStatic();
   console.log(`✓ ${target} build → ${outdir}${watch ? " (watching)" : ""}`);
+}
+
+async function acquireWatchLock() {
+  await mkdir(dirname(watchLock), { recursive: true });
+  try {
+    const handle = await open(watchLock, "wx");
+    await handle.writeFile(String(process.pid));
+    await handle.close();
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    const owner = Number(await readFile(watchLock, "utf8").catch(() => ""));
+    if (owner && processAlive(owner)) {
+      throw new Error(`A ${target} dev watcher is already running (PID ${owner}). Stop it before starting another.`);
+    }
+    await rm(watchLock, { force: true });
+    return acquireWatchLock();
+  }
+
+  const release = () => rmSync(watchLock, { force: true });
+  process.once("exit", release);
+}
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
 }
 
 // esbuild only watches the TS graph, so re-sync everything else — CSS, popup

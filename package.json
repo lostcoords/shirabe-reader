@@ -10,7 +10,8 @@
     "build:chrome": "node build.mjs chrome",
     "watch": "node build.mjs firefox --watch",
     "watch:chrome": "node build.mjs chrome --watch",
-    "prepare:dev-pack": "cd .. && LIMIT=1000 bin/rails dictionary_packs:build",
+    "prepare:dev-pack": "cd .. && bin/rails dictionary_packs:ensure",
+    "rebuild:dev-pack": "cd .. && bin/rails dictionary_packs:build",
     "dev": "npm run prepare:dev-pack && node build.mjs firefox --watch --serve",
     "dev:chrome": "npm run prepare:dev-pack && node build.mjs chrome --watch --serve",
     "check": "tsc --noEmit",
@@ -30,7 +31,6 @@
     "web-ext": "^10.5.0"
   },
   "dependencies": {
-    "@noble/hashes": "^2.0.1",
-    "pdfjs-dist": "^5.7.284"
+    "@noble/hashes": "^2.0.1"
   }
 }

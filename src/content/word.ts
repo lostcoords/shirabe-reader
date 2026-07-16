@@ -38,6 +38,24 @@ export function renderToken(token: ParsedToken, showFurigana: boolean): Node {
   return word;
 }
 
+// A page parsed while furigana was Off contains plain word spans, but every
+// span retains its reading in data-reading. Switching to a visible mode can
+// therefore add ruby in place without reparsing or changing token boundaries.
+export function ensureFurigana(): void {
+  for (const word of document.querySelectorAll<HTMLElement>(".sb-word[data-reading]")) {
+    if (word.querySelector("ruby")) continue;
+    const reading = word.dataset.reading;
+    const surface = word.dataset.surface;
+    if (!reading || !surface) continue;
+    const ruby = document.createElement("ruby");
+    ruby.append(surface);
+    const rt = document.createElement("rt");
+    rt.textContent = reading;
+    ruby.append(rt);
+    word.replaceChildren(ruby);
+  }
+}
+
 function register(lemma: string, word: HTMLElement): void {
   let set = byLemma.get(lemma);
   if (!set) byLemma.set(lemma, (set = new Set()));

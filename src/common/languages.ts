@@ -11,6 +11,7 @@ export const GLOSS_LABELS: Record<GlossLanguage, string> = { eng: "English", spa
 
 // Locales::GLOSS_TO_DB, narrowed to what a pack can contain.
 const UI_TO_GLOSS: Record<string, GlossLanguage> = { en: "eng", es: "spa" };
+const GLOSS_TO_UI: Record<GlossLanguage, string> = { eng: "en", spa: "es" };
 
 // The account's ordered language stack (Prefs#languages, e.g. ["es","en"])
 // mapped into pack codes, dropping languages this pack doesn't ship. Order is
@@ -19,6 +20,10 @@ const UI_TO_GLOSS: Record<string, GlossLanguage> = { en: "eng", es: "spa" };
 export function glossLanguagesFrom(uiCodes: readonly string[]): GlossLanguage[] {
   const mapped = uiCodes.map((code) => UI_TO_GLOSS[code]).filter((code): code is GlossLanguage => !!code);
   return [...new Set(mapped)];
+}
+
+export function uiLanguagesFrom(glossCodes: readonly GlossLanguage[]): string[] {
+  return [...new Set(glossCodes.map((code) => GLOSS_TO_UI[code]))];
 }
 
 // English is the last-resort gloss, mirroring Locales.with_english_fallback: a

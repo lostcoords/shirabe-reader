@@ -12,7 +12,7 @@ declare const __EXTENSION_VERSION__: string;
 // pack, which is always re-downloadable.
 const DB_NAME = "shirabe-offline-dictionary-v3";
 const DB_VERSION = 1;
-const SUPPORTED_SCHEMA = 1;
+const SUPPORTED_SCHEMA = 2;
 const MAX_SCAN_CHARS = 24;
 const IMPORT_BATCH = 2_000;
 
@@ -51,6 +51,13 @@ export type DictionaryStatus = {
   lastCheckedAt: string | null;
 };
 
+export class DictionaryNotInstalledError extends Error {
+  constructor(operation: "look up words" | "parse text") {
+    super(`Install the Shirabe dictionary to ${operation} offline.`);
+    this.name = "DictionaryNotInstalledError";
+  }
+}
+
 type OfflineSense = {
   glosses: Record<string, string[]>;
   partsOfSpeech: string[];
@@ -68,7 +75,7 @@ type OfflineTerm = {
   expressions: Array<{ text: string; script: string; common: boolean; tags: string[] }>;
   readings: Array<{ text: string; kind: string }>;
   senses: OfflineSense[];
-  pitch?: Array<{ text: string; reading: string; downstep: number }>;
+  pitch?: Array<{ text: string; reading: string; downstep: number; audioUrl: string }>;
   frequencies?: Array<{ source: string; rank: number }>;
   jlpt?: number | null;
 };
@@ -89,12 +96,38 @@ type Stored<T> = T & { pk: string; generation: string };
 type Candidate = { text: string; reasons: string[] };
 type LookupHit = { term: Stored<OfflineTerm>; candidate: Candidate; prefixLength: number; surface: string };
 
+class BoundedCache<V> {
+  private values = new Map<string, V>();
+
+  constructor(private max: number) {}
+
+  get(key: string): V | undefined {
+    const value = this.values.get(key);
+    if (value === undefined) return;
+    this.values.delete(key);
+    this.values.set(key, value);
+    return value;
+  }
+
+  set(key: string, value: V): void {
+    this.values.delete(key);
+    this.values.set(key, value);
+    if (this.values.size > this.max) this.values.delete(this.values.keys().next().value as string);
+  }
+
+  clear(): void {
+    this.values.clear();
+  }
+}
+
 let installPromise: Promise<PackManifest> | null = null;
 let installController: AbortController | null = null;
 let installProgress = 0;
 let installStage: string | null = null;
 let installError: string | null = null;
 let databasePromise: Promise<IDBDatabase> | null = null;
+let activeGenerationCache: string | undefined | null = null;
+const lookupProbeCache = new BoundedCache<Array<Stored<OfflineTerm>>>(4_000);
 
 export async function dictionaryStatus(): Promise<DictionaryStatus> {
   let db: IDBDatabase;
@@ -136,6 +169,12 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
 
 export async function checkDictionaryUpdate(apiBase: string): Promise<void> {
   const db = await openDatabase();
+  const active = await activeGeneration(db);
+  if (!active) {
+    await installDictionary(apiBase);
+    await setMeta(db, "lastUpdateCheck", new Date().toISOString());
+    return;
+  }
   const last = await meta<string>(db, "lastUpdateCheck");
   if (last && Date.now() - Date.parse(last) < 24 * 60 * 60 * 1000) return;
   await setMeta(db, "lastUpdateCheck", new Date().toISOString());
@@ -143,8 +182,7 @@ export async function checkDictionaryUpdate(apiBase: string): Promise<void> {
   if (!response.ok) return;
   const available = (await response.json()) as PackManifest;
   validateManifest(available);
-  const active = await meta<string>(db, "activeGeneration");
-  if (active && active !== available.contentRevision) await installDictionary(apiBase);
+  if (active !== available.contentRevision) await installDictionary(apiBase);
 }
 
 export function installDictionary(apiBase: string): Promise<PackManifest> {
@@ -187,21 +225,23 @@ export async function removeDictionary(): Promise<void> {
   installProgress = 0;
   installStage = null;
   installError = null;
+  activeGenerationCache = null;
+  lookupProbeCache.clear();
 }
 
 export async function lookupOffline(query: string, languages: readonly GlossLanguage[], apiBase: string): Promise<Definition | null> {
   const source = normalize(query).slice(0, MAX_SCAN_CHARS);
   if (!source) return null;
   const db = await openDatabase();
-  const generation = await meta<string>(db, "activeGeneration");
-  if (!generation) throw new Error("Install the Shirabe dictionary to look up words offline.");
+  const generation = await activeGeneration(db);
+  if (!generation) throw new DictionaryNotInstalledError("look up words");
   return lookupInDatabase(db, generation, source, languages, apiBase);
 }
 
 export async function parseOffline(text: string, languages: readonly GlossLanguage[], apiBase: string): Promise<ParsedToken[]> {
   const db = await openDatabase();
-  const generation = await meta<string>(db, "activeGeneration");
-  if (!generation) throw new Error("Install the Shirabe dictionary to parse text offline.");
+  const generation = await activeGeneration(db);
+  if (!generation) throw new DictionaryNotInstalledError("parse text");
   const tokens: ParsedToken[] = [];
   let position = 0;
   while (position < text.length) {
@@ -266,8 +306,8 @@ export async function lookupKanjiOffline(character: string, languages: readonly 
   const source = normalize(character);
   if ([...source].length !== 1 || !isKanji(source)) return null;
   const db = await openDatabase();
-  const generation = await meta<string>(db, "activeGeneration");
-  if (!generation) throw new Error("Install the Shirabe dictionary to look up kanji offline.");
+  const generation = await activeGeneration(db);
+  if (!generation) throw new DictionaryNotInstalledError("look up words");
   const kanji = await getByPk<Stored<OfflineKanji>>(db, "kanji", `${generation}\0${source}`);
   return kanji ? kanjiDefinition(kanji, languages, apiBase) : null;
 }
@@ -288,9 +328,7 @@ async function hitsForCandidates(
   const keys = db.transaction("terms").objectStore("terms").index("lookupKeys");
   const resolved = await Promise.all(probes.map(async (probe) => ({
     ...probe,
-    terms: await requestResult<Array<Stored<OfflineTerm>>>(
-      keys.getAll(IDBKeyRange.only(`${generation}\0${normalize(probe.candidate.text)}`)),
-    ),
+    terms: await termsForProbe(keys, `${generation}\0${normalize(probe.candidate.text)}`),
   })));
   const longest = resolved.find((probe) => probe.terms.length)?.prefix;
   if (!longest) return [];
@@ -302,6 +340,14 @@ async function hitsForCandidates(
       seen.add(term.id);
       return [{ term, candidate: probe.candidate, prefixLength: [...probe.prefix].length, surface: probe.prefix }];
     }));
+}
+
+async function termsForProbe(index: IDBIndex, key: string): Promise<Array<Stored<OfflineTerm>>> {
+  const cached = lookupProbeCache.get(key);
+  if (cached) return cached;
+  const terms = await requestResult<Array<Stored<OfflineTerm>>>(index.getAll(IDBKeyRange.only(key)));
+  lookupProbeCache.set(key, terms);
+  return terms;
 }
 
 async function performInstall(apiBase: string, signal: AbortSignal): Promise<PackManifest> {
@@ -343,6 +389,8 @@ async function performInstall(apiBase: string, signal: AbortSignal): Promise<Pac
     if (previous && previous !== generation) await setMeta(db, "previousGeneration", previous);
     await setMeta(db, "activeGeneration", generation);
     await setMeta(db, "manifest", manifest);
+    activeGenerationCache = generation;
+    lookupProbeCache.clear();
     installProgress = 1;
     installStage = null;
     void cleanupOtherGenerations(db, new Set([generation, ...(previous ? [previous] : [])]));
@@ -497,6 +545,8 @@ function openDatabase(): Promise<IDBDatabase> {
       request.result.onversionchange = () => {
         request.result.close();
         databasePromise = null;
+        activeGenerationCache = null;
+        lookupProbeCache.clear();
       };
       resolve(request.result);
     };
@@ -536,6 +586,12 @@ function ensureIndex(store: IDBObjectStore, name: string, keyPath: string | stri
 async function meta<T>(db: IDBDatabase, key: string): Promise<T | undefined> {
   const row = await requestResult<{ key: string; value: T } | undefined>(db.transaction("meta").objectStore("meta").get(key));
   return row?.value;
+}
+
+async function activeGeneration(db: IDBDatabase): Promise<string | undefined> {
+  if (activeGenerationCache !== null) return activeGenerationCache;
+  activeGenerationCache = await meta<string>(db, "activeGeneration");
+  return activeGenerationCache;
 }
 
 async function setMeta(db: IDBDatabase, key: string, value: unknown): Promise<void> {
@@ -603,6 +659,7 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+
 function validateManifest(manifest: PackManifest): void {
   if (manifest.schemaVersion !== SUPPORTED_SCHEMA) throw new Error(`This dictionary needs a newer Shirabe Reader (schema ${manifest.schemaVersion}).`);
   if (!/^\d+\.\d+\.\d+$/.test(manifest.minimumExtensionVersion) || compareVersions(manifest.minimumExtensionVersion, __EXTENSION_VERSION__) > 0) {
@@ -644,7 +701,7 @@ function validateTerm(term: OfflineTerm): void {
       !Array.isArray(term.expressions) || !term.expressions.length || term.expressions.some((item) => !exactKeys(item, ["text", "script", "common", "tags"]) || !plainString(item.text) || !plainString(item.script) || typeof item.common !== "boolean" || !stringArray(item.tags)) ||
       !Array.isArray(term.readings) || term.readings.some((item) => !exactKeys(item, ["text", "kind"]) || !plainString(item.text) || !plainString(item.kind)) ||
       !Array.isArray(term.senses) || !term.senses.length || term.senses.some((sense) => !exactKeys(sense, ["glosses", "partsOfSpeech", "fields", "misc", "dialects", "restrictions"]) || !glossMap(sense.glosses, new Set(["eng", "spa"])) || !stringArray(sense.partsOfSpeech) || !stringArray(sense.fields) || !stringArray(sense.misc) || !stringArray(sense.dialects) || !stringArray(sense.restrictions)) ||
-      (term.pitch != null && (!Array.isArray(term.pitch) || term.pitch.some((item) => !exactKeys(item, ["text", "reading", "downstep"]) || !plainString(item.text) || !plainString(item.reading) || !Number.isInteger(item.downstep)))) ||
+      (term.pitch != null && (!Array.isArray(term.pitch) || term.pitch.some((item) => !exactKeys(item, ["text", "reading", "downstep", "audioUrl"]) || !plainString(item.text) || !plainString(item.reading) || !Number.isInteger(item.downstep) || !r2AudioUrl(item.audioUrl)))) ||
       (term.frequencies != null && (!Array.isArray(term.frequencies) || term.frequencies.some((item) => !exactKeys(item, ["source", "rank"]) || !plainString(item.source) || !Number.isFinite(item.rank)))) ||
       (term.jlpt != null && (!Number.isInteger(term.jlpt) || term.jlpt < 1 || term.jlpt > 5))) {
     throw new Error("Dictionary term record is invalid.");
@@ -675,6 +732,11 @@ function httpUrl(value: unknown): URL | null {
   } catch {
     return null;
   }
+}
+
+function r2AudioUrl(value: unknown): boolean {
+  const url = httpUrl(value);
+  return url?.protocol === "https:" && url.hostname === "cdn.shirabe.org" && url.pathname.startsWith("/audio/");
 }
 
 function stringArray(value: unknown): value is string[] {
@@ -759,6 +821,10 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
     });
   });
   const reading = term.readings.find((item) => item.kind === "kana")?.text ?? term.readings[0]?.text ?? null;
+  const exactPitch = (term.pitch ?? []).filter((item) => item.text === term.headword && item.reading === reading);
+  const displayedPitch = exactPitch.length || term.headword === reading
+    ? exactPitch
+    : (term.pitch ?? []).filter((item) => item.text === reading && item.reading === reading);
   return {
     headword: term.headword,
     reading,
@@ -766,7 +832,7 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
     common: term.expressions.some((item) => item.common),
     jlpt: term.jlpt ? `N${term.jlpt}` : null,
     frequency: term.frequencies?.length ? Math.min(...term.frequencies.map((item) => item.rank)) : null,
-    pitch: (term.pitch ?? []).map((item) => ({ downstep: item.downstep, audioUrl: null })),
+    pitch: displayedPitch.map((item) => ({ downstep: item.downstep, audioUrl: item.audioUrl })),
     senses,
     examples: [],
     sourceForm: hit.surface,

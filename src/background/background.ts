@@ -2,8 +2,8 @@ import { ApiError, ShirabeApi } from "../common/api.js";
 import { ext, usesPromiseMessageResponses } from "../common/browser.js";
 import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config } from "../common/config.js";
 import { normalizePattern, refreshRemoteHostRules } from "../common/host-rules.js";
-import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary } from "../common/offline-dictionary.js";
-import type { LookupHistoryItem, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
+import { cancelDictionaryInstall, checkDictionaryUpdate, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary } from "../common/offline-dictionary.js";
+import type { Deck, LookupHistoryItem, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
 
 // Single API client + our own copy of the config (the client hides it). Both
@@ -29,11 +29,11 @@ async function initializeBackground(): Promise<void> {
   }
 
   api = new ShirabeApi(config);
-  // Best-effort refresh of the server-maintained auto-parse site list, so we can
+  // Best-effort refresh of the server-maintained reader site list, so we can
   // add supported sites without shipping an extension update. No-ops if offline
   // or the endpoint isn't live yet (the bundled built-ins stay in charge).
   void traceBackgroundTask("refresh remote host rules", () => refreshRemoteHostRules(config.apiBase));
-  void traceBackgroundTask("check dictionary update", () => checkDictionaryUpdate(config.apiBase));
+  void traceBackgroundTask("check dictionary update", checkAndNotifyDictionary);
   void traceBackgroundTask("sync registered content scripts", () => syncRegisteredContentScript(config));
 }
 
@@ -69,7 +69,7 @@ const CONTENT_SCRIPT_ID = "shirabe-auto-sites";
 async function syncRegisteredContentScript(current: Config): Promise<void> {
   await ext.scripting.unregisterContentScripts({ ids: [CONTENT_SCRIPT_ID] }).catch(() => undefined);
   const matches: string[] = [];
-  for (const raw of current.autoParseHosts) {
+  for (const raw of current.enabledHosts) {
     const pattern = normalizePattern(raw);
     const candidates = pattern.startsWith("*://")
       ? [`https://${pattern.slice(4)}`, `http://${pattern.slice(4)}`]
@@ -100,29 +100,42 @@ async function sendToTab(tabId: number, message: unknown): Promise<void> {
   }
 }
 
-// ── Request queue ────────────────────────────────────────────────────────────
-// Serialize outbound calls with a small gap so a text-heavy page can't burst
-// past the server's per-minute budget. The server is the real limiter; this
-// just keeps us polite.
-const MIN_GAP_MS = 120;
-let chain: Promise<unknown> = Promise.resolve();
-
-function enqueue<T>(task: () => Promise<T>): Promise<T> {
-  const result = chain.then(task);
-  chain = result.then(() => delay(MIN_GAP_MS), () => delay(MIN_GAP_MS));
-  return result;
-}
-
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 async function notifyDictionaryChanged(): Promise<void> {
   const tabs = await ext.tabs.query({});
   await Promise.all(tabs.filter((tab) => tab.id != null).map((tab) => ext.tabs.sendMessage(tab.id as number, { command: "dictionaryChanged" }).catch(() => undefined)));
 }
 
-// In-flight (or queued) parse requests, keyed by the content script's requestId,
-// so a scrolled-away block can abort its outstanding request.
-const parseAborts = new Map<number, AbortController>();
+let dictionaryRepair: Promise<void> | null = null;
+
+function repairDictionaryInstallation(): Promise<void> {
+  if (dictionaryRepair) return dictionaryRepair;
+  dictionaryRepair = installDictionary(config.apiBase)
+    .then(async () => {
+      lookupCache.clear();
+      await notifyDictionaryChanged();
+    })
+    .finally(() => {
+      dictionaryRepair = null;
+    });
+  return dictionaryRepair;
+}
+
+async function checkAndNotifyDictionary(): Promise<void> {
+  const before = await dictionaryStatus();
+  await checkDictionaryUpdate(config.apiBase);
+  const after = await dictionaryStatus();
+  if (before.revision !== after.revision || before.installed !== after.installed) {
+    lookupCache.clear();
+    await notifyDictionaryChanged();
+  }
+}
+
+async function notifyProfileChanged(): Promise<void> {
+  const tabs = await ext.tabs.query({});
+  await Promise.all(tabs.filter((tab) => tab.id != null).map((tab) =>
+    ext.tabs.sendMessage(tab.id as number, { command: "profileChanged" }).catch(() => undefined),
+  ));
+}
 
 // Last known coverage per tab, pushed by each parse/recolour. A service worker
 // that gets evicted simply forgets, and the popup falls back to offering a parse.
@@ -132,50 +145,44 @@ ext.tabs.onRemoved.addListener((tabId) => tabMetrics.delete(tabId));
 async function handle(request: Request, senderTabId?: number): Promise<Response> {
   await ready;
   switch (request.type) {
-    case "parse": {
-      const tokens = await parseCache.fetch(request.text, () => parseLocally(request.text));
-      return { ok: true, type: "parse", tokens };
-    }
     case "parseBatch": {
-      // A batch is (near-)unique per request, so it isn't worth caching; the
-      // enqueue gap still keeps requests polite. A requestId makes it abortable:
-      // lazy viewport parsing cancels a block's request when it scrolls away —
-      // even while still queued, since the controller exists before it runs.
-      const controller = request.requestId != null ? new AbortController() : undefined;
-      if (controller && request.requestId != null) parseAborts.set(request.requestId, controller);
       try {
-        const tokens = await parseBatchLocally(request.texts, controller?.signal);
+        const tokens = await parseBatchLocally(request.texts);
         return { ok: true, type: "parseBatch", tokens };
-      } finally {
-        if (request.requestId != null) parseAborts.delete(request.requestId);
+      } catch (error) {
+        if (error instanceof DictionaryNotInstalledError) {
+          void repairDictionaryInstallation().catch(() => undefined);
+          return {
+            ok: true, type: "parseBatch", tokens: request.texts.map(() => []), dictionaryInstalling: true,
+          };
+        }
+        throw error;
       }
     }
-    case "abortParse": {
-      parseAborts.get(request.requestId)?.abort();
-      parseAborts.delete(request.requestId);
-      return { ok: true, type: "abortParse" };
-    }
     case "lookup": {
-      const kind = request.kind ?? "word";
-      const definition = await lookupCache.fetch(`${kind}:${config.languages.join(",")}:${request.query}`, async () => {
-        // The kanji breakdown has no server counterpart (/v1 search excludes
-        // KANJIDIC), so it answers from the local pack or not at all.
-        if (kind === "kanji") return lookupKanjiOffline(request.query, config.languages, config.apiBase);
-        try {
+      try {
+        const kind = request.kind ?? "word";
+        const definition = await lookupCache.fetch(`${kind}:${config.languages.join(",")}:${request.query}`, async () => {
+          // The kanji breakdown has no server counterpart (/v1 search excludes
+          // KANJIDIC), so it answers from the local pack or not at all.
+          if (kind === "kanji") return lookupKanjiOffline(request.query, config.languages, config.apiBase);
           const local = await lookupOffline(request.query, config.languages, config.apiBase);
           if (local) return local;
-        } catch (error) {
-          if (!isConnected(config)) throw error;
-        }
-        return isConnected(config) ? enqueue(() => api.lookup(request.query)) : null;
-      });
-      if (definition) await recordLookup(request.query, definition.headword, definition.reading);
-      return { ok: true, type: "lookup", definition };
+          return isConnected(config) ? api.lookup(request.query) : null;
+        });
+        if (definition) await recordLookup(request.query, definition.headword, definition.reading);
+        return { ok: true, type: "lookup", definition };
+      } catch (error) {
+        if (!(error instanceof DictionaryNotInstalledError)) throw error;
+        void repairDictionaryInstallation().catch(() => undefined);
+        return { ok: true, type: "lookup", definition: null, dictionaryInstalling: true };
+      }
     }
     case "dictionaryStatus":
       return { ok: true, type: "dictionaryStatus", dictionary: await dictionaryStatus() };
     case "installDictionary": {
       const manifest = await installDictionary(config.apiBase);
+      lookupCache.clear();
       await notifyDictionaryChanged();
       return { ok: true, type: "installDictionary", manifest };
     }
@@ -190,17 +197,14 @@ async function handle(request: Request, senderTabId?: number): Promise<Response>
     case "save": {
       const { type: _type, captureScreenshot, ...options } = request;
       const imageDataUrl = options.imageDataUrl || (captureScreenshot ? await ext.tabs.captureVisibleTab(undefined, { format: "jpeg", quality: 82 }) : undefined);
-      const result = await enqueue(() => api.save({ ...options, ...(imageDataUrl ? { imageDataUrl } : {}) }));
+      const result = await api.save({ ...options, ...(imageDataUrl ? { imageDataUrl } : {}) });
       await cacheStates({ [request.lemma]: result.state }, { [request.lemma]: result });
       return { ok: true, type: "save", result };
     }
     case "decks":
-      return { ok: true, type: "decks", decks: await enqueue(() => api.decks()) };
+      return { ok: true, type: "decks", decks: await cachedDecks() };
     case "states":
       return { ok: true, type: "states", ...(await stateSnapshotFor(request.lemmas)) };
-    case "openReader":
-      await openReader(request.source);
-      return { ok: true, type: "openReader" };
     case "lookupHistory":
       return { ok: true, type: "lookupHistory", history: await lookupHistory() };
     case "clearLookupHistory":
@@ -224,7 +228,7 @@ async function handle(request: Request, senderTabId?: number): Promise<Response>
       return { ok: true, type: "activePageMetrics", metrics: (tab?.id != null && tabMetrics.get(tab.id)) || null };
     }
     case "setState": {
-      const state = await enqueue(() => api.setState(request.lemma, request.state));
+      const state = await api.setState(request.lemma, request.state);
       await cacheStates({ [request.lemma]: state });
       return { ok: true, type: "setState", state };
     }
@@ -234,74 +238,82 @@ async function handle(request: Request, senderTabId?: number): Promise<Response>
     case "disconnect":
       await disconnect();
       return { ok: true, type: "disconnect" };
+    case "syncProfile":
+      await refreshAccount(true);
+      await clearProfileCaches();
+      await notifyProfileChanged();
+      return { ok: true, type: "syncProfile" };
+    case "updateLanguages": {
+      if (!isConnected(config)) throw new ApiError("Connect your Shirabe account to sync profile languages.", 401);
+      const languages = await api.updateLanguages(request.languages);
+      const next: Config = { ...config, languages };
+      await saveConfig(next);
+      config = next;
+      api.update(next);
+      return { ok: true, type: "updateLanguages", languages };
+    }
     case "status":
       return { ok: true, type: "status", status: await status() };
   }
-}
-
-async function openReader(source: "article" | "selection" | "blank"): Promise<void> {
-  let draft = { title: "", text: "", sourceUrl: "" };
-  if (source !== "blank") {
-    const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id != null) {
-      const [injection] = await ext.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const selected = window.getSelection()?.toString().trim() ?? "";
-          const candidates = [...document.querySelectorAll<HTMLElement>("article,main,[role='main'],.article,.post,.entry-content")];
-          const article = candidates.sort((a, b) => score(b) - score(a))[0] ?? document.body;
-          const clean = article.cloneNode(true) as HTMLElement;
-          clean.querySelectorAll("script,style,noscript,nav,header,footer,aside,form,button,[aria-hidden='true']").forEach((node) => node.remove());
-          const canonical = document.querySelector<HTMLLinkElement>("link[rel='canonical']")?.href || location.href;
-          return { title: document.title, sourceUrl: canonical, selected, article: clean.innerText.trim() };
-
-          function score(element: HTMLElement): number {
-            const text = element.innerText.trim();
-            const paragraphs = element.querySelectorAll("p").length;
-            const linked = [...element.querySelectorAll<HTMLAnchorElement>("a")].reduce((sum, link) => sum + link.innerText.length, 0);
-            return text.length + paragraphs * 120 - linked * 1.5;
-          }
-        },
-      });
-      const page = injection?.result as { title: string; sourceUrl: string; selected: string; article: string } | undefined;
-      if (page) draft = { title: page.title, sourceUrl: page.sourceUrl, text: source === "selection" ? page.selected : page.article };
-    }
-  }
-  await ext.storage.local.set({ readerDraft: draft });
-  await ext.tabs.create({ url: ext.runtime.getURL("reader/reader.html") });
 }
 
 // Parsing is local, always. The server used to parse whatever the local path
 // couldn't, which meant a reader whose pack failed to install had their page
 // text silently posted to us — the one thing the privacy promise rules out —
 // and got a second tokenizer's boundaries at that. Without a dictionary we say
-// so instead. Only lemmas leave the device, in hydrateStates.
-async function parseLocally(text: string): Promise<ParsedToken[]> {
-  return hydrateStates(await parseOffline(text, config.languages, config.apiBase));
+// so instead. Only lemmas leave the device, during the separate state refresh.
+const LOCAL_PARSE_CONCURRENCY = 4;
+
+// A transport batch used to be parsed serially inside the worker, so grouping
+// many text nodes saved message overhead but not parsing time. Run a small
+// number concurrently: enough to keep IndexedDB busy without opening hundreds
+// of lookup streams on a large page.
+async function parseBatchLocally(texts: string[]): Promise<ParsedToken[][]> {
+  const startedAt = performance.now();
+  const lists = new Array<ParsedToken[]>(texts.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < texts.length) {
+      const index = next++;
+      lists[index] = await parseOffline(texts[index], config.languages, config.apiBase);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(LOCAL_PARSE_CONCURRENCY, texts.length) }, worker));
+  recordBackgroundPerformance("local-parse", startedAt, {
+    texts: texts.length,
+    chars: texts.reduce((sum, text) => sum + text.length, 0),
+    tokens: lists.reduce((sum, list) => sum + list.length, 0),
+  });
+  return lists;
 }
 
-// Sequential so an abort can still land between texts: lazy viewport parsing
-// cancels a block that scrolled away, and with no network request left to
-// cancel, the only thing to stop is the work we have not started yet.
-async function parseBatchLocally(texts: string[], signal?: AbortSignal): Promise<ParsedToken[][]> {
-  const lists: ParsedToken[][] = [];
-  for (const text of texts) {
-    if (signal?.aborted) throw new DOMException("Parsing was cancelled.", "AbortError");
-    lists.push(await parseOffline(text, config.languages, config.apiBase));
-  }
-  const hydrated = await hydrateStates(lists.flat());
-  let offset = 0;
-  return lists.map((list) => hydrated.slice(offset, (offset += list.length)));
-}
+const backgroundPerformanceTotals = new Map<string, { runs: number; totalMs: number; maxMs: number }>();
 
-async function hydrateStates(tokens: ParsedToken[]): Promise<ParsedToken[]> {
-  const lemmas = [...new Set(tokens.filter((token) => token.content).map((token) => token.lemma))];
-  if (!lemmas.length) return tokens;
-  const states = await statesFor(lemmas);
-  return tokens.map((token) => ({ ...token, state: states[token.lemma] ?? token.state }));
+function recordBackgroundPerformance(stage: string, startedAt: number, counts: Record<string, number>): void {
+  const durationMs = performance.now() - startedAt;
+  const prior = backgroundPerformanceTotals.get(stage) ?? { runs: 0, totalMs: 0, maxMs: 0 };
+  const next = {
+    runs: prior.runs + 1,
+    totalMs: prior.totalMs + durationMs,
+    maxMs: Math.max(prior.maxMs, durationMs),
+  };
+  backgroundPerformanceTotals.set(stage, next);
+  if (durationMs < 50 && next.runs % 20 !== 0) return;
+  console.debug("[Shirabe performance]", {
+    stage,
+    durationMs: Math.round(durationMs * 10) / 10,
+    averageMs: Math.round((next.totalMs / next.runs) * 10) / 10,
+    maxMs: Math.round(next.maxMs * 10) / 10,
+    runs: next.runs,
+    ...counts,
+  });
 }
 
 const STATE_CACHE_KEY = "wordStateSnapshot";
+const STATE_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+const STATE_CACHE_MAX_LEMMAS = 20_000;
+const STATE_REQUEST_MAX_LEMMAS = 1_000;
+const DECK_CACHE_KEY = "profileDeckSnapshot";
 const LOOKUP_HISTORY_KEY = "lookupHistory";
 
 async function lookupHistory(): Promise<LookupHistoryItem[]> {
@@ -316,35 +328,115 @@ async function recordLookup(query: string, headword: string, reading: string | n
   await ext.storage.local.set({ [LOOKUP_HISTORY_KEY]: [latest, ...deduped].slice(0, 100) });
 }
 
-async function statesFor(lemmas: string[]): Promise<Record<string, WordState>> {
-  return (await stateSnapshotFor(lemmas)).states;
-}
-
 async function stateSnapshotFor(lemmas: string[]): Promise<{ states: Record<string, WordState>; details: Record<string, StudyDetails> }> {
   const cached = await cachedStateSnapshot();
   if (!isConnected(config) || !config.scopes.includes("READ_SRS")) {
     return { states: pickStates(cached.states, lemmas), details: pickDetails(cached.details, lemmas) };
   }
+  const freshAfter = Date.now() - STATE_CACHE_MAX_AGE_MS;
+  if (lemmas.every((lemma) => lemma in cached.states && Date.parse(cached.checkedAt[lemma] ?? "") >= freshAfter)) {
+    return { states: pickStates(cached.states, lemmas), details: pickDetails(cached.details, lemmas) };
+  }
   try {
-    const fresh = await enqueue(() => api.states(lemmas));
-    await cacheStates(fresh.states, fresh.details);
-    return fresh;
+    await refreshRemoteStates(lemmas);
+    const refreshed = await cachedStateSnapshot();
+    return { states: pickStates(refreshed.states, lemmas), details: pickDetails(refreshed.details, lemmas) };
   } catch {
     return { states: pickStates(cached.states, lemmas), details: pickDetails(cached.details, lemmas) };
   }
 }
 
-async function cachedStateSnapshot(): Promise<{ states: Record<string, WordState>; details: Record<string, StudyDetails> }> {
+type CachedStateSnapshot = {
+  states: Record<string, WordState>;
+  details: Record<string, StudyDetails>;
+  checkedAt: Record<string, string>;
+};
+let memoryStateSnapshot: CachedStateSnapshot | null = null;
+
+async function cachedStateSnapshot(): Promise<CachedStateSnapshot> {
+  if (memoryStateSnapshot) return memoryStateSnapshot;
   const stored = await ext.storage.local.get(STATE_CACHE_KEY);
-  const snapshot = stored[STATE_CACHE_KEY] as { states?: Record<string, WordState>; details?: Record<string, StudyDetails> } | undefined;
-  return { states: snapshot?.states ?? {}, details: snapshot?.details ?? {} };
+  const snapshot = stored[STATE_CACHE_KEY] as Partial<CachedStateSnapshot> | undefined;
+  memoryStateSnapshot = { states: snapshot?.states ?? {}, details: snapshot?.details ?? {}, checkedAt: snapshot?.checkedAt ?? {} };
+  return memoryStateSnapshot;
 }
 
 async function cacheStates(states: Record<string, WordState>, details: Record<string, StudyDetails> = {}): Promise<void> {
-  const current = await cachedStateSnapshot();
-  await ext.storage.local.set({ [STATE_CACHE_KEY]: {
-    states: { ...current.states, ...states }, details: { ...current.details, ...details }, updatedAt: new Date().toISOString(),
-  } });
+  stateCacheWrite = stateCacheWrite.then(async () => {
+    const current = await cachedStateSnapshot();
+    const checkedAt = { ...current.checkedAt };
+    const now = new Date().toISOString();
+    for (const lemma of Object.keys(states)) checkedAt[lemma] = now;
+    const snapshot = {
+      states: { ...current.states, ...states }, details: { ...current.details, ...details }, checkedAt,
+    };
+    pruneStateSnapshot(snapshot);
+    memoryStateSnapshot = snapshot;
+    await ext.storage.local.set({ [STATE_CACHE_KEY]: snapshot });
+  });
+  await stateCacheWrite;
+}
+
+let stateCacheWrite: Promise<void> = Promise.resolve();
+const pendingRemoteStateLemmas = new Set<string>();
+let remoteStateRefresh: Promise<void> | null = null;
+
+async function refreshRemoteStates(lemmas: string[]): Promise<void> {
+  for (const lemma of lemmas) pendingRemoteStateLemmas.add(lemma);
+  if (!remoteStateRefresh) {
+    remoteStateRefresh = drainRemoteStateRefresh().finally(() => {
+      remoteStateRefresh = null;
+    });
+  }
+  await remoteStateRefresh;
+}
+
+async function drainRemoteStateRefresh(): Promise<void> {
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+  while (pendingRemoteStateLemmas.size) {
+    const lemmas = [...pendingRemoteStateLemmas].slice(0, STATE_REQUEST_MAX_LEMMAS);
+    for (const lemma of lemmas) pendingRemoteStateLemmas.delete(lemma);
+    const fresh = await api.states(lemmas);
+    await cacheStates(fresh.states, fresh.details);
+  }
+}
+
+let memoryDeckSnapshot: { decks: Deck[]; checkedAt: string } | null = null;
+
+async function cachedDecks(): Promise<Deck[]> {
+  if (memoryDeckSnapshot && Date.parse(memoryDeckSnapshot.checkedAt) >= Date.now() - ACCOUNT_CACHE_MAX_AGE_MS) {
+    return memoryDeckSnapshot.decks;
+  }
+  const stored = await ext.storage.local.get(DECK_CACHE_KEY);
+  const cached = stored[DECK_CACHE_KEY] as { decks?: Deck[]; checkedAt?: string } | undefined;
+  if (cached?.decks && Date.parse(cached.checkedAt ?? "") >= Date.now() - ACCOUNT_CACHE_MAX_AGE_MS) {
+    memoryDeckSnapshot = { decks: cached.decks, checkedAt: cached.checkedAt as string };
+    return cached.decks;
+  }
+  const decks = await api.decks();
+  memoryDeckSnapshot = { decks, checkedAt: new Date().toISOString() };
+  await ext.storage.local.set({ [DECK_CACHE_KEY]: memoryDeckSnapshot });
+  return decks;
+}
+
+function pruneStateSnapshot(snapshot: CachedStateSnapshot): void {
+  const lemmas = Object.keys(snapshot.checkedAt);
+  if (lemmas.length <= STATE_CACHE_MAX_LEMMAS) return;
+  lemmas.sort((a, b) => Date.parse(snapshot.checkedAt[a]) - Date.parse(snapshot.checkedAt[b]));
+  for (const lemma of lemmas.slice(0, lemmas.length - STATE_CACHE_MAX_LEMMAS)) {
+    delete snapshot.states[lemma];
+    delete snapshot.details[lemma];
+    delete snapshot.checkedAt[lemma];
+  }
+}
+
+async function clearProfileCaches(): Promise<void> {
+  await remoteStateRefresh?.catch(() => undefined);
+  pendingRemoteStateLemmas.clear();
+  await stateCacheWrite;
+  memoryStateSnapshot = null;
+  memoryDeckSnapshot = null;
+  await ext.storage.local.remove([STATE_CACHE_KEY, DECK_CACHE_KEY]);
 }
 
 function pickStates(states: Record<string, WordState>, lemmas: string[]): Record<string, WordState> {
@@ -366,7 +458,7 @@ async function connect(): Promise<void> {
   const redirectUri = ext.identity.getRedirectURL();
   const url = api.authorizeUrl({ redirectUri, state, challenge, client: clientLabel() });
 
-  const redirect = await ext.identity.launchWebAuthFlow({ url, interactive: true, redirect_uri: redirectUri });
+  const redirect = await ext.identity.launchWebAuthFlow({ url, interactive: true });
   const params = new URL(redirect).searchParams;
   const error = params.get("error");
   if (error) throw new ApiError(error === "access_denied" ? "You denied the request." : `Sign-in failed (${error}).`, 400);
@@ -398,29 +490,32 @@ function base64url(bytes: Uint8Array): string {
 
 // Persist a freshly-minted key, then look up whose account it belongs to.
 async function adopt(apiKey: string, scopes: string[]): Promise<void> {
-  const next: Config = { ...config, apiKey, scopes, account: "", entitled: false };
+  const next: Config = { ...config, apiKey, scopes, account: "", accountCheckedAt: "", entitled: false };
   await saveConfig(next);
+  await clearProfileCaches();
   config = next;
   api.update(next);
-  await refreshAccount();
+  await refreshAccount(true);
 }
 
 // Re-check the connected account's name + SRS entitlement against the server, so
 // a lapsed subscription (or a freshly-activated one) is reflected the next time
 // the popup opens. Best-effort: on a network hiccup the stored values stay
 // authoritative — the key still mines fine if /v1/me merely blips.
-async function refreshAccount(): Promise<void> {
+const ACCOUNT_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+
+async function refreshAccount(force = false): Promise<void> {
   if (!isConnected(config)) return;
+  if (!force && Date.parse(config.accountCheckedAt) >= Date.now() - ACCOUNT_CACHE_MAX_AGE_MS) return;
   try {
     const { name, entitled, languages } = await api.me();
     // The account's language order wins while connected, so the offline pack
     // renders meanings in the same order the website does for this reader. A
     // stack with nothing this pack ships (a French reader) leaves it untouched.
     const synced = languages.length ? languages : config.languages;
-    const unchanged = name === config.account && entitled === config.entitled
-      && synced.join(",") === config.languages.join(",");
-    if (unchanged) return;
-    const next: Config = { ...config, account: name, entitled, languages: synced };
+    const next: Config = {
+      ...config, account: name, accountCheckedAt: new Date().toISOString(), entitled, languages: synced,
+    };
     await saveConfig(next);
     config = next;
   } catch {
@@ -429,14 +524,15 @@ async function refreshAccount(): Promise<void> {
 }
 
 async function disconnect(): Promise<void> {
-  const next: Config = { ...config, apiKey: "", account: "", scopes: [], entitled: false };
+  const next: Config = { ...config, apiKey: "", account: "", accountCheckedAt: "", scopes: [], entitled: false };
   await saveConfig(next);
+  await clearProfileCaches();
   config = next;
   api.update(next);
 }
 
 async function status(): Promise<Status> {
-  await refreshAccount(); // freshen name + entitlement each time the popup asks
+  await refreshAccount();
   return {
     connected: isConnected(config),
     account: config.account,
@@ -512,7 +608,7 @@ const MENU_SELECTION = "shirabe-parse-selection";
 const MENU_LOOKUP = "shirabe-lookup-selection";
 
 ext.contextMenus?.removeAll().then(() => {
-  ext.contextMenus?.create({ id: MENU_PAGE, title: "Parse this page with Shirabe", contexts: ["page"] });
+  ext.contextMenus?.create({ id: MENU_PAGE, title: "Reparse this page with Shirabe", contexts: ["page"] });
   ext.contextMenus?.create({ id: MENU_SELECTION, title: "Parse selection with Shirabe", contexts: ["selection"] });
   ext.contextMenus?.create({ id: MENU_LOOKUP, title: "Look up selection with Shirabe", contexts: ["selection"] });
 });
@@ -549,6 +645,5 @@ class LruCache<V> {
 }
 
 // ── Caches ───────────────────────────────────────────────────────────────────
-// Same paragraph or word gets revisited constantly as the user scrolls/hovers.
-const parseCache = new LruCache<ParsedToken[]>(500);
+// The same word gets revisited constantly as the user scans and hovers.
 const lookupCache = new LruCache<Definition | null>(1000);

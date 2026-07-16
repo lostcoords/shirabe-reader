@@ -15,13 +15,77 @@ export const EMPTY_METRICS: DetailedPageMetrics = {
   uniques: { known: 0, learning: 0, due: 0, unknown: 0 },
 };
 
+type TrackedWord = { lemma: string; state: WordState };
+
+export class PageMetricIndex {
+  private tracked = new Map<HTMLElement, TrackedWord>();
+  private occurrenceCounts = emptyCounts();
+  private uniqueCounts = emptyCounts();
+  private statesByLemma = new Map<string, Map<WordState, number>>();
+
+  update(word: HTMLElement): void {
+    const next = { lemma: lemmaOf(word), state: wordState(word) };
+    const prior = this.tracked.get(word);
+    if (prior?.lemma === next.lemma && prior.state === next.state) return;
+    if (prior) this.removeValue(prior);
+    this.tracked.set(word, next);
+    this.addValue(next);
+  }
+
+  remove(word: HTMLElement): void {
+    const prior = this.tracked.get(word);
+    if (!prior) return;
+    this.tracked.delete(word);
+    this.removeValue(prior);
+  }
+
+  clear(): void {
+    this.tracked.clear();
+    this.statesByLemma.clear();
+    this.occurrenceCounts = emptyCounts();
+    this.uniqueCounts = emptyCounts();
+  }
+
+  metrics(): DetailedPageMetrics {
+    return {
+      occurrenceCoverage: coverage(this.occurrenceCounts, this.tracked.size),
+      uniqueCoverage: coverage(this.uniqueCounts, this.statesByLemma.size),
+      total: this.tracked.size,
+      unique: this.statesByLemma.size,
+      occurrences: { ...this.occurrenceCounts },
+      uniques: { ...this.uniqueCounts },
+    };
+  }
+
+  private addValue(word: TrackedWord): void {
+    count(this.occurrenceCounts, word.state, 1);
+    const states = this.statesByLemma.get(word.lemma) ?? new Map<WordState, number>();
+    const prior = highestState(states);
+    states.set(word.state, (states.get(word.state) ?? 0) + 1);
+    this.statesByLemma.set(word.lemma, states);
+    replaceUnique(this.uniqueCounts, prior, highestState(states));
+  }
+
+  private removeValue(word: TrackedWord): void {
+    count(this.occurrenceCounts, word.state, -1);
+    const states = this.statesByLemma.get(word.lemma);
+    if (!states) return;
+    const prior = highestState(states);
+    const remaining = (states.get(word.state) ?? 0) - 1;
+    if (remaining > 0) states.set(word.state, remaining);
+    else states.delete(word.state);
+    if (!states.size) this.statesByLemma.delete(word.lemma);
+    replaceUnique(this.uniqueCounts, prior, highestState(states));
+  }
+}
+
 export function measurePageWords(words: HTMLElement[]): DetailedPageMetrics {
   const occurrences = emptyCounts();
   const states = new Map<string, WordState>();
   for (const word of words) {
     const state = wordState(word);
     count(occurrences, state);
-    const lemma = word.dataset.lemma || word.dataset.surface || word.textContent || "";
+    const lemma = lemmaOf(word);
     const prior = states.get(lemma);
     if (!prior || priority[state] > priority[prior]) states.set(lemma, state);
   }
@@ -62,11 +126,29 @@ function emptyCounts(): StateCounts {
   return { known: 0, learning: 0, due: 0, unknown: 0 };
 }
 
-function count(counts: StateCounts, state: WordState): void {
-  if (state === "known") counts.known += 1;
-  else if (state === "due") { counts.known += 1; counts.due += 1; }
-  else if (state === "new" || state === "learning") counts.learning += 1;
-  else counts.unknown += 1;
+function lemmaOf(word: HTMLElement): string {
+  return word.dataset.lemma || word.dataset.surface || word.textContent || "";
+}
+
+function highestState(states: Map<WordState, number>): WordState | undefined {
+  let highest: WordState | undefined;
+  for (const [state, amount] of states) {
+    if (amount > 0 && (!highest || priority[state] > priority[highest])) highest = state;
+  }
+  return highest;
+}
+
+function replaceUnique(counts: StateCounts, prior?: WordState, next?: WordState): void {
+  if (prior === next) return;
+  if (prior) count(counts, prior, -1);
+  if (next) count(counts, next, 1);
+}
+
+function count(counts: StateCounts, state: WordState, by = 1): void {
+  if (state === "known") counts.known += by;
+  else if (state === "due") { counts.known += by; counts.due += by; }
+  else if (state === "new" || state === "learning") counts.learning += by;
+  else counts.unknown += by;
 }
 
 function coverage(counts: StateCounts, total: number): number {

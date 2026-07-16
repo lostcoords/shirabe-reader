@@ -32,7 +32,6 @@ test("all extension-owned surfaces preserve focus, reduced-motion, and forced-co
     readFileSync("src/content/content.css", "utf8"),
     readFileSync("src/content/popup.ts", "utf8"),
     readFileSync("src/options/options.css", "utf8"),
-    readFileSync("src/reader/reader.css", "utf8"),
   ];
   for (const css of surfaces) {
     assert.match(css, /focus-visible/);
@@ -47,6 +46,25 @@ test("built-in auto sites expose an explicit optional-access control", () => {
   assert.match(popup, /id="enableSiteAccess"[^>]*>Enable automatic access<\/button>/);
 });
 
+test("the popup replaces decorative branding with a real per-site reader toggle", () => {
+  const markup = readFileSync("src/action/popup.html", "utf8");
+  const logic = readFileSync("src/action/popup.ts", "utf8");
+  const content = readFileSync("src/content/content.ts", "utf8");
+
+  assert.doesNotMatch(markup, /<header class="head">/);
+  assert.doesNotMatch(markup, /Offline lookup/);
+  assert.match(markup, /id="readerToggle"[^>]*aria-pressed="true"/);
+  assert.match(logic, /await patch\(\{ disabledHosts \}\)/);
+  assert.match(content, /if \(mode === "off"\) \{/);
+  assert.match(content, /if \(mode === "off" \|\| !localDictionaryReady/);
+  assert.match(content, /classList\.toggle\("sb-furigana-off", config\.furiganaMode === "off"\)/);
+  assert.match(content, /if \(showFurigana\) ensureFurigana\(\)/);
+  assert.match(content, /classList\.toggle\("sb-reader-off", mode === "off"\)/);
+  assert.match(content, /setParsingPaused\(true\)/);
+  assert.match(content, /hideStatusBar\(\)/);
+  assert.doesNotMatch(content, /mode === "off"[\s\S]{0,300}revertParsedPage\(\)/);
+});
+
 test("the action popup navigates with a bottom bar and hands settings to its own page", () => {
   const popup = readFileSync("src/action/popup.html", "utf8");
   const css = readFileSync("src/action/popup.css", "utf8");
@@ -59,14 +77,16 @@ test("the action popup navigates with a bottom bar and hands settings to its own
   assert.match(css, /--primary:\s*#0369a1/);
   assert.match(css, /--brand-purple:\s*#7b61ff/);
   assert.match(css, /--radius-card:\s*18px/);
-  assert.match(popup, /class="reader-buttons"/);
+  assert.doesNotMatch(popup, /readArticle|readSelection|openPasteReader|Paste \/ PDF/);
   assert.match(popup, /<symbol id="icon-search"/);
 
   // Every tab in the bar must own a panel, and every panel must have a tab.
   const tabs = [...popup.matchAll(/role="tab"[^>]*aria-controls="panel-(\w+)"/g)].map((match) => match[1]);
   const panels = [...popup.matchAll(/id="panel-(\w+)"[^>]*role="tabpanel"/g)].map((match) => match[1]);
-  assert.deepEqual(tabs, [ "search", "page", "dictionary" ]);
+  assert.deepEqual(tabs, [ "lookup", "dictionary", "account" ]);
   assert.deepEqual(panels.slice().sort(), tabs.slice().sort());
+  assert.match(popup, /id="panel-dictionary"[\s\S]*?<section id="dictionary"[\s\S]*?<\/section>\s*<\/section>\s*<!-- ── Account and profile/);
+  assert.match(popup, /id="panel-account"[\s\S]*?<section id="account"/);
   assert.match(css, /\.tabbar\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;/s);
 
   // Settings leaves for its own page, so it is a link out rather than a tab.
@@ -76,10 +96,49 @@ test("the action popup navigates with a bottom bar and hands settings to its own
   assert.equal(manifest.options_ui.open_in_tab, true);
 
   // The preferences the popup dropped must exist on the options page instead.
-  for (const id of [ "prefs", "keybinds", "advanced", "scanModifier", "languages", "furiganaMode", "apiBase", "apiKey" ]) {
+  for (const id of [ "prefs", "keybinds", "advanced", "scanModifier", "apiBase", "apiKey" ]) {
     assert.match(options, new RegExp(`id="${id}"`), `options page is missing #${id}`);
     assert.doesNotMatch(popup, new RegExp(`id="${id}"`), `popup should no longer own #${id}`);
   }
+
+  // Definition language is deliberately available both beside the dictionary
+  // and on the full settings page; both controls write Config#languages.
+  assert.match(popup, /id="dictionaryLanguages"/);
+  assert.match(options, /id="languages"/);
+  assert.match(readFileSync("src/action/popup.ts", "utf8"), /await patch\(\{ languages \}\)/);
+
+  // Furigana is likewise a shared preference, available mid-read in Lookup and
+  // in the full settings page without introducing a second stored value.
+  assert.match(popup, /id="lookupFuriganaMode"/);
+  assert.match(options, /id="furiganaMode"/);
+  assert.match(readFileSync("src/action/popup.ts", "utf8"), /patch\(\{ furiganaMode, showFurigana: furiganaMode !== "off" \}\)/);
+});
+
+test("the first-release bundle excludes the dedicated reader and PDF runtime", () => {
+  const builder = readFileSync("build.mjs", "utf8");
+  const manifest = readFileSync("manifest.base.json", "utf8");
+  const packageJson = readFileSync("package.json", "utf8");
+  const messages = readFileSync("src/common/messages.ts", "utf8");
+
+  for (const source of [builder, manifest, packageJson, messages]) {
+    assert.doesNotMatch(source, /pdfjs|pdf\.worker|reader\/reader|openReader/);
+  }
+});
+
+test("extension settings mirror Shirabe's sidebar and card layout without purple accents", () => {
+  const options = readFileSync("src/options/options.html", "utf8");
+  const css = readFileSync("src/options/options.css", "utf8");
+  const logic = readFileSync("src/options/options.ts", "utf8");
+
+  assert.match(options, /class="settings-nav"/);
+  assert.match(options, /class="settings-content"/);
+  for (const id of ["reading", "keyboard", "advanced"]) assert.match(options, new RegExp(`href="#${id}"`));
+  assert.match(css, /--surface-page:\s*#f8fafc/);
+  assert.match(css, /--surface:\s*#fff/);
+  assert.match(css, /--primary:\s*#0369a1/);
+  assert.match(css, /grid-template-columns:\s*176px minmax\(0, 1fr\)/);
+  assert.doesNotMatch(css, /purple|#7b61ff/i);
+  assert.match(logic, /new IntersectionObserver/);
 });
 
 test("Firefox and Chrome use their supported asynchronous message contracts", () => {
@@ -96,6 +155,14 @@ test("a watch build repairs the stale production API default in its persistent p
   assert.match(config, /__DEFAULT_API_BASE__ !== PRODUCTION_API_BASE && config\.apiBase === PRODUCTION_API_BASE/);
   assert.match(config, /config\.apiBase = __DEFAULT_API_BASE__/);
   assert.match(config, /await ext\.storage\.local\.set\(\{ \[KEY\]: config \}\)/);
+});
+
+test("concurrent watch builds replace manifests atomically", () => {
+  const build = readFileSync("build.mjs", "utf8");
+  assert.match(build, /const temporary = `\$\{destination\}\.\$\{process\.pid\}\.\$\{Date\.now\(\)\}\.tmp`/);
+  assert.match(build, /await rename\(temporary, destination\)/);
+  assert.match(build, /await acquireWatchLock\(\)/);
+  assert.match(build, /dev watcher is already running/);
 });
 
 test("offline storage indexes lookup keys off the term record", () => {
@@ -118,10 +185,13 @@ test("dictionary failures render self-contained popup diagnostics", () => {
 
 test("dictionary installation uses a persistent background port", () => {
   const browser = readFileSync("src/common/browser.ts", "utf8");
-  const popup = readFileSync("src/action/popup.ts", "utf8");
+  const dictionaryPort = readFileSync("src/common/dictionary-port.ts", "utf8");
+  const wordPopup = readFileSync("src/content/popup.ts", "utf8");
   const background = readFileSync("src/background/background.ts", "utf8");
   assert.match(browser, /connect\(connectInfo\?: \{ name\?: string \}\): RuntimePort/);
-  assert.match(popup, /ext\.runtime\.connect\(\{ name: "shirabe-dictionary" \}\)/);
+  assert.match(dictionaryPort, /ext\.runtime\.connect\(\{ name: "shirabe-dictionary" \}\)/);
+  assert.match(wordPopup, /sendDictionary\(\{ type: "installDictionary" \}\)/);
+  assert.match(wordPopup, /response\.dictionary\.progress/);
   assert.match(background, /ext\.runtime\.onConnect\.addListener/);
   assert.match(background, /port\.name !== "shirabe-dictionary"/);
 });
@@ -134,19 +204,23 @@ test("background failures include exception names, codes, stacks, and request ty
   assert.match(background, /console\.error\("\[Shirabe background\] request failed"/);
 });
 
-test("anonymous dictionary use is the default and OAuth is an explicit Pro action", () => {
+test("anonymous dictionary use is the default and OAuth is an explicit account action", () => {
   const popup = readFileSync("src/action/popup.html", "utf8");
   const popupLogic = readFileSync("src/action/popup.ts", "utf8");
   const api = readFileSync("src/common/api.ts", "utf8");
   const background = readFileSync("src/background/background.ts", "utf8");
 
-  assert.match(popup, /Optional Pro features/);
-  assert.match(popup, /Search, parsing, and the offline dictionary need no account/);
-  assert.match(popup, /Connect Pro account/);
+  assert.doesNotMatch(popup, /Optional Pro features/);
+  assert.doesNotMatch(popup, /Search, parsing, and the offline dictionary need no account/);
+  assert.match(popup, /Not connected/);
+  assert.match(popup, /Connect account/);
   assert.doesNotMatch(api, /const OAUTH_SCOPES = \[[^\]]*READ_DICTIONARY/);
-  assert.match(api, /const OAUTH_SCOPES = \["READ_ACCOUNT", "READ_SRS", "WRITE_SRS"\]/);
+  assert.match(api, /const OAUTH_SCOPES = \["READ_ACCOUNT", "READ_PREFERENCES", "WRITE_PREFERENCES", "READ_SRS", "WRITE_SRS"\]/);
+  assert.match(api, /"\/v1\/preferences"/);
+  assert.match(popupLogic, /send\(\{ type: "updateLanguages", languages \}\)/);
   assert.match(popupLogic, /\$<HTMLButtonElement>\("connect"\)\.addEventListener\("click"/);
-  assert.match(background, /launchWebAuthFlow\(\{ url, interactive: true, redirect_uri: redirectUri \}\)/);
+  assert.match(background, /launchWebAuthFlow\(\{ url, interactive: true \}\)/);
+  assert.doesNotMatch(background, /launchWebAuthFlow\([^)]*redirect_uri/);
 });
 
 test("opening the action activates raw-text scanning without parsing the page", () => {
@@ -159,4 +233,73 @@ test("opening the action activates raw-text scanning without parsing the page", 
   assert.match(popup, /executeScript\(\{ target: \{ tabId: tab\.id, allFrames: true \}/);
   assert.match(content, /lastPointer = event/);
   assert.match(content, /else if \(lastPointer\) scanPointer\(lastPointer, true\)/);
+});
+
+test("pronunciation audio only plays processed R2 clips and never browser speech", () => {
+  const popup = readFileSync("src/content/popup.ts", "utf8");
+  const webAudio = readFileSync("../app/javascript/controllers/audio_controller.js", "utf8");
+
+  assert.match(popup, /hostname === "cdn\.shirabe\.org"/);
+  assert.match(popup, /pathname\.startsWith\("\/audio\/"\)/);
+  assert.doesNotMatch(popup, /speechSynthesis|SpeechSynthesisUtterance/);
+  assert.doesNotMatch(webAudio, /speechSynthesis|SpeechSynthesisUtterance/);
+});
+
+test("reader grading is due-only and locks after the first click", () => {
+  const popup = readFileSync("src/content/popup.ts", "utf8");
+  assert.match(popup, /if \(word\.dataset\.state === "due"\)/);
+  assert.match(popup, /wrap\.dataset\.running === "true"/);
+  assert.match(popup, /control\.disabled = true/);
+});
+
+test("offline parsing does not wait for profile-state network hydration", () => {
+  const background = readFileSync("src/background/background.ts", "utf8");
+  const parser = readFileSync("src/content/parser.ts", "utf8");
+  assert.match(background, /return lists;/);
+  assert.doesNotMatch(background, /hydrateCachedStates|hydrateStates/);
+  assert.match(background, /const LOCAL_PARSE_CONCURRENCY = 4/);
+  assert.match(background, /await Promise\.all\(Array\.from/);
+  assert.match(background, /const fresh = await api\.states\(lemmas\)/);
+  assert.match(background, /pendingRemoteStateLemmas/);
+  assert.match(background, /drainRemoteStateRefresh/);
+  assert.doesNotMatch(background, /MIN_GAP_MS|function enqueue/);
+  assert.match(background, /const STATE_CACHE_MAX_AGE_MS = 5 \* 60 \* 1000/);
+  assert.match(background, /lemma in cached\.states/);
+  assert.match(background, /cached\.checkedAt\[lemma\]/);
+  assert.match(background, /const ACCOUNT_CACHE_MAX_AGE_MS = 5 \* 60 \* 1000/);
+  assert.match(background, /Date\.parse\(config\.accountCheckedAt\)/);
+  assert.match(background, /let stateCacheWrite: Promise<void> = Promise\.resolve\(\)/);
+  assert.match(background, /const STATE_CACHE_MAX_LEMMAS = 20_000/);
+  assert.match(background, /memoryStateSnapshot/);
+  assert.match(background, /case "syncProfile"/);
+  assert.match(background, /const DECK_CACHE_KEY = "profileDeckSnapshot"/);
+  assert.match(background, /async function cachedDecks/);
+  assert.match(background, /ext\.storage\.local\.remove\(\[STATE_CACHE_KEY, DECK_CACHE_KEY\]\)/);
+  assert.match(parser, /export async function refreshRenderedStates/);
+  assert.match(parser, /pendingStateLemmas/);
+  assert.match(parser, /requestAnimationFrame\(\(\) => void refreshQueuedStates\(\)\)/);
+  assert.match(parser, /send\(\{ type: "states", lemmas \}\)/);
+  assert.match(parser, /applyStateEverywhere\(lemma, state\)/);
+  assert.match(parser, /const DISCOVERY_SLICE_NODES = 300/);
+  assert.match(parser, /scheduleIdle\(work\)/);
+  assert.match(parser, /texts: blocks\.map\(\(item\) => item\.text\)/);
+  assert.match(parser, /recordPerformance\("parse-render"/);
+  const dictionary = readFileSync("src/common/offline-dictionary.ts", "utf8");
+  assert.match(dictionary, /activeGenerationCache/);
+  assert.match(dictionary, /lookupProbeCache = new BoundedCache/);
+});
+
+test("missing offline storage self-heals and the word popup has a stable scrollable frame", () => {
+  const background = readFileSync("src/background/background.ts", "utf8");
+  const dictionary = readFileSync("src/common/offline-dictionary.ts", "utf8");
+  const popup = readFileSync("src/content/popup.ts", "utf8");
+  assert.match(dictionary, /if \(!active\) \{\s*await installDictionary\(apiBase\)/);
+  assert.match(background, /DictionaryNotInstalledError/);
+  assert.match(background, /dictionaryInstalling: true/);
+  assert.match(popup, /Preparing the offline dictionary/);
+  assert.match(popup, /width: min\(360px, calc\(100vw - 24px\)\)/);
+  assert.match(popup, /max-height: min\(60vh, 460px\)/);
+  assert.doesNotMatch(popup, /\n  height: min\(460px/);
+  assert.match(popup, /overflow-y: auto/);
+  assert.match(popup, /roomRight >= width/);
 });

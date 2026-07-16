@@ -1,5 +1,5 @@
 import type { Config } from "./config.js";
-import { glossLanguagesFrom, type GlossLanguage } from "./languages.js";
+import { glossLanguagesFrom, uiLanguagesFrom, type GlossLanguage } from "./languages.js";
 import type { Definition, Example, Sense, WordState } from "./types.js";
 import type { Deck, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
 
@@ -17,7 +17,7 @@ export class ApiError extends Error {
 // Dictionary lookup is public and local, so connecting must never ask for it.
 // OAuth exists only for the personal online layer: identify the account, read
 // its study state, and save/grade through the SRS.
-const OAUTH_SCOPES = ["READ_ACCOUNT", "READ_SRS", "WRITE_SRS"];
+const OAUTH_SCOPES = ["READ_ACCOUNT", "READ_PREFERENCES", "WRITE_PREFERENCES", "READ_SRS", "WRITE_SRS"];
 
 // /v1/search: the server already returns a full word card — headword, reading,
 // pitch (with audio), common/JLPT/frequency, and nested entries → senses →
@@ -146,10 +146,8 @@ export class ShirabeApi {
   }
 
   // ── SRS write-back (/v1/srs/*, requires a WRITE_SRS key) ────────────────────
-  // Save a word as a review card, optionally grading it on the spot (rating
-  // 1=Again…4=Easy). The server find-or-creates the card by lemma, so this is
-  // the one call that both mines a new word and reviews an existing one. Returns
-  // the resulting state so the caller can recolour the word in place.
+  // Save a word as a review card. A rating is accepted only when that existing
+  // card is currently due, so lookup cannot create early or duplicate reviews.
   async save(options: { lemma: string; surface?: string; reading?: string; deckId?: number; sentence?: SentenceCapture; rating?: 1 | 2 | 3 | 4; imageDataUrl?: string; audioDataUrl?: string }): Promise<SaveResult> {
     const response = await this.post<{
       card: { state: WordState }; created: boolean; memberships: Array<{ id: number; name: string }>;
@@ -199,6 +197,14 @@ export class ShirabeApi {
     };
   }
 
+  async updateLanguages(languages: readonly GlossLanguage[]): Promise<GlossLanguage[]> {
+    const data = await this.patch<{ preferences: { languages: string[] } }>(
+      "/v1/preferences",
+      { languages: uiLanguagesFrom(languages) },
+    );
+    return glossLanguagesFrom(data.preferences.languages);
+  }
+
   // ── HTTP plumbing ───────────────────────────────────────────────────────
   private async get<T>(path: string): Promise<T> {
     return this.request<T>(path, { method: "GET" });
@@ -206,6 +212,10 @@ export class ShirabeApi {
 
   private async post<T>(path: string, body: unknown, opts: { auth?: boolean; signal?: AbortSignal } = {}): Promise<T> {
     return this.request<T>(path, { method: "POST", body: JSON.stringify(body), signal: opts.signal }, opts);
+  }
+
+  private async patch<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, { method: "PATCH", body: JSON.stringify(body) });
   }
 
   private async request<T>(path: string, init: RequestInit, opts: { auth?: boolean } = {}): Promise<T> {

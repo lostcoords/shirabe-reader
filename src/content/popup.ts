@@ -1,4 +1,5 @@
 import { send, type Rating } from "../common/messages.js";
+import { sendDictionary } from "../common/dictionary-port.js";
 import type { Definition, Example, Sense, SentenceToken } from "../common/types.js";
 import { applyStudyDetails, grade, GRADES, markKnown, save, setMediaCapture, type MediaCapture, type Outcome } from "./actions.js";
 import { refreshStatusBar } from "./status-bar.js";
@@ -19,6 +20,7 @@ const lookupHistory: PopupTarget[] = [];
 let historyIndex = -1;
 let navigatingHistory = false;
 let currentDepth = 0;
+let dictionaryInstallPromise: Promise<void> | null = null;
 
 export function setCanWrite(value: boolean): void {
   canWrite = value;
@@ -171,6 +173,13 @@ async function showTarget(target: PopupTarget): Promise<void> {
     el.replaceChildren(messageRow(res.error));
     return;
   }
+  if (res.dictionaryInstalling) {
+    el.replaceChildren(loadingRow(target.query), messageRow("Preparing the offline dictionary…"));
+    position(target.rect);
+    void ensureDictionaryInstallation();
+    void retryWhenDictionaryReady(target, mine);
+    return;
+  }
   if (res.definition) {
     target.word.dataset.lemma = res.definition.headword;
     target.word.dataset.surface = res.definition.sourceForm ?? target.query;
@@ -193,9 +202,47 @@ async function showTarget(target: PopupTarget): Promise<void> {
   position(target.rect);
 }
 
+function ensureDictionaryInstallation(): Promise<void> {
+  if (dictionaryInstallPromise) return dictionaryInstallPromise;
+  dictionaryInstallPromise = sendDictionary({ type: "installDictionary" })
+    .then((response) => {
+      if (!response.ok && visible()) element().replaceChildren(messageRow(response.error));
+    })
+    .finally(() => {
+      dictionaryInstallPromise = null;
+    });
+  return dictionaryInstallPromise;
+}
+
+async function retryWhenDictionaryReady(target: PopupTarget, mine: number): Promise<void> {
+  while (mine === token && visible() && currentKey === target.key) {
+    await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+    if (mine !== token || !visible() || currentKey !== target.key) return;
+    const response = await sendDictionary({ type: "dictionaryStatus" });
+    if (!response.ok) return;
+    if (response.dictionary.error) {
+      element().replaceChildren(messageRow(response.dictionary.error));
+      return;
+    }
+    if (!response.dictionary.installed) {
+      const progress = response.dictionary.progress > 0
+        ? ` · ${Math.round(response.dictionary.progress * 100)}%`
+        : "";
+      const stage = response.dictionary.stage ?? "Preparing the offline dictionary";
+      element().replaceChildren(loadingRow(target.query), messageRow(`${stage}${progress}`));
+      position(target.rect);
+      continue;
+    }
+    currentKey = null;
+    navigatingHistory = true;
+    await showTarget(target);
+    return;
+  }
+}
+
 function position(rect: DOMRect): void {
   if (!host) return;
-  const margin = 8;
+  const margin = 12;
   host.style.visibility = "hidden";
   host.style.left = "0px";
   host.style.top = "0px";
@@ -203,18 +250,28 @@ function position(rect: DOMRect): void {
   const viewW = document.documentElement.clientWidth;
   const viewH = document.documentElement.clientHeight;
 
-  let left = rect.left;
-  left = Math.min(left, viewW - width - margin);
-  left = Math.max(left, margin);
+  const roomRight = viewW - rect.right - margin;
+  const roomLeft = rect.left - margin;
+  let left: number;
+  let top: number;
 
-  // Prefer below the word; flip above only when there's genuinely more room
-  // there. The popup's own max-height keeps it shorter than the viewport, so we
-  // then clamp it fully into view — the headword + reading at the top is always
-  // visible, and long entries scroll inside instead of spilling off-screen.
-  const roomBelow = viewH - rect.bottom - margin;
-  const roomAbove = rect.top - margin;
-  let top = rect.bottom + margin;
-  if (height > roomBelow && roomAbove > roomBelow) top = rect.top - height - margin;
+  // Prefer the page margin beside the word when a fixed-size card fits there;
+  // this preserves the sentence being read. Narrow layouts fall back above or
+  // below without ever overlapping the target word itself.
+  if (roomRight >= width) {
+    left = rect.right + margin;
+    top = rect.top;
+  } else if (roomLeft >= width) {
+    left = rect.left - width - margin;
+    top = rect.top;
+  } else {
+    left = rect.left + rect.width / 2 < viewW / 2 ? rect.left : rect.right - width;
+    const roomBelow = viewH - rect.bottom - margin;
+    const roomAbove = rect.top - margin;
+    top = rect.bottom + margin;
+    if (height > roomBelow && roomAbove > roomBelow) top = rect.top - height - margin;
+  }
+  left = Math.max(margin, Math.min(left, viewW - width - margin));
   top = Math.max(margin, Math.min(top, viewH - height - margin));
 
   host.style.left = `${window.scrollX + left}px`;
@@ -238,7 +295,10 @@ function messageRow(text: string): Node {
 
 function definitionRows(def: Definition | null, lemma: string, word: HTMLElement): Node[] {
   if (!def) {
-    const rows: Node[] = [messageRow(`No entry for 「${lemma}」`)];
+    const body = document.createElement("div");
+    body.className = "sb-body";
+    body.append(messageRow(`No entry for 「${lemma}」`));
+    const rows: Node[] = [body];
     if (canWrite) rows.push(actions(word));
     return rows;
   }
@@ -284,7 +344,7 @@ function studyUnavailable(): HTMLElement {
   return row;
 }
 
-// Headword (links to its shirabe.org page) + reading + a play-audio button.
+// Headword (links to its shirabe.org page) + reading + an R2-backed audio button.
 function headRow(def: Definition): Node {
   const head = document.createElement("div");
   head.className = "sb-popup-head";
@@ -317,8 +377,9 @@ function headRow(def: Definition): Node {
   navigation.append(back, forward);
   head.append(navigation);
 
-  if (def.reading || def.pitch.length) {
-    const audio = button("🔊", "sb-audio", "", () => playAudio(def.pitch[0]?.audioUrl ?? null, def.reading ?? def.headword));
+  const audioUrl = def.pitch.map((pitch) => pitch.audioUrl).find(isR2AudioUrl);
+  if (audioUrl) {
+    const audio = button("🔊", "sb-audio", "", () => playAudio(audioUrl));
     audio.title = "Play pronunciation";
     audio.setAttribute("aria-label", "Play pronunciation");
     head.append(audio);
@@ -498,27 +559,18 @@ function sentenceToken(tok: SentenceToken): Node {
   return link;
 }
 
-// Play the pre-generated clip; fall back to the browser's speech synth when
-// there's no file (dev, or a word we never generated audio for).
-function playAudio(url: string | null, reading: string): void {
-  if (url) {
-    const audio = new Audio(url);
-    audio.addEventListener("error", () => speak(reading));
-    audio.play().catch(() => speak(reading));
-  } else {
-    speak(reading);
+function isR2AudioUrl(url: string | null): url is string {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.hostname === "cdn.shirabe.org" && parsed.pathname.startsWith("/audio/");
+  } catch {
+    return false;
   }
 }
 
-function speak(reading: string): void {
-  try {
-    const utterance = new SpeechSynthesisUtterance(reading);
-    utterance.lang = "ja-JP";
-    speechSynthesis.cancel();
-    speechSynthesis.speak(utterance);
-  } catch {
-    // No speech synthesis available — nothing to play.
-  }
+function playAudio(url: string): void {
+  void new Audio(url).play().catch(() => undefined);
 }
 
 // Mining + review controls, gated by whether the word is already a card. An
@@ -543,7 +595,7 @@ function renderActions(word: HTMLElement, wrap: HTMLElement): void {
     wrap.append(membership);
   }
 
-  if (saved) {
+  if (word.dataset.state === "due") {
     const grades = document.createElement("div");
     grades.className = "sb-grades";
     const intervals = intervalPreviews(word);
@@ -552,6 +604,15 @@ function renderActions(word: HTMLElement, wrap: HTMLElement): void {
       grades.append(button(`${GRADES[r]}${intervals?.[key] ? ` ${intervals[key]}` : ""}`, `sb-grade sb-g${r}`, `${r}`, () => run(word, wrap, () => grade(word, r))));
     }
     wrap.append(grades);
+  } else if (saved) {
+    const schedule = document.createElement("div");
+    schedule.className = "sb-schedule";
+    schedule.textContent = word.dataset.state === "new"
+      ? "Ready for its first review in Shirabe"
+      : word.dataset.state === "known"
+        ? "Marked known"
+        : "Next review is already scheduled";
+    wrap.append(schedule);
   }
 
   const extra = document.createElement("div");
@@ -643,8 +704,13 @@ function fileDataUrl(file: File): Promise<string> {
 }
 
 async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<Outcome>): Promise<void> {
+  if (wrap.dataset.running === "true") return;
+  wrap.dataset.running = "true";
+  for (const control of wrap.querySelectorAll<HTMLButtonElement>("button")) control.disabled = true;
   const { ok, message } = await action();
+  delete wrap.dataset.running;
   if (ok) renderActions(word, wrap); // state changed → re-render (Save → grade row)
+  else for (const control of wrap.querySelectorAll<HTMLButtonElement>("button")) control.disabled = false;
   if (ok) refreshStatusBar();
   const note = wrap.querySelector<HTMLElement>(".sb-feedback");
   if (note) {
@@ -697,8 +763,7 @@ const CSS = `
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  max-width: 360px;
-  min-width: 200px;
+  width: min(360px, calc(100vw - 24px));
   max-height: min(60vh, 460px);
   padding: 12px 14px;
   background: #ffffff;
@@ -783,6 +848,7 @@ const CSS = `
 
 .sb-actions { flex: 0 0 auto; margin-top: 12px; padding-top: 10px; border-top: 1px solid #f3f4f6; }
 .sb-membership { margin-bottom: 6px; color: #4b5563; font-size: 11px; }
+.sb-schedule { margin-bottom: 6px; color: #4b5563; font-size: 12px; }
 .sb-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .sb-extra { display: flex; gap: 6px; margin-top: 6px; }
 .sb-extra .sb-btn { flex: 1; }
@@ -793,6 +859,7 @@ const CSS = `
   padding: 7px 8px; border-radius: 8px; border: 1px solid transparent; cursor: pointer;
   color: #fff;
 }
+.sb-btn:disabled { cursor: wait; opacity: 0.55; }
 .sb-btn kbd {
   font: 600 10px/1 ui-monospace, monospace;
   padding: 2px 4px; border-radius: 4px;

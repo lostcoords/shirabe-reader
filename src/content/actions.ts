@@ -67,10 +67,11 @@ async function saveRequest(word: HTMLElement, rating?: Rating) {
   });
 }
 
-// Grade (and mine if new) on Shirabe's 1–4 scale. POST /v1/srs/saves
-// find-or-creates the card by lemma, so this both mines and reviews.
+// Grade a due card on Shirabe's 1–4 scale. POST /v1/srs/saves rejects new,
+// early, and already-graded cards; saving is a separate action.
 export async function grade(word: HTMLElement, rating: Rating): Promise<Outcome> {
   const lemma = lemmaOf(word);
+  if (word.dataset.state !== "due") return { ok: false, message: `${lemma} is not due for review` };
   const res = await saveRequest(word, rating);
   if (res.ok) {
     applyStateEverywhere(lemma, res.result.state);

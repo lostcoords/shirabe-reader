@@ -41,11 +41,5 @@
       "48": "icons/logo_48.png",
       "128": "icons/logo_128.png"
     }
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["content.css", "reader/pdf.worker.min.mjs"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }
