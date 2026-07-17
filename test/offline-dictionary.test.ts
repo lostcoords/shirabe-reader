@@ -6,7 +6,7 @@ import { gzipSync } from "node:zlib";
 import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
 
 const records = [
-  { type: "header", schemaVersion: 2, languages: ["eng", "spa"], source: "Shirabe open-core" },
+  { type: "header", schemaVersion: 3, languages: ["eng", "spa"], source: "Shirabe open-core" },
   {
     type: "term", id: "jmdict:1", dictionary: "jmdict", headword: "食べる",
     expressions: [{ text: "食べる", script: "mixed", common: true, tags: [] }],
@@ -17,7 +17,7 @@ const records = [
       { text: "たべる", reading: "たべる", downstep: 2, audioUrl: `https://cdn.shirabe.org/audio/${"b".repeat(64)}.m4a` },
       { text: "たべる", reading: "たべる", downstep: 0, audioUrl: `https://cdn.shirabe.org/audio/${"c".repeat(64)}.m4a` },
     ],
-    frequencies: [{ source: "jiten-global", rank: 100 }],
+    frequencies: [{ source: "jiten-global", text: "食べる", reading: "たべる", rank: 100 }],
   },
   ...[
     ["2", "日本語", "にほんご", "Japanese language", "idioma japonés", "noun", 200],
@@ -36,15 +36,36 @@ const records = [
     expressions: [{ text: headword, script: "mixed", common: true, tags: [] }],
     readings: [{ text: reading, kind: "kana" }],
     senses: [{ glosses: { eng: [english], spa: [spanish] }, partsOfSpeech: [pos], fields: [], misc: [], dialects: [], restrictions: [] }],
-    frequencies: [{ source: "jiten-global", rank }],
+    frequencies: [{ source: "jiten-global", text: headword, reading, rank }],
   })),
   {
     type: "term", id: "jmdict:9", dictionary: "jmdict", headword: "Ｔシャツ",
     expressions: [{ text: "Ｔシャツ", script: "mixed", common: true, tags: [] }],
     readings: [{ text: "ティーシャツ", kind: "kana" }],
     senses: [{ glosses: { eng: ["T-shirt"], spa: ["camiseta"] }, partsOfSpeech: ["noun"], fields: [], misc: [], dialects: [], restrictions: [] }],
-    frequencies: [{ source: "jiten-global", rank: 900 }],
+    frequencies: [{ source: "jiten-global", text: "Ｔシャツ", reading: "ティーシャツ", rank: 900 }],
   },
+  {
+    type: "term", id: "jmdict:12", dictionary: "jmdict", headword: "一石二鳥",
+    expressions: [{ text: "一石二鳥", script: "mixed", common: false, tags: [] }],
+    readings: [{ text: "いっせきにちょう", kind: "kana" }],
+    senses: [{ glosses: { eng: ["killing two birds with one stone"], spa: ["matar dos pájaros de un tiro"] }, partsOfSpeech: ["expression"], fields: [], misc: ["yoji"], dialects: [], restrictions: [] }],
+    frequencies: [{ source: "jiten-global", text: "一石二鳥", reading: "いっせきにちょう", rank: 80_000 }],
+  },
+  ...[
+    ["13", "明日", "あした", "tomorrow", 1_000],
+    ["14", "天気", "てんき", "weather", 2_000],
+    ["15", "明日天気", "あしたてんき", "children's weather game", 128_981],
+  ].map(([id, headword, reading, english, rank]) => ({
+    type: "term", id: `jmdict:${id}`, dictionary: "jmdict", headword,
+    expressions: [{ text: headword, script: "mixed", common: false, tags: [] }],
+    readings: [{ text: reading, kind: "kana" }],
+    senses: [{ glosses: { eng: [english], spa: [english] }, partsOfSpeech: ["noun"], fields: [], misc: [], dialects: [], restrictions: [] }],
+    frequencies: [
+      { source: "jiten-global", text: headword, reading, rank },
+      ...(headword === "明日天気" ? [{ source: "jiten-global", text: "明日", reading: "あした", rank: 1 }] : []),
+    ],
+  })),
   { type: "kanji", id: "kanjidic:食", char: "食", readings: { on: ["ショク"], kun: ["た.べる"] }, meanings: { eng: ["eat"], spa: ["comer"] }, strokes: 9 },
   // KANJIDIC lists pinyin/korean/vietnam before the Japanese readings, and 猫 is
   // also a word — both of which the lookup has to see past.
@@ -61,9 +82,9 @@ const checksum = createHash("sha256").update(compressed).digest("hex");
 
 function manifest(revision: string, sha256 = checksum) {
   return {
-    schemaVersion: 2, buildRecipeVersion: 4, minimumExtensionVersion: "0.1.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
+    schemaVersion: 3, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
     artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
-    bytes: compressed.byteLength, sha256, counts: { terms: 11, kanji: 3 }, languages: ["eng", "spa"],
+    bytes: compressed.byteLength, sha256, counts: { terms: 15, kanji: 3 }, languages: ["eng", "spa"],
     dictionaries: [{ slug: "jmdict", version: "test" }], modifications: [], sources: [], downloadUrl: "https://packs.test/dictionary.gz",
   } as const;
 }
@@ -106,6 +127,19 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal((await lookupOffline("Tシャツ", ["eng"], "https://shirabe.test"))?.headword, "Ｔシャツ");
   const shirtTokens = await parseOffline("Ｔシャツを買った。", ["eng"], "https://shirabe.test");
   assert.ok(shirtTokens.some((token) => token.lemma === "Ｔシャツ" && token.surface === "Ｔシャツ"));
+
+  const expressionTokens = await parseOffline("一石二鳥は便利だ。", ["eng"], "https://shirabe.test");
+  assert.deepEqual(expressionTokens.filter((token) => token.content)[0], {
+    start: 0, length: 4, surface: "一石二鳥", reading: "いっせきにちょう",
+    lemma: "一石二鳥", pos: "expression", content: true, state: "none", frequency: 80_000,
+  });
+  assert.equal((await lookupOffline("明日天気", ["eng"], "https://shirabe.test"))?.headword, "明日天気",
+    "an explicit lookup must preserve an obscure exact dictionary entry");
+  assert.deepEqual(
+    (await parseOffline("明日天気になる。", ["eng"], "https://shirabe.test")).filter((token) => token.content).slice(0, 2).map((token) => token.surface),
+    ["明日", "天気"],
+    "contextual parsing must not blindly consume an uncommon untagged headword",
+  );
 
   // Language ORDER is the contract: the reader's stack decides which meaning
   // block renders first, exactly as the web walks Locales.source_stack_for in

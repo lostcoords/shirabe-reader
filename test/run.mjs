@@ -10,7 +10,7 @@ const outfile = join(dir, "tests.cjs");
 try {
   await build({
     entryPoints: ["test/all.test.ts"], bundle: true, platform: "node", format: "cjs", outfile, logLevel: "silent",
-    define: { __EXTENSION_VERSION__: JSON.stringify("0.1.0") },
+    define: { __EXTENSION_VERSION__: JSON.stringify("0.2.0") },
   });
   execFileSync(process.execPath, ["--test", outfile], { stdio: "inherit" });
 } finally {

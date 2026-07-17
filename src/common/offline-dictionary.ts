@@ -10,9 +10,9 @@ declare const __EXTENSION_VERSION__: string;
 // dev-built database opens a clean one rather than a shape this code cannot
 // read. Superseded databases are not migrated: a generation is rebuilt from the
 // pack, which is always re-downloadable.
-const DB_NAME = "shirabe-offline-dictionary-v3";
+const DB_NAME = "shirabe-offline-dictionary-v4";
 const DB_VERSION = 1;
-const SUPPORTED_SCHEMA = 2;
+const SUPPORTED_SCHEMA = 3;
 const MAX_SCAN_CHARS = 24;
 const IMPORT_BATCH = 2_000;
 
@@ -76,7 +76,7 @@ type OfflineTerm = {
   readings: Array<{ text: string; kind: string }>;
   senses: OfflineSense[];
   pitch?: Array<{ text: string; reading: string; downstep: number; audioUrl: string }>;
-  frequencies?: Array<{ source: string; rank: number }>;
+  frequencies?: Array<{ source: string; text: string; reading: string | null; rank: number }>;
   jlpt?: number | null;
 };
 
@@ -254,7 +254,7 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
       continue;
     }
 
-    const definition = await lookupInDatabase(db, generation, rest.slice(0, MAX_SCAN_CHARS), languages, apiBase);
+    const definition = await lookupInDatabase(db, generation, rest.slice(0, MAX_SCAN_CHARS), languages, apiBase, true);
     if (!definition?.sourceForm) {
       const surface = String.fromCodePoint(rest.codePointAt(0) as number);
       tokens.push({ start: position, length: surface.length, surface, reading: null, lemma: surface, pos: "", content: false, state: "none" });
@@ -272,25 +272,34 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
   return tokens;
 }
 
-async function lookupInDatabase(db: IDBDatabase, generation: string, source: string, languages: readonly GlossLanguage[], apiBase: string): Promise<Definition | null> {
+async function lookupInDatabase(db: IDBDatabase, generation: string, source: string, languages: readonly GlossLanguage[], apiBase: string, contextual = false): Promise<Definition | null> {
   const prefixes = prefixesLongestFirst(source);
   // Exact prefixes first: IndexedDB reads run concurrently, and this is the
   // overwhelmingly common case.
   const exactHits = await hitsForCandidates(db, generation, prefixes.map((prefix) => ({
     prefix, candidate: { text: prefix, reasons: [] },
-  })));
+  })), !contextual);
 
   // Deinflecting only when nothing matched exactly loses to any shorter entry
   // that happens to be a real word: 読みませんでした matched the noun 読み and never
   // reached 読む; 高くなかった matched 高 instead of 高い. Only a prefix longer than
   // the exact match can improve on it, so deinflect just those — keeping
   // longest-match semantics without paying for deinflection on every lookup.
-  const longerPrefixes = prefixes.filter((prefix) => [...prefix].length > (exactHits[0]?.prefixLength ?? 0));
+  const longestExact = exactHits.reduce((length, hit) => Math.max(length, hit.prefixLength), 0);
+  const longerPrefixes = prefixes.filter((prefix) => [...prefix].length > longestExact);
   const deinflectedHits = longerPrefixes.length
     ? await hitsForCandidates(db, generation, longerPrefixes.flatMap((prefix) =>
       deinflect(prefix).map((found) => ({ prefix, candidate: { text: found.term, reasons: found.inflections.map(inflectionLabel) } })),
     ))
     : [];
+
+  if (contextual) {
+    const confident = [...deinflectedHits, ...exactHits].filter(contextuallyConfident);
+    if (confident.length) {
+      confident.sort(contextualCompare);
+      return termDefinition(confident[0], languages, apiBase);
+    }
+  }
 
   const hits = deinflectedHits.length ? deinflectedHits : exactHits;
   hits.sort((a, b) => score(b, source) - score(a, source));
@@ -316,6 +325,7 @@ async function hitsForCandidates(
   db: IDBDatabase,
   generation: string,
   probes: Array<{ prefix: string; candidate: Candidate }>,
+  longestOnly = true,
 ): Promise<LookupHit[]> {
   if (!probes.length) return [];
   // IndexedDB commits a transaction once its requests drain, so issuing every
@@ -334,12 +344,58 @@ async function hitsForCandidates(
   if (!longest) return [];
   const seen = new Set<string>();
   return resolved
-    .filter((probe) => probe.prefix === longest && probe.terms.length)
+    .filter((probe) => (!longestOnly || probe.prefix === longest) && probe.terms.length)
     .flatMap((probe) => probe.terms.flatMap((term) => {
-      if (seen.has(term.id)) return [];
-      seen.add(term.id);
+      const key = longestOnly ? term.id : `${probe.prefix}\0${term.id}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
       return [{ term, candidate: probe.candidate, prefixLength: [...probe.prefix].length, surface: probe.prefix }];
     }));
+}
+
+const CONTEXTUAL_MISC = new Set(["yoji", "id", "proverb"]);
+const SEARCH_ONLY_TAGS = new Set(["sK", "sk"]);
+const RARE_KANJI_TAGS = new Set(["rK", "oK"]);
+const CONTEXTUAL_FREQUENCY_LIMIT = 50_000;
+
+function matchingExpression(hit: LookupHit) {
+  const normalized = normalize(hit.candidate.text);
+  return hit.term.expressions.find((expression) => normalize(expression.text) === normalized);
+}
+
+function forcedExpression(hit: LookupHit): boolean {
+  return hit.term.senses.some((sense) => sense.misc.some((tag) => CONTEXTUAL_MISC.has(tag)));
+}
+
+function contextuallyConfident(hit: LookupHit): boolean {
+  if (hit.candidate.reasons.length) return true; // a longer deinflected word
+  const expression = matchingExpression(hit);
+  if (!expression || expression.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag))) return false;
+  if (forcedExpression(hit)) return true;
+  const usuallyKana = hit.term.senses.some((sense) => sense.misc.includes("uk"));
+  if (usuallyKana || expression.tags.some((tag) => RARE_KANJI_TAGS.has(tag))) return false;
+  const frequency = frequencyForHit(hit);
+  return expression.common || (frequency !== null && frequency <= CONTEXTUAL_FREQUENCY_LIMIT);
+}
+
+function contextualCompare(a: LookupHit, b: LookupHit): number {
+  const forced = Number(forcedExpression(b)) - Number(forcedExpression(a));
+  if (forced) return forced;
+  const length = b.prefixLength - a.prefixLength;
+  if (length) return length;
+  const common = Number(Boolean(matchingExpression(b)?.common)) - Number(Boolean(matchingExpression(a)?.common));
+  if (common) return common;
+  const aFrequency = frequencyForHit(a) ?? Number.POSITIVE_INFINITY;
+  const bFrequency = frequencyForHit(b) ?? Number.POSITIVE_INFINITY;
+  return aFrequency - bFrequency || score(b, b.surface) - score(a, a.surface) || a.term.id.localeCompare(b.term.id);
+}
+
+function frequencyForHit(hit: LookupHit): number | null {
+  const text = normalize(hit.candidate.text);
+  const ranks = (hit.term.frequencies ?? [])
+    .filter((item) => normalize(item.text) === text)
+    .map((item) => item.rank);
+  return ranks.length ? Math.min(...ranks) : null;
 }
 
 async function termsForProbe(index: IDBIndex, key: string): Promise<Array<Stored<OfflineTerm>>> {
@@ -702,7 +758,7 @@ function validateTerm(term: OfflineTerm): void {
       !Array.isArray(term.readings) || term.readings.some((item) => !exactKeys(item, ["text", "kind"]) || !plainString(item.text) || !plainString(item.kind)) ||
       !Array.isArray(term.senses) || !term.senses.length || term.senses.some((sense) => !exactKeys(sense, ["glosses", "partsOfSpeech", "fields", "misc", "dialects", "restrictions"]) || !glossMap(sense.glosses, new Set(["eng", "spa"])) || !stringArray(sense.partsOfSpeech) || !stringArray(sense.fields) || !stringArray(sense.misc) || !stringArray(sense.dialects) || !stringArray(sense.restrictions)) ||
       (term.pitch != null && (!Array.isArray(term.pitch) || term.pitch.some((item) => !exactKeys(item, ["text", "reading", "downstep", "audioUrl"]) || !plainString(item.text) || !plainString(item.reading) || !Number.isInteger(item.downstep) || !r2AudioUrl(item.audioUrl)))) ||
-      (term.frequencies != null && (!Array.isArray(term.frequencies) || term.frequencies.some((item) => !exactKeys(item, ["source", "rank"]) || !plainString(item.source) || !Number.isFinite(item.rank)))) ||
+      (term.frequencies != null && (!Array.isArray(term.frequencies) || term.frequencies.some((item) => !exactKeys(item, ["source", "text", "reading", "rank"]) || !plainString(item.source) || !plainString(item.text) || (item.reading !== null && !plainString(item.reading)) || !Number.isFinite(item.rank)))) ||
       (term.jlpt != null && (!Number.isInteger(term.jlpt) || term.jlpt < 1 || term.jlpt > 5))) {
     throw new Error("Dictionary term record is invalid.");
   }
@@ -791,7 +847,8 @@ function score(hit: LookupHit, source: string): number {
   const expressions = hit.term.expressions;
   const exact = expressions.some((expression) => expression.text === source) ? 10_000 : 0;
   const common = expressions.some((expression) => expression.common) ? 1_000 : 0;
-  const frequency = hit.term.frequencies?.length ? Math.max(0, 1_000 - Math.min(...hit.term.frequencies.map((item) => item.rank)) / 100) : 0;
+  const rank = frequencyForHit(hit);
+  const frequency = rank === null ? 0 : Math.max(0, 1_000 - rank / 100);
   return exact + common + frequency + hit.prefixLength * 10 - hit.candidate.reasons.length;
 }
 
@@ -831,7 +888,7 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
     url: `${apiBase.replace(/\/$/, "")}/word/${encodeURIComponent(term.headword)}`,
     common: term.expressions.some((item) => item.common),
     jlpt: term.jlpt ? `N${term.jlpt}` : null,
-    frequency: term.frequencies?.length ? Math.min(...term.frequencies.map((item) => item.rank)) : null,
+    frequency: frequencyForHit(hit),
     pitch: displayedPitch.map((item) => ({ downstep: item.downstep, audioUrl: item.audioUrl })),
     senses,
     examples: [],

@@ -167,7 +167,7 @@ test("concurrent watch builds replace manifests atomically", () => {
 
 test("offline storage indexes lookup keys off the term record", () => {
   const dictionary = readFileSync("src/common/offline-dictionary.ts", "utf8");
-  assert.match(dictionary, /const DB_NAME = "shirabe-offline-dictionary-v3"/);
+  assert.match(dictionary, /const DB_NAME = "shirabe-offline-dictionary-v4"/);
   // A term's keys live on the record, indexed multiEntry: no join table, so one
   // put per record instead of one per key, and a probe returns the record.
   assert.match(dictionary, /ensureIndex\(terms, "lookupKeys", "keys", \{ multiEntry: true \}\)/);
@@ -178,7 +178,7 @@ test("dictionary failures render self-contained popup diagnostics", () => {
   const popup = readFileSync("src/action/popup.html", "utf8");
   const logic = readFileSync("src/action/popup.ts", "utf8");
   assert.match(popup, /id="dictionaryDiagnostics"/);
-  assert.match(logic, /build: 0\.1\.0-dev-storage-isolation/);
+  assert.match(logic, /build: 0\.2\.0-contextual-search/);
   assert.match(logic, /manifest: HTTP \$\{response\.status\}/);
   assert.match(logic, /background: reachable/);
 });

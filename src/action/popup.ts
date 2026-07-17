@@ -385,7 +385,7 @@ async function installedRevision(): Promise<string | null> {
 
 async function dictionaryPreflight(): Promise<{ ok: boolean; diagnostics: string }> {
   const apiBase = (config?.apiBase || DEFAULTS.apiBase).replace(/\/$/, "");
-  const lines = ["build: 0.1.0-dev-storage-isolation", `api: ${apiBase}`];
+  const lines = ["build: 0.2.0-contextual-search", `api: ${apiBase}`];
   lines.push(`indexedDB: ${typeof indexedDB === "undefined" ? "missing" : "available"}`);
   lines.push(`gzip: ${typeof DecompressionStream === "undefined" ? "missing" : "available"}`);
   try {
