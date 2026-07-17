@@ -66,7 +66,18 @@ const buildOptions = {
   // production for shipped one-shot builds. Overridable at runtime via Advanced.
   define: {
     __DEFAULT_API_BASE__: JSON.stringify(watch ? "https://shirabe.localhost" : "https://shirabe.org"),
+    // Full list so production zips never embed a localhost host pattern string.
+    __SHIRABE_OFF_HOSTS__: JSON.stringify(
+      watch
+        ? ["*://shirabe.org/*", "*://*.shirabe.org/*", "*://shirabe.localhost/*"]
+        : ["*://shirabe.org/*", "*://*.shirabe.org/*"],
+    ),
     __EXTENSION_VERSION__: JSON.stringify(baseManifest.version),
+    // Telemetry ships to the same self-hosted Grafana Faro receiver as the web
+    // app's RUM; watch builds report tagged "development" so dev noise stays
+    // filterable, exactly like the web's DEPLOYMENT_ENV-tagged environment.
+    __FARO_URL__: JSON.stringify("https://o.shirabe.org/collect"),
+    __TELEMETRY_ENV__: JSON.stringify(watch ? "development" : "production"),
   },
 };
 

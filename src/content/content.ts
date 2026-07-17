@@ -13,6 +13,9 @@ import { dismissPopup, scheduleHide, scheduleShow, scheduleTextLookup, setCanWri
 import { logicalTextAt } from "./dom-text.js";
 import { toast } from "./toast.js";
 import { ensureFurigana } from "./word.js";
+import { installClientReporter } from "../common/client-reporter.js";
+
+installClientReporter("content");
 
 let scanModifier: ScanModifier = "none";
 let showFurigana = true;

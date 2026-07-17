@@ -8,6 +8,70 @@ const byLemma = new Map<string, Set<HTMLElement>>();
 
 const STATE_CLASS = /sb-(none|new|learning|due|known)/;
 
+// Furigana only earns its place over words that actually contain kanji — a
+// kana-only surface (この, では, アクセント) reads its own reading, so ruby there
+// is just noise. 々〇〻 count as kanji so 人々 and the like keep their gloss.
+const KANJI = /[\p{Script=Han}々〆〇〻]/u;
+export const hasKanji = (surface: string): boolean => KANJI.test(surface);
+
+export type FuriganaSegment = { text: string; ruby?: string };
+
+// Distribute a reading across a surface so furigana sits ONLY over kanji runs,
+// leaving okurigana and other kana as plain text (食べる → 食[た] + べる, not
+// たべる floating over the whole word). Each surface run of kanji claims the
+// stretch of reading up to where the following kana run reappears; kana runs
+// pass through unchanged. If the reading can't be aligned (irregular/jukujikun
+// readings, unexpected katakana), it falls back to one whole-word ruby — still
+// correct, just not split. Katakana is folded to hiragana only for matching.
+export function furiganaSegments(surface: string, reading: string): FuriganaSegment[] {
+  const whole: FuriganaSegment[] = [{ text: surface, ruby: reading }];
+  const runs = surfaceRuns(surface);
+  const readingHira = kataToHira(reading);
+  const segments: FuriganaSegment[] = [];
+  let cursor = 0; // position within `reading`
+
+  for (let i = 0; i < runs.length; i++) {
+    const run = runs[i];
+    if (!run.kanji) {
+      const kana = kataToHira(run.text);
+      if (readingHira.slice(cursor, cursor + kana.length) !== kana) return whole;
+      segments.push({ text: run.text });
+      cursor += kana.length;
+      continue;
+    }
+    const next = runs[i + 1]; // always a kana run when present
+    let end: number;
+    if (!next) {
+      end = reading.length;
+    } else {
+      const at = readingHira.indexOf(kataToHira(next.text), cursor + 1);
+      if (at === -1) return whole;
+      end = at;
+    }
+    if (end <= cursor) return whole; // a kanji with no reading of its own — bail
+    segments.push({ text: run.text, ruby: reading.slice(cursor, end) });
+    cursor = end;
+  }
+
+  return cursor === reading.length ? segments : whole;
+}
+
+// Split a surface into maximal runs of kanji vs. everything else, iterating by
+// code point so astral-plane kanji stay intact.
+function surfaceRuns(surface: string): Array<{ text: string; kanji: boolean }> {
+  const runs: Array<{ text: string; kanji: boolean }> = [];
+  for (const ch of surface) {
+    const kanji = hasKanji(ch);
+    const last = runs[runs.length - 1];
+    if (last && last.kanji === kanji) last.text += ch;
+    else runs.push({ text: ch, kanji });
+  }
+  return runs;
+}
+
+const kataToHira = (text: string): string =>
+  text.replace(/[ァ-ヶ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+
 // Builds the DOM for one parsed token. Content words become interactive,
 // state-colored spans (optionally with furigana); particles and punctuation
 // stay as plain text so the page reads naturally and only meaningful words
@@ -23,7 +87,7 @@ export function renderToken(token: ParsedToken, showFurigana: boolean): Node {
   if (token.frequency != null) word.dataset.frequency = String(token.frequency);
   if (token.reading) word.dataset.reading = token.reading;
 
-  if (showFurigana && token.reading) {
+  if (showFurigana && token.reading && hasKanji(token.surface)) {
     const ruby = document.createElement("ruby");
     ruby.append(token.surface);
     const rt = document.createElement("rt");
@@ -46,7 +110,7 @@ export function ensureFurigana(): void {
     if (word.querySelector("ruby")) continue;
     const reading = word.dataset.reading;
     const surface = word.dataset.surface;
-    if (!reading || !surface) continue;
+    if (!reading || !surface || !hasKanji(surface)) continue;
     const ruby = document.createElement("ruby");
     ruby.append(surface);
     const rt = document.createElement("rt");

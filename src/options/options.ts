@@ -3,6 +3,9 @@ import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type Fu
 import { parseHostList } from "../common/host-rules.js";
 import { formatKeybind, KEYBIND_ACTIONS, KEYBIND_LABELS, keybindFromEvent, type Keybind, type KeybindAction } from "../common/keybind.js";
 import { send } from "../common/messages.js";
+import { installClientReporter } from "../common/client-reporter.js";
+
+installClientReporter("options");
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 

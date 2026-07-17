@@ -44,6 +44,49 @@ test("mapped parsing preserves inline elements while one word spans them", async
   assert.equal(line.textContent, "食べました。");
 });
 
+test("furigana renders only over kanji-bearing surfaces, never kana-only words", async () => {
+  installDom("");
+  const { renderToken } = await import("../src/content/word.js");
+  const token = (surface: string, reading: string) => ({
+    start: 0, length: surface.length, surface, reading, lemma: surface, pos: "noun", content: true, state: "none" as const,
+  });
+
+  const kanji = renderToken(token("日本語", "にほんご"), true) as HTMLElement;
+  assert.ok(kanji.querySelector("ruby"), "kanji word keeps furigana");
+  assert.equal(kanji.querySelector("rt")?.textContent, "にほんご");
+
+  // Kana-only surfaces already read as their own reading — ruby is noise.
+  for (const surface of ["この", "では", "アクセント"]) {
+    const word = renderToken(token(surface, surface === "この" ? "この" : "よみ"), true) as HTMLElement;
+    assert.equal(word.querySelector("ruby"), null, `${surface} has no furigana`);
+    assert.equal(word.textContent, surface);
+    assert.equal(word.dataset.reading, surface === "この" ? "この" : "よみ", "reading stays available for the popup");
+  }
+
+  // 々 counts as kanji so 人々 keeps its gloss.
+  assert.ok((renderToken(token("人々", "ひとびと"), true) as HTMLElement).querySelector("ruby"), "々 word keeps furigana");
+});
+
+test("furigana distributes a reading over kanji runs only, not okurigana", async () => {
+  installDom("");
+  const { furiganaSegments } = await import("../src/content/word.js");
+
+  // Trailing okurigana stays plain; only 食 gets furigana.
+  assert.deepEqual(furiganaSegments("食べる", "たべる"), [{ text: "食", ruby: "た" }, { text: "べる" }]);
+  // Leading kana passes through.
+  assert.deepEqual(furiganaSegments("お茶", "おちゃ"), [{ text: "お" }, { text: "茶", ruby: "ちゃ" }]);
+  // Interleaved kanji/kana: 取り扱い.
+  assert.deepEqual(furiganaSegments("取り扱い", "とりあつかい"), [
+    { text: "取", ruby: "と" }, { text: "り" }, { text: "扱", ruby: "あつか" }, { text: "い" },
+  ]);
+  // All-kanji stays a single ruby.
+  assert.deepEqual(furiganaSegments("日本語", "にほんご"), [{ text: "日本語", ruby: "にほんご" }]);
+  // Katakana in the surface is matched (folded) but rendered as-is.
+  assert.deepEqual(furiganaSegments("消しゴム", "けしゴム"), [{ text: "消", ruby: "け" }, { text: "しゴム" }]);
+  // Jukujikun / unalignable readings fall back to one whole-word ruby.
+  assert.deepEqual(furiganaSegments("大人", "おとな"), [{ text: "大人", ruby: "おとな" }]);
+});
+
 test("page metrics distinguish occurrences and unique words and apply the i+1 cap", async () => {
   const window = installDom(`
     <p><span class="sb-word" data-lemma="猫" data-state="known"></span><span class="sb-word" data-lemma="猫" data-state="known"></span></p>
@@ -79,6 +122,10 @@ test("the release host matrix resolves to maintained parsing paths", async () =>
   assert.equal(resolve("https://reader.ttsu.app/b?id=1").rule?.custom, "ttsu");
   assert.equal(resolve("https://reader.mokuro.app/reader/1").rule?.custom, "mokuro");
   assert.equal(resolve("https://news.example.jp/story").mode, "auto");
+  // Shirabe's own site is never parsed — it is the dictionary, not a reading surface.
+  assert.equal(resolve("https://shirabe.org/en/word/日本語").mode, "off");
+  assert.equal(resolve("https://www.shirabe.org/").mode, "off");
+  assert.equal(resolve("https://shirabe.localhost/en/word/日本語").mode, "off");
 });
 
 test("Japanese Wikipedia fixture scopes logical text to article content", async () => {

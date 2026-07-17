@@ -9,7 +9,10 @@ test("the local scanner loads on ordinary pages while required API hosts stay Sh
     content_scripts?: Array<{ matches?: string[]; js?: string[]; css?: string[]; all_frames?: boolean }>;
   };
 
-  assert.deepEqual(manifest.host_permissions, ["https://shirabe.org/*"]);
+  // cdn.shirabe.org lets the background fetch pronunciation clips; o.shirabe.org
+  // is the Faro telemetry collector. All first-party Shirabe hosts, fetched only
+  // from the background (bypassing the page CSP that blocks cross-origin media).
+  assert.deepEqual(manifest.host_permissions, ["https://shirabe.org/*", "https://cdn.shirabe.org/*", "https://o.shirabe.org/*"]);
   assert.deepEqual(manifest.optional_host_permissions, ["<all_urls>"]);
   assert.deepEqual(manifest.content_scripts, [{
     matches: ["<all_urls>"], js: ["content.js"], css: ["content.css"], all_frames: true, run_at: "document_idle",
@@ -237,10 +240,21 @@ test("opening the action activates raw-text scanning without parsing the page", 
 
 test("pronunciation audio only plays processed R2 clips and never browser speech", () => {
   const popup = readFileSync("src/content/popup.ts", "utf8");
+  const audio = readFileSync("src/common/audio.ts", "utf8");
+  const background = readFileSync("src/background/background.ts", "utf8");
   const webAudio = readFileSync("../app/javascript/controllers/audio_controller.js", "utf8");
 
-  assert.match(popup, /hostname === "cdn\.shirabe\.org"/);
-  assert.match(popup, /pathname\.startsWith\("\/audio\/"\)/);
+  // The R2 allowlist is the fetch security boundary, shared by popup + background.
+  assert.match(audio, /hostname === "cdn\.shirabe\.org"/);
+  assert.match(audio, /pathname\.startsWith\("\/audio\/"\)/);
+  // The background — not the content script — fetches the clip (bypassing page
+  // CSP) and only after re-validating the URL, then returns a playable data: URL.
+  assert.match(background, /case "audioClip"/);
+  assert.match(background, /if \(!isR2AudioUrl\(url\)\)/);
+  assert.match(background, /data:\$\{mediaType\};base64,/);
+  // The popup plays that data: URL and never points <audio> straight at the CDN.
+  assert.match(popup, /send\(\{ type: "audioClip", url \}\)/);
+  assert.doesNotMatch(popup, /new Audio\(url\)/);
   assert.doesNotMatch(popup, /speechSynthesis|SpeechSynthesisUtterance/);
   assert.doesNotMatch(webAudio, /speechSynthesis|SpeechSynthesisUtterance/);
 });

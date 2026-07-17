@@ -19,10 +19,19 @@ export type HostRule = {
 // selectors/flags drive the parser); absent for plain generic auto-parsing.
 export type HostResolution = { mode: "auto" | "off"; rule?: HostRule };
 
+// Injected by build.mjs as a full host list so production bundles never contain
+// a `shirabe.localhost` string (watch builds include the local dev host).
+declare const __SHIRABE_OFF_HOSTS__: string[];
+
 // Bundled defaults: dedicated reader apps + common Japanese sites (the user chose
 // "reader apps + common JP sites"). This list is also refreshable from the server
 // (see loadHostRules) so we can add sites without shipping an extension update.
 export const BUILTIN_RULES: HostRule[] = [
+  // ── Shirabe's own site is never a reading surface ──
+  // The web app is the dictionary itself: parsing it would wrap our own rendered
+  // Japanese (word pages, examples, the reader) in a second lookup layer and fire
+  // parse requests back at us. Off on every Shirabe host (and local dev in watch).
+  { host: __SHIRABE_OFF_HOSTS__, mode: "off" },
   // ── Dedicated reader apps (reading JP is the whole point) ──
   { host: ["*://reader.ttsu.app/*", "*://ttu-ebook.web.app/*"], custom: "ttsu" }, // ッツ epub reader
   { host: ["*://reader.mokuro.app/*", "*://*.mokuro.app/*"], custom: "mokuro", collapseWhitespace: true }, // Mokuro manga OCR

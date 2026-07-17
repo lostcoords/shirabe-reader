@@ -3,6 +3,9 @@ import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type Fu
 import { sendDictionary } from "../common/dictionary-port.js";
 import { loadHostRules, matchUrl, normalizePattern, resolveHostMode, siteScopeFor, type HostRule } from "../common/host-rules.js";
 import { send } from "../common/messages.js";
+import { installClientReporter } from "../common/client-reporter.js";
+
+installClientReporter("popup");
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 

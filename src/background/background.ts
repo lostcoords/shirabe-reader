@@ -1,15 +1,18 @@
 import { ApiError, ShirabeApi } from "../common/api.js";
 import { ext, usesPromiseMessageResponses } from "../common/browser.js";
 import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config } from "../common/config.js";
+import { isR2AudioUrl } from "../common/audio.js";
 import { normalizePattern, refreshRemoteHostRules } from "../common/host-rules.js";
 import { cancelDictionaryInstall, checkDictionaryUpdate, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary } from "../common/offline-dictionary.js";
 import type { Deck, LookupHistoryItem, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
+import { captureException, ingestClientReport, installBackgroundErrorHandlers } from "./telemetry.js";
 
 // Single API client + our own copy of the config (the client hides it). Both
 // stay in sync with stored settings.
 let config: Config = DEFAULTS;
 let api: ShirabeApi;
+installBackgroundErrorHandlers();
 const ready = initializeBackground();
 
 async function initializeBackground(): Promise<void> {
@@ -243,6 +246,13 @@ async function handle(request: Request, senderTabId?: number): Promise<Response>
       await clearProfileCaches();
       await notifyProfileChanged();
       return { ok: true, type: "syncProfile" };
+    case "audioClip": {
+      const dataUrl = await audioCache.fetch(request.url, () => fetchAudioDataUrl(request.url));
+      return { ok: true, type: "audioClip", dataUrl };
+    }
+    case "telemetry":
+      ingestClientReport(request.report);
+      return { ok: true, type: "telemetry" };
     case "updateLanguages": {
       if (!isConnected(config)) throw new ApiError("Connect your Shirabe account to sync profile languages.", 401);
       const languages = await api.updateLanguages(request.languages);
@@ -553,6 +563,8 @@ function clientLabel(): string {
 function errorResponse(err: unknown, requestType = "unknown"): { ok: false; error: string } {
   const error = formatBackgroundError(err);
   console.error("[Shirabe background] request failed", { requestType, error: err, formatted: error });
+  // A telemetry request that fails must not report itself and loop.
+  if (requestType !== "telemetry") captureException(err, "background", { request: requestType });
   return { ok: false, error: `request: ${requestType}\n${error}` };
 }
 
@@ -647,3 +659,21 @@ class LruCache<V> {
 // ── Caches ───────────────────────────────────────────────────────────────────
 // The same word gets revisited constantly as the user scans and hovers.
 const lookupCache = new LruCache<Definition | null>(1000);
+// Pronunciation clips replayed within a session — small, content-addressed, so
+// a modest ring is plenty. Each entry is a base64 data: URL of one short clip.
+const audioCache = new LruCache<string>(64);
+
+// Fetch a pronunciation clip from R2 in the privileged background context and
+// return it as a data: URL the content script can play under any page CSP.
+// Only cdn.shirabe.org/audio/ URLs are ever fetched (isR2AudioUrl), so a
+// compromised content script can't turn this into an SSRF primitive.
+async function fetchAudioDataUrl(url: string): Promise<string> {
+  if (!isR2AudioUrl(url)) throw new Error("Refusing to fetch a non-Shirabe audio URL.");
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Audio fetch failed (${response.status}).`);
+  const buffer = new Uint8Array(await response.arrayBuffer());
+  const mediaType = response.headers.get("content-type") || "audio/mp4";
+  let binary = "";
+  for (let i = 0; i < buffer.length; i += 0x8000) binary += String.fromCharCode(...buffer.subarray(i, i + 0x8000));
+  return `data:${mediaType};base64,${btoa(binary)}`;
+}

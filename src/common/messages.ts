@@ -2,6 +2,7 @@ import { ext } from "./browser.js";
 import type { Definition, ParsedToken, WordState } from "./types.js";
 import type { DictionaryStatus, PackManifest } from "./offline-dictionary.js";
 import type { GlossLanguage } from "./languages.js";
+import type { ClientReport } from "./telemetry.js";
 
 // A grade on Shirabe's 1–4 FSRS scale, matching POST /v1/srs/reviews.
 export type Rating = 1 | 2 | 3 | 4;
@@ -70,6 +71,12 @@ export type Request =
   | { type: "disconnect" }
   | { type: "syncProfile" }
   | { type: "updateLanguages"; languages: GlossLanguage[] }
+  // Fetch a pronunciation clip in the background (bypasses the page CSP that
+  // blocks cross-origin media) and get it back as a playable data: URL.
+  | { type: "audioClip"; url: string }
+  // Page contexts can't reach the collector under a page CSP, so they forward
+  // captured errors to the background worker, which batches and ships them.
+  | { type: "telemetry"; report: ClientReport }
   | { type: "status" };
 
 export type Response =
@@ -91,6 +98,8 @@ export type Response =
   | { ok: true; type: "disconnect" }
   | { ok: true; type: "syncProfile" }
   | { ok: true; type: "updateLanguages"; languages: GlossLanguage[] }
+  | { ok: true; type: "audioClip"; dataUrl: string }
+  | { ok: true; type: "telemetry" }
   | { ok: true; type: "status"; status: Status }
   | { ok: false; error: string };
 

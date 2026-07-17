@@ -3,6 +3,8 @@ import { sendDictionary } from "../common/dictionary-port.js";
 import type { Definition, Example, Sense, SentenceToken } from "../common/types.js";
 import { applyStudyDetails, grade, GRADES, markKnown, save, setMediaCapture, type MediaCapture, type Outcome } from "./actions.js";
 import { refreshStatusBar } from "./status-bar.js";
+import { furiganaSegments, hasKanji } from "./word.js";
+import { isR2AudioUrl } from "../common/audio.js";
 
 // One reused popup, shown next to whichever word the pointer (or keyboard) is
 // over. It lives in a shadow root so the host page's CSS can never reach in —
@@ -354,14 +356,34 @@ function headRow(def: Definition): Node {
   link.href = def.url;
   link.target = "_blank";
   link.rel = "noopener";
-  link.textContent = def.headword;
-  head.append(link);
 
-  if (def.reading) {
-    const reading = document.createElement("span");
-    reading.className = "sb-popup-reading";
-    reading.textContent = def.reading;
-    head.append(reading);
+  // Furigana sits over the headword when it carries kanji — the reading then
+  // reads in place, so the separate reading chip beside it would be redundant.
+  // A kana-only headword keeps the plain text + reading chip (nothing to gloss).
+  if (def.reading && hasKanji(def.headword)) {
+    // Furigana sits over each kanji run only; okurigana/kana render plain.
+    for (const segment of furiganaSegments(def.headword, def.reading)) {
+      if (!segment.ruby) {
+        link.append(segment.text);
+        continue;
+      }
+      const ruby = document.createElement("ruby");
+      ruby.append(segment.text);
+      const rt = document.createElement("rt");
+      rt.textContent = segment.ruby;
+      ruby.append(rt);
+      link.append(ruby);
+    }
+    head.append(link);
+  } else {
+    link.textContent = def.headword;
+    head.append(link);
+    if (def.reading) {
+      const reading = document.createElement("span");
+      reading.className = "sb-popup-reading";
+      reading.textContent = def.reading;
+      head.append(reading);
+    }
   }
 
   const navigation = document.createElement("span");
@@ -379,7 +401,7 @@ function headRow(def: Definition): Node {
 
   const audioUrl = def.pitch.map((pitch) => pitch.audioUrl).find(isR2AudioUrl);
   if (audioUrl) {
-    const audio = button("🔊", "sb-audio", "", () => playAudio(audioUrl));
+    const audio = button("🔊", "sb-audio", "", () => void playAudio(audioUrl));
     audio.title = "Play pronunciation";
     audio.setAttribute("aria-label", "Play pronunciation");
     head.append(audio);
@@ -559,18 +581,14 @@ function sentenceToken(tok: SentenceToken): Node {
   return link;
 }
 
-function isR2AudioUrl(url: string | null): url is string {
-  if (!url) return false;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && parsed.hostname === "cdn.shirabe.org" && parsed.pathname.startsWith("/audio/");
-  } catch {
-    return false;
-  }
-}
-
-function playAudio(url: string): void {
-  void new Audio(url).play().catch(() => undefined);
+// The clip is fetched by the background worker and returned as a data: URL:
+// a content-script `new Audio(cdnUrl)` is a cross-origin media load governed
+// by the *page's* CSP, which strict sites (Wikipedia) block. data: is allowed
+// under those same policies, so playing the returned URL works everywhere.
+async function playAudio(url: string): Promise<void> {
+  const res = await send({ type: "audioClip", url });
+  if (!res.ok) return;
+  void new Audio(res.dataUrl).play().catch(() => undefined);
 }
 
 // Mining + review controls, gated by whether the word is already a card. An
@@ -791,6 +809,8 @@ const CSS = `
 .sb-btn.sb-history-button:disabled { cursor: default; opacity: .35; }
 .sb-headword { color: #111827; text-decoration: none; cursor: pointer; }
 .sb-headword:hover { color: #4f46e5; text-decoration: underline; }
+.sb-headword ruby { ruby-align: center; }
+.sb-headword ruby rt { font-size: 0.5em; font-weight: 600; color: #4f46e5; user-select: none; }
 .sb-popup-reading { font-size: 14px; font-weight: 500; color: #4f46e5; }
 .sb-popup-message { color: #6b7280; }
 .sb-inflection { margin-bottom: 7px; color: #6b7280; font-size: 12px; }
