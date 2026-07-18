@@ -9,7 +9,13 @@ export type Rating = 1 | 2 | 3 | 4;
 export type Deck = { id: number; name: string; visibility: "personal" | "school" };
 export type DeckMembership = { id: number; name: string };
 export type IntervalPreviews = { again: string; hard: string; good: string; easy: string };
-export type StudyDetails = { state: WordState; decks: DeckMembership[]; intervals?: IntervalPreviews };
+export type StudyDetails = {
+  state: WordState;
+  decks: DeckMembership[];
+  intervals?: IntervalPreviews;
+  /** Shirabe card id — open `/study/cards?card_id=` to view card + mined context. */
+  cardId?: number;
+};
 export type SaveResult = StudyDetails & { created: boolean };
 export type SentenceCapture = {
   text: string;
@@ -83,7 +89,9 @@ export type Response =
   | { ok: true; type: "parseBatch"; tokens: ParsedToken[][]; dictionaryInstalling?: boolean }
   | { ok: true; type: "lookup"; definition: Definition | null; dictionaryInstalling?: boolean }
   | { ok: true; type: "dictionaryStatus"; dictionary: DictionaryStatus }
-  | { ok: true; type: "installDictionary"; manifest: PackManifest }
+  // `manifest` is set when install finished immediately (already current).
+  // Long installs return without it; the popup polls dictionaryStatus instead.
+  | { ok: true; type: "installDictionary"; manifest?: PackManifest }
   | { ok: true; type: "removeDictionary" }
   | { ok: true; type: "cancelDictionaryInstall" }
   | { ok: true; type: "save"; result: SaveResult }

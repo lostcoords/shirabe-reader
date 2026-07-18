@@ -6,7 +6,7 @@ import { applyStateEverywhere } from "./word.js";
 // shortcuts. Each performs the network call, recolours every occurrence of the
 // word on success, and returns a human message for the caller to surface
 // (inline in the popup, or as a toast when fired from the keyboard).
-export type Outcome = { ok: boolean; message: string };
+export type Outcome = { ok: boolean; message: string; cardUrl?: string };
 export type MediaCapture = { captureScreenshot?: boolean; imageDataUrl?: string; audioDataUrl?: string };
 const mediaByWord = new WeakMap<HTMLElement, MediaCapture>();
 
@@ -22,6 +22,38 @@ export function applyStudyDetails(word: HTMLElement, details: StudyDetails): voi
   word.dataset.deckNames = details.decks.map((deck) => deck.name).join(", ");
   if (details.intervals) word.dataset.intervals = JSON.stringify(details.intervals);
   else delete word.dataset.intervals;
+  // Never clear an existing cardId — a later states payload without one would
+  // hide the "Open in Shirabe" link after a successful save.
+  if (details.cardId != null) word.dataset.cardId = String(details.cardId);
+}
+
+/** Absolute URL of the card in Shirabe's study browser (card + mined context). */
+export async function cardUrlFor(cardId: number | string): Promise<string> {
+  const config = await loadConfig();
+  const base = config.apiBase.replace(/\/$/, "");
+  return `${base}/study/cards?card_id=${encodeURIComponent(String(cardId))}`;
+}
+
+/** Best URL for this word: exact card inspector, else search the card browser. */
+export async function studyUrlForWord(word: HTMLElement): Promise<string> {
+  if (word.dataset.cardUrl) return word.dataset.cardUrl;
+  if (word.dataset.cardId) {
+    const url = await cardUrlFor(word.dataset.cardId);
+    word.dataset.cardUrl = url;
+    return url;
+  }
+  const config = await loadConfig();
+  const base = config.apiBase.replace(/\/$/, "");
+  const lemma = word.dataset.lemma || word.dataset.surface || "";
+  return `${base}/study/cards?q=${encodeURIComponent(lemma)}`;
+}
+
+async function rememberCard(word: HTMLElement, cardId: number | undefined): Promise<string | undefined> {
+  if (cardId == null || !Number.isFinite(cardId)) return undefined;
+  word.dataset.cardId = String(cardId);
+  const url = await cardUrlFor(cardId);
+  word.dataset.cardUrl = url;
+  return url;
 }
 
 const lemmaOf = (word: HTMLElement) => word.dataset.lemma ?? word.dataset.surface ?? "";
@@ -73,24 +105,34 @@ export async function grade(word: HTMLElement, rating: Rating): Promise<Outcome>
   const lemma = lemmaOf(word);
   if (word.dataset.state !== "due") return { ok: false, message: `${lemma} is not due for review` };
   const res = await saveRequest(word, rating);
+  let cardUrl: string | undefined;
   if (res.ok) {
     applyStateEverywhere(lemma, res.result.state);
     applyStudyDetails(word, res.result);
+    cardUrl = await rememberCard(word, res.result.cardId);
   }
   const interval = res.ok ? res.result.intervals?.[INTERVAL_KEYS[rating]] : undefined;
-  return { ok: res.ok, message: res.ok ? `${lemma} → ${GRADES[rating]}${interval ? ` · ${interval}` : ""}` : res.error };
+  return { ok: res.ok, message: res.ok ? `${lemma} → ${GRADES[rating]}${interval ? ` · ${interval}` : ""}` : res.error, cardUrl };
 }
 
 // Add to the deck without grading.
 export async function save(word: HTMLElement): Promise<Outcome> {
   const lemma = lemmaOf(word);
   const res = await saveRequest(word);
+  let cardUrl: string | undefined;
   if (res.ok) {
     applyStateEverywhere(lemma, res.result.state);
     applyStudyDetails(word, res.result);
+    // Prefer explicit cardId; also accept a nested card.id if the envelope shape drifts.
+    const cardId = res.result.cardId ?? (res.result as { card?: { id?: number } }).card?.id;
+    cardUrl = await rememberCard(word, cardId);
   }
   const decks = res.ok ? res.result.decks.map((deck) => deck.name).join(", ") : "";
-  return { ok: res.ok, message: res.ok ? `${res.result.created ? "Saved" : "Already saved"} ${lemma}${decks ? ` · ${decks}` : ""}` : res.error };
+  return {
+    ok: res.ok,
+    message: res.ok ? `${res.result.created ? "Saved" : "Already saved"} ${lemma}${decks ? ` · ${decks}` : ""}` : res.error,
+    cardUrl,
+  };
 }
 
 // Park as learned (out of review rotation).

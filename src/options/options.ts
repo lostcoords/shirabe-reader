@@ -1,6 +1,5 @@
 import { ext } from "../common/browser.js";
 import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type ScanModifier, type StatePreset } from "../common/config.js";
-import { parseHostList } from "../common/host-rules.js";
 import { formatKeybind, KEYBIND_ACTIONS, KEYBIND_LABELS, keybindFromEvent, type Keybind, type KeybindAction } from "../common/keybind.js";
 import { send } from "../common/messages.js";
 import { installClientReporter } from "../common/client-reporter.js";
@@ -19,7 +18,7 @@ const sectionObserver = new IntersectionObserver((entries) => {
   const visible = entries.find((entry) => entry.isIntersecting);
   if (visible?.target.id) selectSettingsSection(visible.target.id);
 }, { rootMargin: "-15% 0px -70%", threshold: 0 });
-for (const id of ["reading", "keyboard", "advanced"]) sectionObserver.observe($(id));
+for (const id of ["reading", "keyboard"]) sectionObserver.observe($(id));
 
 const prefs = {
   furiganaMode: $<HTMLSelectElement>("furiganaMode"),
@@ -28,12 +27,6 @@ const prefs = {
   statePreset: $<HTMLSelectElement>("statePreset"),
   iPlusOneIncludesLearning: $<HTMLInputElement>("iPlusOneIncludesLearning"),
   iPlusOneFrequencyMax: $<HTMLInputElement>("iPlusOneFrequencyMax"),
-};
-const advanced = {
-  apiBase: $<HTMLInputElement>("apiBase"),
-  apiKey: $<HTMLInputElement>("apiKey"),
-  enabledHosts: $<HTMLTextAreaElement>("enabledHosts"),
-  disabledHosts: $<HTMLTextAreaElement>("disabledHosts"),
 };
 
 let config: Config;
@@ -46,10 +39,6 @@ loadConfig().then((loaded) => {
   prefs.statePreset.value = config.statePreset;
   prefs.iPlusOneIncludesLearning.checked = config.iPlusOneIncludesLearning;
   prefs.iPlusOneFrequencyMax.value = String(config.iPlusOneFrequencyMax);
-  advanced.apiBase.value = config.apiBase;
-  advanced.apiKey.value = config.apiKey;
-  advanced.enabledHosts.value = config.enabledHosts.join("\n");
-  advanced.disabledHosts.value = config.disabledHosts.join("\n");
   const base = config.apiBase.replace(/\/$/, "");
   $<HTMLAnchorElement>("settingsLink").href = `${base}/settings`;
   $<HTMLAnchorElement>("privacyLink").href = `${base}/privacy`;
@@ -128,22 +117,6 @@ window.addEventListener("keydown", (event) => {
   if (bind === null && event.key !== "Backspace" && event.key !== "Delete") return; // modifier-only, keep waiting
   capturing = null;
   patch({ keybinds: { ...config.keybinds, [action]: bind } }).then(renderKeybinds);
-});
-
-// Advanced: manual key + server + host lists. A pasted key's scopes are unknown,
-// so assume the full set (the server still enforces) — that keeps mining live.
-$<HTMLFormElement>("advancedForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const apiKey = advanced.apiKey.value.trim();
-  await patch({
-    apiBase: advanced.apiBase.value.trim() || DEFAULTS.apiBase,
-    apiKey,
-    scopes: apiKey ? ["READ_ACCOUNT", "READ_PREFERENCES", "WRITE_PREFERENCES", "READ_SRS", "WRITE_SRS"] : [],
-    account: apiKey ? config.account : "",
-    enabledHosts: parseHostList(advanced.enabledHosts.value),
-    disabledHosts: parseHostList(advanced.disabledHosts.value),
-  });
-  status("Saved");
 });
 
 function status(text: string): void {

@@ -303,6 +303,7 @@ async function refreshDictionary(): Promise<void> {
   const res = await sendDictionary({ type: "dictionaryStatus" });
   if (!res.ok) {
     showDictionaryPane("error");
+    setDictionaryDot(false);
     $<HTMLElement>("dictionaryError").textContent = res.error;
     await diagnoseDictionary(res.error);
     return;
@@ -310,18 +311,21 @@ async function refreshDictionary(): Promise<void> {
   const dict = res.dictionary;
   if (dict.installing) {
     showDictionaryPane("installing");
+    setDictionaryDot(true);
     $<HTMLProgressElement>("dictionaryProgress").value = dict.progress;
     $<HTMLElement>("dictionaryProgressLabel").textContent = dict.stage
       ? `${dict.stage}${dict.progress > 0 ? ` · ${Math.round(dict.progress * 100)}%` : ""}`
       : `Installing… ${Math.round(dict.progress * 100)}%`;
     window.clearTimeout(dictionaryPoll);
-    dictionaryPoll = window.setTimeout(refreshDictionary, 350);
+    dictionaryPoll = window.setTimeout(() => void refreshDictionary(), 350);
   } else if (dict.error) {
     showDictionaryPane("error");
+    setDictionaryDot(false);
     $<HTMLElement>("dictionaryError").textContent = dict.error;
     await diagnoseDictionary(dict.error);
   } else if (dict.installed) {
     showDictionaryPane("installed");
+    setDictionaryDot(false);
     const size = dict.bytes ? `${(dict.bytes / 1024 / 1024).toFixed(1)} MB download` : "installed";
     $<HTMLElement>("dictionaryVersion").textContent = `${dict.terms.toLocaleString()} terms · ${dict.kanji.toLocaleString()} kanji · ${size} · ${dict.revision ?? "unknown version"}`;
     const credits = $<HTMLUListElement>("dictionaryCredits");
@@ -337,25 +341,33 @@ async function refreshDictionary(): Promise<void> {
     }));
   } else {
     showDictionaryPane("missing");
+    setDictionaryDot(false);
   }
+}
+
+function setDictionaryDot(active: boolean): void {
+  const dot = document.getElementById("dictionaryDot");
+  if (dot) dot.hidden = !active;
 }
 
 async function install({ update = false } = {}): Promise<void> {
   const previousRevision = update ? await installedRevision() : null;
   showDictionaryPane("installing");
+  setDictionaryDot(true);
   $<HTMLProgressElement>("dictionaryProgress").value = 0;
   $<HTMLElement>("dictionaryError").textContent = "";
   $<HTMLElement>("dictionaryDiagnostics").textContent = "";
   const preflight = await dictionaryPreflight();
   if (!preflight.ok) {
     showDictionaryPane("error");
+    setDictionaryDot(false);
     $<HTMLElement>("dictionaryError").textContent = "Dictionary preflight failed";
     $<HTMLElement>("dictionaryDiagnostics").textContent = preflight.diagnostics;
     return;
   }
-  const pending = sendDictionary({ type: "installDictionary" });
+  const res = await sendDictionary({ type: "installDictionary" });
+  // Start progress polling immediately (also covers reopen while install runs).
   void refreshDictionary();
-  const res = await pending;
   if (!res.ok) {
     if (/abort|cancel/i.test(res.error)) await refreshDictionary();
     else {
@@ -369,15 +381,34 @@ async function install({ update = false } = {}): Promise<void> {
       }
       await diagnoseDictionary(res.error);
     }
-  } else {
-    // Checking for an update that finds none reinstalls nothing, so say so
-    // rather than claiming a fresh install happened.
-    const revision = await installedRevision();
-    status(!update ? "Offline dictionary installed"
-      : revision === previousRevision ? "Dictionary is already up to date"
-      : "Dictionary updated");
+    return;
+  }
+
+  // Long installs acknowledge immediately; wait for status to leave "installing".
+  await waitForDictionaryInstall();
+  const finalStatus = await sendDictionary({ type: "dictionaryStatus" });
+  if (finalStatus.ok && finalStatus.dictionary.error) {
+    showDictionaryPane("error");
+    $<HTMLElement>("dictionaryError").textContent = finalStatus.dictionary.error;
+    await diagnoseDictionary(finalStatus.dictionary.error);
+    return;
+  }
+  const revision = await installedRevision();
+  status(!update ? "Offline dictionary installed"
+    : revision === previousRevision ? "Dictionary is already up to date"
+    : "Dictionary updated");
+  await refreshDictionary();
+  await renderPageState();
+}
+
+/** Poll until the background reports the install finished, failed, or cancelled. */
+async function waitForDictionaryInstall(): Promise<void> {
+  for (let attempt = 0; attempt < 1_200; attempt += 1) { // ~10 min at 500ms
+    const res = await sendDictionary({ type: "dictionaryStatus" });
+    if (!res.ok) return;
+    if (!res.dictionary.installing) return;
     await refreshDictionary();
-    await renderPageState();
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
   }
 }
 
@@ -455,10 +486,13 @@ const BANDS = [
 async function renderPageState(): Promise<void> {
   const installed = (await sendDictionary({ type: "dictionaryStatus" }));
   const hasDictionary = installed.ok && installed.dictionary.installed;
+  const installing = installed.ok && installed.dictionary.installing;
   const connected = config?.apiKey ? true : false;
 
-  $("needsDictionary").hidden = hasDictionary;
-  $("signInBanner").hidden = !hasDictionary || connected;
+  // While an install is running, don't re-offer Install — show a progress entry.
+  $("needsDictionary").hidden = hasDictionary || installing;
+  $("dictionaryInstallingBanner").hidden = !installing;
+  $("signInBanner").hidden = !hasDictionary || connected || installing;
   const coverage = $("coverage");
   if (!hasDictionary || !connected) {
     coverage.hidden = true;
@@ -495,6 +529,7 @@ async function renderPageState(): Promise<void> {
 }
 
 $<HTMLButtonElement>("goInstallDictionary").addEventListener("click", () => selectTab("dictionary"));
+$<HTMLButtonElement>("goDictionaryProgress").addEventListener("click", () => selectTab("dictionary"));
 $<HTMLButtonElement>("bannerConnect").addEventListener("click", () => {
   selectTab("account");
   $<HTMLButtonElement>("connect").click();

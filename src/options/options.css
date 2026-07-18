@@ -1,19 +1,22 @@
+/* Same system-driven light-dark tokens as the action popup — settings page
+   tracks the OS without a separate preference control. */
 :root {
-  --surface: #fff;
-  --surface-page: #f8fafc;
-  --surface-muted: #f1f5f9;
-  --ink: #111827;
-  --ink-muted: #4b5563;
-  --ink-subtle: #64748b;
-  --outline: #e2e8f0;
-  --primary: #0369a1;
-  --primary-hover: #025a83;
-  --primary-tint: #e2f1fa;
-  --success-text: #15803d;
+  color-scheme: light dark;
+  --surface: light-dark(#ffffff, #1a1a1e);
+  --surface-page: light-dark(#f8fafc, #0e0e10);
+  --surface-muted: light-dark(#f1f5f9, oklch(25% 0.016 285.7));
+  --ink: light-dark(#111827, #e8e6e3);
+  --ink-muted: light-dark(#4b5563, oklch(74% 0.007 80));
+  --ink-subtle: light-dark(#64748b, oklch(62% 0.009 80));
+  --outline: light-dark(#e2e8f0, oklch(92% 0.02 285.7 / 0.14));
+  --primary: light-dark(#0369a1, oklch(72% 0.15 245));
+  --primary-hover: light-dark(#025a83, oklch(80% 0.13 245));
+  --primary-tint: light-dark(#e2f1fa, oklch(26% 0.08 245));
+  --success-text: light-dark(#15803d, oklch(83% 0.19 155));
   --radius-button: 12px;
   --radius-card: 18px;
-  --shadow-e1: 0 1px 2px rgb(15 23 42 / 0.05);
-  --ring: 0 0 0 4px rgb(3 105 161 / 0.14);
+  --shadow-e1: 0 1px 2px light-dark(rgb(15 23 42 / 0.05), rgb(0 0 0 / 0.45));
+  --ring: 0 0 0 4px light-dark(rgb(3 105 161 / 0.14), rgb(125 190 255 / 0.22));
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -104,28 +107,12 @@ input[type="checkbox"] { width: 17px; height: 17px; margin: 1px 0 0; accent-colo
 }
 .kb-btn:hover, .kb-btn.capturing { border-color: var(--primary); background: var(--primary-tint); color: var(--primary); }
 
-#advanced form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; border-top: 1px solid var(--outline); padding-top: 18px; }
-#advanced form label { display: grid; gap: 5px; }
-#advanced form button { justify-self: start; align-self: end; }
-
-.ghost {
-  min-height: 38px;
-  border: 1px solid var(--outline);
-  border-radius: var(--radius-button);
-  padding: 8px 14px;
-  background: var(--surface);
-  color: var(--ink-muted);
-  font-weight: 650;
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
-}
-.ghost:hover { border-color: var(--primary); background: var(--primary-tint); color: var(--primary); }
-
 .footer-note { border-radius: 12px; background: var(--surface-muted); padding: 12px 14px; text-align: center; }
 .status { min-height: 0; margin: 12px 0 0; color: var(--success-text); font-size: 12px; text-align: center; }
 .status:empty { display: none; }
 
 @media (max-width: 620px) {
-  .prefs-grid, #advanced form { grid-template-columns: minmax(0, 1fr); }
+  .prefs-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 800px) {
@@ -138,7 +125,7 @@ input[type="checkbox"] { width: 17px; height: 17px; margin: 1px 0 0; accent-colo
 }
 
 @media (forced-colors: active) {
-  .ghost, .kb-btn { border: 1px solid ButtonText; }
+  .kb-btn { border: 1px solid ButtonText; }
 }
 
 @media (prefers-reduced-motion: reduce) {

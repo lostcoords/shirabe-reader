@@ -17,7 +17,6 @@
         <p>Settings</p>
         <a href="#reading" aria-current="true">Reading</a>
         <a href="#keyboard">Keyboard shortcuts</a>
-        <a href="#advanced">Advanced</a>
       </nav>
 
       <article class="settings-content">
@@ -44,17 +43,6 @@
           <p>Click a shortcut, then press keys. Backspace clears it.</p>
         </div>
         <div id="keybinds"></div>
-        </section>
-
-        <section id="advanced" class="card">
-          <div class="section-title"><h2>Advanced</h2><p>Server, manual key, and per-site lists.</p></div>
-          <form id="advancedForm">
-            <label>API server<input id="apiBase" type="url" placeholder="https://shirabe.org" /></label>
-            <label>API key (manual)<input id="apiKey" type="password" placeholder="Paste a key instead of connecting" autocomplete="off" /></label>
-            <label>Automatically enable Shirabe on these sites<textarea id="enabledHosts" rows="3" placeholder="one domain per line, e.g. example.com"></textarea></label>
-            <label>Never parse on these sites<textarea id="disabledHosts" rows="3" placeholder="one domain per line"></textarea></label>
-            <button type="submit" class="ghost">Save advanced</button>
-          </form>
         </section>
 
         <p class="muted footer-note">

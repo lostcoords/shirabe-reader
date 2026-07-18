@@ -1,4 +1,5 @@
 import { deinflect, inflectionLabel } from "./deinflect.js";
+import { posLabels, tagLabels } from "./jmdict-tags.js";
 import { GLOSS_LABELS, withEnglishFallback, type GlossLanguage } from "./languages.js";
 import type { Definition, ParsedToken, Sense } from "./types.js";
 import { sha256 as createSha256 } from "@noble/hashes/sha2.js";
@@ -125,9 +126,24 @@ let installController: AbortController | null = null;
 let installProgress = 0;
 let installStage: string | null = null;
 let installError: string | null = null;
+let installApiBase: string | null = null;
 let databasePromise: Promise<IDBDatabase> | null = null;
 let activeGenerationCache: string | undefined | null = null;
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+let lastSnapshotWrite = 0;
 const lookupProbeCache = new BoundedCache<Array<Stored<OfflineTerm>>>(4_000);
+
+// Survives popup close and brief MV3 worker restarts so reopening the action
+// can show the in-progress bar instead of the idle Install button.
+const INSTALL_STATE_KEY = "dictionaryInstallState";
+type InstallStateSnapshot = {
+  installing: boolean;
+  progress: number;
+  stage: string | null;
+  error: string | null;
+  apiBase: string | null;
+  updatedAt: number;
+};
 
 export async function dictionaryStatus(): Promise<DictionaryStatus> {
   let db: IDBDatabase;
@@ -150,6 +166,8 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
     console.error("[Shirabe dictionary] storage estimate failed", error);
     return undefined;
   });
+  const snapshot = installPromise ? null : await readInstallSnapshot();
+  const installing = installPromise != null || !!snapshot?.installing;
   return {
     installed: !!active && !!manifest,
     revision: manifest?.contentRevision ?? null,
@@ -157,14 +175,23 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
     bytes: manifest?.bytes ?? 0,
     terms: manifest?.counts.terms ?? 0,
     kanji: manifest?.counts.kanji ?? 0,
-    installing: installPromise != null,
-    progress: installProgress,
-    stage: installStage,
-    error: installError,
+    installing,
+    progress: installPromise ? installProgress : (snapshot?.progress ?? installProgress),
+    stage: installPromise ? installStage : (snapshot?.stage ?? installStage),
+    error: installPromise ? installError : (snapshot?.error ?? installError),
     storageBytes: estimate?.usage ?? null,
     sources: manifest?.sources ?? [],
     lastCheckedAt: lastCheckedAt ?? null,
   };
+}
+
+/** If a previous worker died mid-install, pick the job back up. */
+export function resumeInterruptedDictionaryInstall(apiBase: string): void {
+  if (installPromise) return;
+  void readInstallSnapshot().then((snapshot) => {
+    if (!snapshot?.installing) return;
+    void installDictionary(snapshot.apiBase || apiBase).catch(() => undefined);
+  });
 }
 
 export async function checkDictionaryUpdate(apiBase: string): Promise<void> {
@@ -190,7 +217,10 @@ export function installDictionary(apiBase: string): Promise<PackManifest> {
   installProgress = 0;
   installStage = "Preparing dictionary installation";
   installError = null;
+  installApiBase = apiBase.replace(/\/$/, "");
   installController = new AbortController();
+  startInstallKeepAlive();
+  void writeInstallSnapshot(true);
   installPromise = performInstall(apiBase, installController.signal)
     .catch((error: unknown) => {
       installError = error instanceof DOMException && error.name === "AbortError" ? null : describeInstallError(error, installStage);
@@ -200,14 +230,114 @@ export function installDictionary(apiBase: string): Promise<PackManifest> {
       throw error;
     })
     .finally(() => {
+      const failed = installError != null;
       installPromise = null;
       installController = null;
+      installApiBase = null;
+      stopInstallKeepAlive();
+      if (failed) void writeInstallSnapshot(false);
+      else void clearInstallSnapshot();
     });
   return installPromise;
 }
 
 export function cancelDictionaryInstall(): void {
   installController?.abort();
+  // Snapshot stays "installing" until the abort settles in finally; clear early so
+  // a reopened popup does not flash a zombie progress bar after Cancel.
+  installStage = null;
+  installProgress = 0;
+  void clearInstallSnapshot();
+}
+
+function startInstallKeepAlive(): void {
+  if (keepAliveTimer != null) return;
+  // MV3 workers go idle ~30s after the last extension event. Dictionary import
+  // is mostly IndexedDB and can outlive a closed popup; ping the runtime so the
+  // worker (and in-memory installPromise / progress) stay alive.
+  keepAliveTimer = setInterval(() => {
+    const runtime = extensionRuntime();
+    void runtime?.getPlatformInfo?.()?.then?.(() => undefined, () => undefined);
+    void writeInstallSnapshot(true);
+  }, 20_000);
+}
+
+function stopInstallKeepAlive(): void {
+  if (keepAliveTimer == null) return;
+  clearInterval(keepAliveTimer);
+  keepAliveTimer = null;
+}
+
+function reportInstallProgress(progress: number, stage?: string | null): void {
+  installProgress = progress;
+  if (stage !== undefined) installStage = stage;
+  const now = Date.now();
+  // Throttle storage writes; the popup polls ~3×/s and does not need every tick.
+  if (now - lastSnapshotWrite < 400) return;
+  lastSnapshotWrite = now;
+  void writeInstallSnapshot(true);
+}
+
+async function writeInstallSnapshot(installing: boolean): Promise<void> {
+  const storage = extensionStorage();
+  if (!storage) return;
+  const snapshot: InstallStateSnapshot = {
+    installing,
+    progress: installProgress,
+    stage: installStage,
+    error: installError,
+    apiBase: installApiBase,
+    updatedAt: Date.now(),
+  };
+  try {
+    await storage.set({ [INSTALL_STATE_KEY]: snapshot });
+  } catch (error) {
+    console.error("[Shirabe dictionary] could not persist install progress", error);
+  }
+}
+
+async function clearInstallSnapshot(): Promise<void> {
+  const storage = extensionStorage();
+  if (!storage) return;
+  try {
+    await storage.remove(INSTALL_STATE_KEY);
+  } catch {
+    // Best-effort; a stale snapshot is cleared on the next successful install.
+  }
+}
+
+async function readInstallSnapshot(): Promise<InstallStateSnapshot | null> {
+  const storage = extensionStorage();
+  if (!storage) return null;
+  try {
+    const stored = await storage.get(INSTALL_STATE_KEY);
+    const value = stored[INSTALL_STATE_KEY];
+    if (!value || typeof value !== "object") return null;
+    const snapshot = value as InstallStateSnapshot;
+    if (typeof snapshot.installing !== "boolean") return null;
+    // Drop abandoned snapshots (worker died days ago without cleanup).
+    if (snapshot.updatedAt && Date.now() - snapshot.updatedAt > 6 * 60 * 60 * 1000) {
+      void clearInstallSnapshot();
+      return null;
+    }
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
+function extensionStorage(): { get: (key: string) => Promise<Record<string, unknown>>; set: (items: Record<string, unknown>) => Promise<void>; remove: (key: string) => Promise<void> } | null {
+  const api = (typeof globalThis !== "undefined" && ((globalThis as { browser?: { storage?: { session?: unknown; local?: unknown } }; chrome?: { storage?: { session?: unknown; local?: unknown } } }).browser
+    || (globalThis as { chrome?: { storage?: { session?: unknown; local?: unknown } } }).chrome)) || null;
+  const storage = api?.storage as { session?: { get: (key: string) => Promise<Record<string, unknown>>; set: (items: Record<string, unknown>) => Promise<void>; remove: (key: string) => Promise<void> }; local?: { get: (key: string) => Promise<Record<string, unknown>>; set: (items: Record<string, unknown>) => Promise<void>; remove: (key: string) => Promise<void> } } | undefined;
+  // Prefer session (cleared when the browser restarts) but fall back to local.
+  return storage?.session ?? storage?.local ?? null;
+}
+
+function extensionRuntime(): { getPlatformInfo?: () => Promise<unknown> } | null {
+  const api = (typeof globalThis !== "undefined" && ((globalThis as { browser?: { runtime?: { getPlatformInfo?: () => Promise<unknown> } }; chrome?: { runtime?: { getPlatformInfo?: () => Promise<unknown> } } }).browser
+    || (globalThis as { chrome?: { runtime?: { getPlatformInfo?: () => Promise<unknown> } } }).chrome)) || null;
+  return api?.runtime ?? null;
 }
 
 export async function removeDictionary(): Promise<void> {
@@ -227,6 +357,7 @@ export async function removeDictionary(): Promise<void> {
   installError = null;
   activeGenerationCache = null;
   lookupProbeCache.clear();
+  void clearInstallSnapshot();
 }
 
 export async function lookupOffline(query: string, languages: readonly GlossLanguage[], apiBase: string): Promise<Definition | null> {
@@ -363,16 +494,28 @@ function matchingExpression(hit: LookupHit) {
   return hit.term.expressions.find((expression) => normalize(expression.text) === normalized);
 }
 
+function matchingReading(hit: LookupHit): boolean {
+  const normalized = normalize(hit.candidate.text);
+  return hit.term.readings.some((reading) => normalize(reading.text) === normalized);
+}
+
 function forcedExpression(hit: LookupHit): boolean {
   return hit.term.senses.some((sense) => sense.misc.some((tag) => CONTEXTUAL_MISC.has(tag)));
 }
 
 function contextuallyConfident(hit: LookupHit): boolean {
   if (hit.candidate.reasons.length) return true; // a longer deinflected word
-  const expression = matchingExpression(hit);
-  if (!expression || expression.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag))) return false;
-  if (forcedExpression(hit)) return true;
   const usuallyKana = hit.term.senses.some((sense) => sense.misc.includes("uk"));
+  const expression = matchingExpression(hit);
+  if (!expression) {
+    // The surface matched a reading, not a writing form. For a usually-kana word
+    // (について, こと, など) the kana IS the normal spelling, so a kana surface is as
+    // confident as a common expression — otherwise the multi-kana word loses to a
+    // bare particle prefix and について is split into に + つい + て.
+    return usuallyKana && matchingReading(hit);
+  }
+  if (expression.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag))) return false;
+  if (forcedExpression(hit)) return true;
   if (usuallyKana || expression.tags.some((tag) => RARE_KANJI_TAGS.has(tag))) return false;
   const frequency = frequencyForHit(hit);
   return expression.common || (frequency !== null && frequency <= CONTEXTUAL_FREQUENCY_LIMIT);
@@ -408,47 +551,49 @@ async function termsForProbe(index: IDBIndex, key: string): Promise<Array<Stored
 
 async function performInstall(apiBase: string, signal: AbortSignal): Promise<PackManifest> {
   const base = apiBase.replace(/\/$/, "");
-  installStage = "Fetching the dictionary manifest";
+  reportInstallProgress(0, "Fetching the dictionary manifest");
   const manifestResponse = await fetch(`${base}/v1/dictionary-packs/current`, { cache: "no-store", signal });
   if (!manifestResponse.ok) throw new Error(await responseFailure("Dictionary manifest", manifestResponse));
   const manifest = (await manifestResponse.json()) as PackManifest;
   validateManifest(manifest);
 
-  installStage = "Checking offline dictionary storage";
-  const current = await dictionaryStatus();
+  reportInstallProgress(installProgress, "Checking offline dictionary storage");
+  // Avoid re-entering snapshot/installing flags via dictionaryStatus during install —
+  // only need the active revision comparison.
+  const dbForCheck = await openDatabase();
+  const activeRevision = await meta<string>(dbForCheck, "activeGeneration");
+  const current = { revision: activeRevision ?? null };
   if (current.revision === manifest.contentRevision) {
-    installProgress = 1;
-    installStage = null;
+    reportInstallProgress(1, null);
     return manifest;
   }
 
-  installStage = "Downloading the dictionary pack";
+  reportInstallProgress(installProgress, "Downloading the dictionary pack");
   const response = await fetch(manifest.downloadUrl, { cache: "no-store", signal });
   if (!response.ok) throw new Error(await responseFailure("Dictionary download", response));
   if (!response.body) throw new Error("This browser cannot stream the dictionary download.");
   const [importBranch, hashBranch] = response.body.tee();
   const digestPromise = sha256Stream(hashBranch, manifest.bytes, signal);
 
-  installStage = "Opening offline dictionary storage";
+  reportInstallProgress(installProgress, "Opening offline dictionary storage");
   const db = await openDatabase();
   const generation = manifest.contentRevision;
   await clearGeneration(db, generation);
   try {
-    installStage = "Decompressing and importing dictionary records";
+    reportInstallProgress(Math.max(installProgress, 0.2), "Decompressing and importing dictionary records");
     const stream = importBranch.pipeThrough(new DecompressionStream("gzip"));
     await importRecords(db, generation, stream, manifest, signal);
-    installStage = "Verifying the dictionary checksum";
+    reportInstallProgress(Math.max(installProgress, 0.95), "Verifying the dictionary checksum");
     const digest = await digestPromise;
     if (digest !== manifest.sha256) throw new Error("Dictionary checksum did not match. The previous dictionary is still active.");
-    installStage = "Activating the offline dictionary";
+    reportInstallProgress(0.98, "Activating the offline dictionary");
     const previous = await meta<string>(db, "activeGeneration");
     if (previous && previous !== generation) await setMeta(db, "previousGeneration", previous);
     await setMeta(db, "activeGeneration", generation);
     await setMeta(db, "manifest", manifest);
     activeGenerationCache = generation;
     lookupProbeCache.clear();
-    installProgress = 1;
-    installStage = null;
+    reportInstallProgress(1, null);
     void cleanupOtherGenerations(db, new Set([generation, ...(previous ? [previous] : [])]));
     return manifest;
   } catch (error) {
@@ -491,7 +636,7 @@ async function importRecords(db: IDBDatabase, generation: string, stream: Readab
     await writeBatch(db, generation, batch);
     batch = [];
     const expected = Math.max(1, manifest.counts.terms + manifest.counts.kanji);
-    installProgress = 0.2 + 0.75 * ((importedTerms + importedKanji) / expected);
+    reportInstallProgress(0.2 + 0.75 * ((importedTerms + importedKanji) / expected));
   };
 
   while (true) {
@@ -829,7 +974,7 @@ async function sha256Stream(stream: ReadableStream<Uint8Array>, expectedBytes: n
     if (done) break;
     hash.update(value);
     received += value.byteLength;
-    installProgress = Math.max(installProgress, 0.18 * Math.min(1, received / Math.max(1, expectedBytes)));
+    reportInstallProgress(Math.max(installProgress, 0.18 * Math.min(1, received / Math.max(1, expectedBytes))));
   }
   return bytesToHex(hash.digest());
 }
@@ -871,8 +1016,10 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
       if (!glosses) return [];
       return [{
         source: `${GLOSS_LABELS[language]} · ${dictionaryName(term.dictionary)}`,
-        partsOfSpeech: sense.partsOfSpeech,
-        tags: [...sense.fields, ...sense.misc, ...sense.dialects],
+        // Pack stores raw JMdict codes (v5r, vi, uk…); resolve to the same
+        // short labels the site chips show so offline popups match the web.
+        partsOfSpeech: posLabels(sense.partsOfSpeech),
+        tags: tagLabels([...sense.fields, ...sense.misc, ...sense.dialects]),
         glosses,
       }];
     });

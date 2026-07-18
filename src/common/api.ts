@@ -1,4 +1,5 @@
 import type { Config } from "./config.js";
+import { posLabel, tagLabel } from "./jmdict-tags.js";
 import { glossLanguagesFrom, uiLanguagesFrom, type GlossLanguage } from "./languages.js";
 import type { Definition, Example, Sense, WordState } from "./types.js";
 import type { Deck, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
@@ -88,8 +89,14 @@ export class ShirabeApi {
         if (!glosses.length) continue; // Wikipedia abstracts etc. live on the full page
         senses.push({
           source: sourceLabel(sense.definitions[0]?.lang, entry.dictionary),
-          partsOfSpeech: sense.tags.filter((t) => POS_CATEGORIES.has(t.category)).map((t) => t.label),
-          tags: sense.tags.filter((t) => TAG_CATEGORIES.has(t.category)).map((t) => t.label),
+          // Prefer the stable code through posLabel so chips match the site
+          // ("Godan verb") rather than the verbose JMdict entity string.
+          partsOfSpeech: sense.tags
+            .filter((t) => POS_CATEGORIES.has(t.category))
+            .map((t) => posLabel(t.code, t.label)),
+          tags: sense.tags
+            .filter((t) => TAG_CATEGORIES.has(t.category))
+            .map((t) => tagLabel(t.code, t.label)),
           glosses,
         });
       }
@@ -150,10 +157,17 @@ export class ShirabeApi {
   // card is currently due, so lookup cannot create early or duplicate reviews.
   async save(options: { lemma: string; surface?: string; reading?: string; deckId?: number; sentence?: SentenceCapture; rating?: 1 | 2 | 3 | 4; imageDataUrl?: string; audioDataUrl?: string }): Promise<SaveResult> {
     const response = await this.post<{
-      card: { state: WordState }; created: boolean; memberships: Array<{ id: number; name: string }>;
+      card: { id: number; state: WordState }; created: boolean; memberships: Array<{ id: number; name: string }>;
       intervals: { again: string; hard: string; good: string; easy: string };
     }>("/v1/srs/saves", options);
-    return { state: response.card.state, created: response.created, decks: response.memberships, intervals: response.intervals };
+    const cardId = response.card?.id;
+    return {
+      state: response.card.state,
+      created: response.created,
+      decks: response.memberships,
+      intervals: response.intervals,
+      ...(cardId != null ? { cardId } : {}),
+    };
   }
 
   async decks(): Promise<Deck[]> {
@@ -162,10 +176,15 @@ export class ShirabeApi {
   }
 
   async states(lemmas: string[]): Promise<{ states: Record<string, WordState>; details: Record<string, StudyDetails> }> {
-    const { states } = await this.post<{ states: Array<{ lemma: string; state: WordState; decks: Array<{ id: number; name: string }>; intervals?: StudyDetails["intervals"] }> }>("/v1/srs/states/lookup", { words: lemmas });
+    const { states } = await this.post<{ states: Array<{ lemma: string; state: WordState; decks: Array<{ id: number; name: string }>; cardId?: number; intervals?: StudyDetails["intervals"] }> }>("/v1/srs/states/lookup", { words: lemmas });
     return {
       states: Object.fromEntries(states.map((item) => [item.lemma, item.state])),
-      details: Object.fromEntries(states.map((item) => [item.lemma, { state: item.state, decks: item.decks, ...(item.intervals ? { intervals: item.intervals } : {}) }])),
+      details: Object.fromEntries(states.map((item) => [item.lemma, {
+        state: item.state,
+        decks: item.decks,
+        ...(item.cardId != null ? { cardId: item.cardId } : {}),
+        ...(item.intervals ? { intervals: item.intervals } : {}),
+      }])),
     };
   }
 

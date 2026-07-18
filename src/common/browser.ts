@@ -36,8 +36,15 @@ type WebExt = {
     onInstalled?: { addListener(fn: (details: { reason: "install" | "update" | "chrome_update" | "shared_module_update" }) => void): void };
     openOptionsPage?(): Promise<void>;
     getURL(path: string): string;
+    // Used as a light keep-alive ping while a long dictionary install runs without
+    // an open popup (MV3 service workers otherwise suspend and drop in-memory state).
+    getPlatformInfo?(): Promise<unknown>;
   };
-  storage: { local: StorageArea; onChanged: { addListener(fn: (changes: Record<string, { newValue?: unknown }>, area: string) => void): void } };
+  storage: {
+    local: StorageArea;
+    session?: StorageArea;
+    onChanged: { addListener(fn: (changes: Record<string, { newValue?: unknown }>, area: string) => void): void };
+  };
   tabs: {
     query(info: Record<string, unknown>): Promise<Array<{ id?: number; url?: string; windowId?: number }>>;
     sendMessage(tabId: number, message: unknown): Promise<unknown>;

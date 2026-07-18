@@ -77,8 +77,11 @@ test("the action popup navigates with a bottom bar and hands settings to its own
   // Firefox sizes the panel from the root's intrinsic width, so it stays fixed.
   assert.match(css, /html,\s*\nbody\s*\{[^}]*width:\s*400px;[^}]*min-width:\s*400px;/s);
   assert.doesNotMatch(css, /max-width:\s*100vw/);
-  assert.match(css, /--primary:\s*#0369a1/);
-  assert.match(css, /--brand-purple:\s*#7b61ff/);
+  // Tokens are light-dark pairs (system dark mode); the light half keeps the
+  // brand ocean / purple from the site palette.
+  assert.match(css, /color-scheme:\s*light dark/);
+  assert.match(css, /--primary:\s*light-dark\(#0369a1/);
+  assert.match(css, /--brand-purple:\s*light-dark\(#7b61ff/);
   assert.match(css, /--radius-card:\s*18px/);
   assert.doesNotMatch(popup, /readArticle|readSelection|openPasteReader|Paste \/ PDF/);
   assert.match(popup, /<symbol id="icon-search"/);
@@ -99,10 +102,13 @@ test("the action popup navigates with a bottom bar and hands settings to its own
   assert.equal(manifest.options_ui.open_in_tab, true);
 
   // The preferences the popup dropped must exist on the options page instead.
-  for (const id of [ "prefs", "keybinds", "advanced", "scanModifier", "apiBase", "apiKey" ]) {
+  // Server / key / host lists are not user-facing here — connect flow and the
+  // per-site reader toggle own those.
+  for (const id of [ "prefs", "keybinds", "scanModifier" ]) {
     assert.match(options, new RegExp(`id="${id}"`), `options page is missing #${id}`);
     assert.doesNotMatch(popup, new RegExp(`id="${id}"`), `popup should no longer own #${id}`);
   }
+  assert.doesNotMatch(options, /id="advanced"|id="apiBase"|id="apiKey"|href="#advanced"/);
 
   // Definition language is deliberately available both beside the dictionary
   // and on the full settings page; both controls write Config#languages.
@@ -135,11 +141,14 @@ test("extension settings mirror Shirabe's sidebar and card layout without purple
 
   assert.match(options, /class="settings-nav"/);
   assert.match(options, /class="settings-content"/);
-  for (const id of ["reading", "keyboard", "advanced"]) assert.match(options, new RegExp(`href="#${id}"`));
-  assert.match(css, /--surface-page:\s*#f8fafc/);
-  assert.match(css, /--surface:\s*#fff/);
-  assert.match(css, /--primary:\s*#0369a1/);
+  for (const id of ["reading", "keyboard"]) assert.match(options, new RegExp(`href="#${id}"`));
+  assert.doesNotMatch(options, /href="#advanced"/);
+  assert.match(css, /color-scheme:\s*light dark/);
+  assert.match(css, /--surface-page:\s*light-dark\(#f8fafc/);
+  assert.match(css, /--surface:\s*light-dark\(#ffffff/);
+  assert.match(css, /--primary:\s*light-dark\(#0369a1/);
   assert.match(css, /grid-template-columns:\s*176px minmax\(0, 1fr\)/);
+  // Settings stays interaction-blue; purple is identity-only on the action popup.
   assert.doesNotMatch(css, /purple|#7b61ff/i);
   assert.match(logic, /new IntersectionObserver/);
 });

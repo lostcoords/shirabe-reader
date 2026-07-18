@@ -36,6 +36,11 @@
           <p class="muted">Shirabe reads pages with a dictionary stored on this device. Install it once and lookup works offline, with no account.</p>
           <button id="goInstallDictionary" class="primary"><svg><use href="#icon-document" /></svg>Install dictionary</button>
         </section>
+        <section id="dictionaryInstallingBanner" class="card prompt-card" hidden>
+          <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-book" /></svg></span><p class="account-line">Dictionary installing…</p></div>
+          <p class="muted">Download and import continue in the background. Open the Dictionary tab for progress.</p>
+          <button id="goDictionaryProgress" class="primary"><svg><use href="#icon-document" /></svg>Show progress</button>
+        </section>
 
         <!-- Coverage is per-word study state, which is exactly what an account buys. -->
         <aside id="signInBanner" class="card banner-card" hidden>

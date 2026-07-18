@@ -69,6 +69,17 @@ test("toFaroPayload produces the receiver's shape and tags app/environment", () 
   assert.deepEqual(payload.measurements[0].values, { parse_failed: 1 });
 });
 
+test("named failure counters are wired at their choke points", () => {
+  const background = readFileSync("src/background/background.ts", "utf8");
+  // Onboarding + backend-health counters ride the central errorResponse hook.
+  assert.match(background, /captureEvent\("dictionary_install_failed"/);
+  assert.match(background, /err instanceof ApiError && err\.status >= 500/);
+  assert.match(background, /captureEvent\("api_error"/);
+  // Core-functionality + feature counters at their own sites.
+  assert.match(background, /captureMeasurement\("parse_failed", 1\)/);
+  assert.match(background, /captureEvent\("audio_fetch_failed"/);
+});
+
 test("the client reporter only forwards our own errors, never the host page's", () => {
   const reporter = readFileSync("src/common/client-reporter.ts", "utf8");
   // The extension-origin gate is what keeps a page's own JS errors out.

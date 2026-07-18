@@ -11,7 +11,7 @@ const records = [
     type: "term", id: "jmdict:1", dictionary: "jmdict", headword: "食べる",
     expressions: [{ text: "食べる", script: "mixed", common: true, tags: [] }],
     readings: [{ text: "たべる", kind: "kana" }],
-    senses: [{ glosses: { eng: ["to eat"], spa: ["comer"] }, partsOfSpeech: ["verb"], fields: [], misc: [], dialects: [], restrictions: [] }],
+    senses: [{ glosses: { eng: ["to eat"], spa: ["comer"] }, partsOfSpeech: ["v1", "vt"], fields: [], misc: [], dialects: [], restrictions: [] }],
     pitch: [
       { text: "食べる", reading: "たべる", downstep: 2, audioUrl: `https://cdn.shirabe.org/audio/${"a".repeat(64)}.m4a` },
       { text: "たべる", reading: "たべる", downstep: 2, audioUrl: `https://cdn.shirabe.org/audio/${"b".repeat(64)}.m4a` },
@@ -49,7 +49,7 @@ const records = [
     type: "term", id: "jmdict:12", dictionary: "jmdict", headword: "一石二鳥",
     expressions: [{ text: "一石二鳥", script: "mixed", common: false, tags: [] }],
     readings: [{ text: "いっせきにちょう", kind: "kana" }],
-    senses: [{ glosses: { eng: ["killing two birds with one stone"], spa: ["matar dos pájaros de un tiro"] }, partsOfSpeech: ["expression"], fields: [], misc: ["yoji"], dialects: [], restrictions: [] }],
+    senses: [{ glosses: { eng: ["killing two birds with one stone"], spa: ["matar dos pájaros de un tiro"] }, partsOfSpeech: ["exp"], fields: [], misc: ["yoji"], dialects: [], restrictions: [] }],
     frequencies: [{ source: "jiten-global", text: "一石二鳥", reading: "いっせきにちょう", rank: 80_000 }],
   },
   ...[
@@ -66,6 +66,28 @@ const records = [
       ...(headword === "明日天気" ? [{ source: "jiten-global", text: "明日", reading: "あした", rank: 1 }] : []),
     ],
   })),
+  // A usually-kana (uk) expression: its only writing forms are rare kanji, and
+  // the surface that appears on a page is the kana reading について. The kana is a
+  // *reading*, not an expression, so the confidence gate has to accept it.
+  {
+    type: "term", id: "jmdict:16", dictionary: "jmdict", headword: "について",
+    expressions: [
+      { text: "に就いて", script: "mixed", common: false, tags: ["rK"] },
+      { text: "に付いて", script: "mixed", common: false, tags: ["rK"] },
+    ],
+    readings: [{ text: "について", kind: "kana" }],
+    senses: [{ glosses: { eng: ["about; concerning; regarding"], spa: ["sobre; acerca de"] }, partsOfSpeech: ["exp"], fields: [], misc: ["uk"], dialects: [], restrictions: [] }],
+    frequencies: [{ source: "jiten-global", text: "について", reading: "について", rank: 50 }],
+  },
+  // The bare particle が/に is common and confident on its own; without the fix a
+  // について page splits into this particle + leftover kana one code point at a time.
+  {
+    type: "term", id: "jmdict:17", dictionary: "jmdict", headword: "に",
+    expressions: [{ text: "に", script: "kana", common: true, tags: [] }],
+    readings: [{ text: "に", kind: "kana" }],
+    senses: [{ glosses: { eng: ["at (place); in; on"], spa: ["en; a"] }, partsOfSpeech: ["prt"], fields: [], misc: [], dialects: [], restrictions: [] }],
+    frequencies: [{ source: "jiten-global", text: "に", reading: "に", rank: 1 }],
+  },
   { type: "kanji", id: "kanjidic:食", char: "食", readings: { on: ["ショク"], kun: ["た.べる"] }, meanings: { eng: ["eat"], spa: ["comer"] }, strokes: 9 },
   // KANJIDIC lists pinyin/korean/vietnam before the Japanese readings, and 猫 is
   // also a word — both of which the lookup has to see past.
@@ -84,7 +106,7 @@ function manifest(revision: string, sha256 = checksum) {
   return {
     schemaVersion: 3, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
     artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
-    bytes: compressed.byteLength, sha256, counts: { terms: 15, kanji: 3 }, languages: ["eng", "spa"],
+    bytes: compressed.byteLength, sha256, counts: { terms: 17, kanji: 3 }, languages: ["eng", "spa"],
     dictionaries: [{ slug: "jmdict", version: "test" }], modifications: [], sources: [], downloadUrl: "https://packs.test/dictionary.gz",
   } as const;
 }
@@ -112,6 +134,8 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal(definition?.headword, "食べる");
   assert.equal(definition?.sourceForm, "食べました");
   assert.deepEqual(definition?.senses[0]?.glosses, ["comer"]);
+  assert.deepEqual(definition?.senses[0]?.partsOfSpeech, ["Ichidan verb", "Transitive verb"],
+    "offline POS codes resolve to the same short labels as the site");
   assert.equal(definition?.pitch[0]?.audioUrl, `https://cdn.shirabe.org/audio/${"a".repeat(64)}.m4a`);
   assert.deepEqual(definition?.pitch.map((pitch) => pitch.downstep), [2], "alternate-spelling pitch rows do not leak into the displayed headword");
 
@@ -131,14 +155,26 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   const expressionTokens = await parseOffline("一石二鳥は便利だ。", ["eng"], "https://shirabe.test");
   assert.deepEqual(expressionTokens.filter((token) => token.content)[0], {
     start: 0, length: 4, surface: "一石二鳥", reading: "いっせきにちょう",
-    lemma: "一石二鳥", pos: "expression", content: true, state: "none", frequency: 80_000,
+    lemma: "一石二鳥", pos: "Expression", content: true, state: "none", frequency: 80_000,
   });
+  const expressionLookup = await lookupOffline("一石二鳥", ["eng"], "https://shirabe.test");
+  assert.deepEqual(expressionLookup?.senses[0]?.partsOfSpeech, ["Expression"]);
+  assert.deepEqual(expressionLookup?.senses[0]?.tags, ["Yojijukugo"]);
   assert.equal((await lookupOffline("明日天気", ["eng"], "https://shirabe.test"))?.headword, "明日天気",
     "an explicit lookup must preserve an obscure exact dictionary entry");
   assert.deepEqual(
     (await parseOffline("明日天気になる。", ["eng"], "https://shirabe.test")).filter((token) => token.content).slice(0, 2).map((token) => token.surface),
     ["明日", "天気"],
     "contextual parsing must not blindly consume an uncommon untagged headword",
+  );
+
+  // A usually-kana expression appears on the page as its kana reading, which is a
+  // *reading*, not a writing form — so contextual confidence must accept a reading
+  // match, or について loses to the bare particle に and is split into に + つい + て.
+  assert.deepEqual(
+    (await parseOffline("猫について", ["eng"], "https://shirabe.test")).filter((token) => token.content).map((token) => token.surface),
+    ["猫", "について"],
+    "a usually-kana expression parses as one token, not split into に + つい + て",
   );
 
   // Language ORDER is the contract: the reader's stack decides which meaning

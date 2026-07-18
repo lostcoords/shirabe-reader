@@ -1,10 +1,11 @@
 import { send, type Rating } from "../common/messages.js";
 import { sendDictionary } from "../common/dictionary-port.js";
 import type { Definition, Example, Sense, SentenceToken } from "../common/types.js";
-import { applyStudyDetails, grade, GRADES, markKnown, save, setMediaCapture, type MediaCapture, type Outcome } from "./actions.js";
+import { applyStudyDetails, cardUrlFor, grade, GRADES, markKnown, save, setMediaCapture, studyUrlForWord, type MediaCapture, type Outcome } from "./actions.js";
 import { refreshStatusBar } from "./status-bar.js";
 import { furiganaSegments, hasKanji } from "./word.js";
 import { isR2AudioUrl } from "../common/audio.js";
+import { toast } from "./toast.js";
 
 // One reused popup, shown next to whichever word the pointer (or keyboard) is
 // over. It lives in a shadow root so the host page's CSS can never reach in —
@@ -195,8 +196,12 @@ async function showTarget(target: PopupTarget): Promise<void> {
       if (mine !== token) return;
       if (states.ok) {
         const details = states.details[res.definition.headword];
-        if (details) applyStudyDetails(target.word, details);
-        else target.word.dataset.state = states.states[res.definition.headword] ?? "none";
+        if (details) {
+          applyStudyDetails(target.word, details);
+          if (details.cardId != null) target.word.dataset.cardUrl = await cardUrlFor(details.cardId);
+        } else {
+          target.word.dataset.state = states.states[res.definition.headword] ?? "none";
+        }
       }
     }
   }
@@ -313,7 +318,7 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
   if (badges) body.append(badges);
   if (def.pitch.length && def.reading) body.append(pitchRows(def.pitch, def.reading));
   body.append(sensesList(def.senses));
-  const kanji = kanjiStrip(def.headword);
+  const kanji = kanjiStrip(def.headword, def.url);
   if (kanji) body.append(kanji);
   const examples = examplesBlock(def.examples);
   if (examples) body.append(examples);
@@ -324,17 +329,25 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
   return rows;
 }
 
-function kanjiStrip(headword: string): HTMLElement | null {
+// Kanji chips open the site's kanji page — richer than the offline KANJIDIC
+// slice, and the path we keep if the pack eventually drops kanji records.
+function kanjiStrip(headword: string, wordUrl: string): HTMLElement | null {
   const characters = [...new Set([...headword].filter((character) => /\p{Script=Han}/u.test(character)))];
   if (!characters.length) return null;
+  const siteBase = wordUrl.replace(/\/word\/[^/?#]*$/, "");
   const strip = document.createElement("div");
   strip.className = "sb-kanji-strip";
   strip.setAttribute("aria-label", "Kanji details");
   for (const character of characters) {
-    const control = button(character, "sb-kanji-button", "", () => nestedLookup(character, control.getBoundingClientRect(), currentDepth, "kanji"));
-    control.title = `Look up ${character}`;
-    control.setAttribute("aria-label", `Look up kanji ${character}`);
-    strip.append(control);
+    const link = document.createElement("a");
+    link.className = "sb-btn sb-kanji-button";
+    link.href = `${siteBase}/kanji/${encodeURIComponent(character)}`;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = character;
+    link.title = `Open ${character} on Shirabe`;
+    link.setAttribute("aria-label", `Open kanji ${character} on Shirabe`);
+    strip.append(link);
   }
   return strip;
 }
@@ -587,8 +600,19 @@ function sentenceToken(tok: SentenceToken): Node {
 // under those same policies, so playing the returned URL works everywhere.
 async function playAudio(url: string): Promise<void> {
   const res = await send({ type: "audioClip", url });
-  if (!res.ok) return;
-  void new Audio(res.dataUrl).play().catch(() => undefined);
+  if (!res.ok) {
+    // A 404 means this word has no processed clip yet (or the installed pack is
+    // stale); anything else is a real fetch failure. Surface it instead of
+    // failing silently, so a dead speaker button always explains itself.
+    const missing = /\((404|403)\)/.test(res.error);
+    toast(missing ? "No pronunciation audio for this word yet." : "Couldn't load pronunciation audio.", false);
+    return;
+  }
+  try {
+    await new Audio(res.dataUrl).play();
+  } catch {
+    toast("Couldn't play pronunciation audio.", false);
+  }
 }
 
 // Mining + review controls, gated by whether the word is already a card. An
@@ -633,6 +657,10 @@ function renderActions(word: HTMLElement, wrap: HTMLElement): void {
     wrap.append(schedule);
   }
 
+  // Always offer a Shirabe deep-link once the word is a card — exact card when
+  // we know cardId, otherwise the card browser search for the lemma.
+  if (saved) wrap.append(cardLink(word));
+
   const extra = document.createElement("div");
   extra.className = "sb-extra";
   if (!saved) extra.append(button("＋ Save", "sb-btn-save", "S", () => run(word, wrap, () => save(word))));
@@ -651,6 +679,35 @@ function intervalPreviews(word: HTMLElement): { again: string; hard: string; goo
   } catch {
     return null;
   }
+}
+
+function cardLink(word: HTMLElement): HTMLAnchorElement {
+  const link = document.createElement("a");
+  link.className = "sb-card-link";
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = "Open card in Shirabe →";
+  // Synchronous placeholder so the control is always clickable immediately;
+  // then upgrade to the real host (and card_id when known).
+  link.href = word.dataset.cardUrl || "#";
+  void studyUrlForWord(word).then((url) => {
+    word.dataset.cardUrl = url;
+    link.href = url;
+  });
+  // If we only know the lemma so far, try to resolve a cardId from the server
+  // so the next open lands on the inspector with mined context.
+  if (!word.dataset.cardId && word.dataset.lemma) {
+    void send({ type: "states", lemmas: [word.dataset.lemma] }).then(async (res) => {
+      if (!res.ok) return;
+      const details = res.details[word.dataset.lemma!];
+      if (!details?.cardId) return;
+      applyStudyDetails(word, details);
+      const url = await cardUrlFor(details.cardId);
+      word.dataset.cardUrl = url;
+      link.href = url;
+    });
+  }
+  return link;
 }
 
 function editContext(word: HTMLElement, wrap: HTMLElement): void {
@@ -725,9 +782,11 @@ async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<O
   if (wrap.dataset.running === "true") return;
   wrap.dataset.running = "true";
   for (const control of wrap.querySelectorAll<HTMLButtonElement>("button")) control.disabled = true;
-  const { ok, message } = await action();
+  const outcome = await action();
+  const { ok, message, cardUrl } = outcome;
+  if (cardUrl) word.dataset.cardUrl = cardUrl;
   delete wrap.dataset.running;
-  if (ok) renderActions(word, wrap); // state changed → re-render (Save → grade row)
+  if (ok) renderActions(word, wrap); // state changed → re-render (Save → grade row + link)
   else for (const control of wrap.querySelectorAll<HTMLButtonElement>("button")) control.disabled = false;
   if (ok) refreshStatusBar();
   const note = wrap.querySelector<HTMLElement>(".sb-feedback");
@@ -776,6 +835,35 @@ const CSS = `
   left: 0;
   z-index: 2147483647;
   display: block;
+  /* Isolated from the host page: follow the OS theme so the lookup card is
+     readable on dark-mode machines even when the site under the cursor is light. */
+  color-scheme: light dark;
+  --sb-surface: light-dark(#ffffff, #1a1a1e);
+  --sb-surface-muted: light-dark(#f3f4f6, oklch(25% 0.016 285.7));
+  --sb-surface-hover: light-dark(#e5e7eb, oklch(30% 0.016 285.7));
+  --sb-ink: light-dark(#111827, #e8e6e3);
+  --sb-ink-body: light-dark(#1f2937, #e8e6e3);
+  --sb-ink-muted: light-dark(#4b5563, oklch(74% 0.007 80));
+  --sb-ink-subtle: light-dark(#6b7280, oklch(62% 0.009 80));
+  --sb-ink-faint: light-dark(#9ca3af, oklch(58% 0.009 80));
+  --sb-outline: light-dark(#e5e7eb, oklch(92% 0.02 285.7 / 0.14));
+  --sb-outline-strong: light-dark(#d1d5db, oklch(92% 0.02 285.7 / 0.22));
+  --sb-divider: light-dark(#f3f4f6, oklch(92% 0.02 285.7 / 0.1));
+  --sb-accent: light-dark(#4f46e5, oklch(72% 0.18 280));
+  --sb-accent-hover: light-dark(#4338ca, oklch(78% 0.16 280));
+  --sb-accent-tint: light-dark(#eef2ff, oklch(26% 0.08 280));
+  --sb-accent-tint-strong: light-dark(#e0e7ff, oklch(32% 0.1 280));
+  --sb-accent-border: light-dark(#a5b4fc, oklch(60% 0.14 280));
+  --sb-source: light-dark(#6366f1, oklch(75% 0.16 280));
+  --sb-common-bg: light-dark(#dcfce7, oklch(26% 0.09 155));
+  --sb-common-fg: light-dark(#166534, oklch(83% 0.19 155));
+  --sb-jlpt-bg: light-dark(#e0e7ff, oklch(26% 0.09 280));
+  --sb-jlpt-fg: light-dark(#3730a3, oklch(80% 0.14 280));
+  --sb-error: light-dark(#b91c1c, oklch(75% 0.17 25));
+  --sb-shadow: 0 10px 30px light-dark(rgba(15, 23, 42, 0.18), rgba(0, 0, 0, 0.55));
+  --sb-on-solid: #ffffff;
+  --sb-known-btn: light-dark(#6b7280, oklch(45% 0.02 260));
+  --sb-known-btn-hover: light-dark(#4b5563, oklch(52% 0.02 260));
 }
 .sb-popup {
   box-sizing: border-box;
@@ -784,11 +872,11 @@ const CSS = `
   width: min(360px, calc(100vw - 24px));
   max-height: min(60vh, 460px);
   padding: 12px 14px;
-  background: #ffffff;
-  color: #1f2937;
-  border: 1px solid #e5e7eb;
+  background: var(--sb-surface);
+  color: var(--sb-ink-body);
+  border: 1px solid var(--sb-outline);
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--sb-shadow);
   font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
   font-size: 14px;
   line-height: 1.5;
@@ -804,17 +892,17 @@ const CSS = `
    the flex child shrink below its content height. */
 .sb-popup-head { flex: 0 0 auto; display: flex; align-items: baseline; gap: 8px; font-size: 20px; font-weight: 700; }
 .sb-history-nav { display: inline-flex; gap: 3px; margin-left: auto; }
-.sb-btn.sb-history-button { cursor: pointer; border: 0; border-radius: 5px; padding: 3px 6px; background: #f3f4f6; color: #4b5563; }
-.sb-btn.sb-history-button:hover { background: #e5e7eb; }
+.sb-btn.sb-history-button { cursor: pointer; border: 0; border-radius: 5px; padding: 3px 6px; background: var(--sb-surface-muted); color: var(--sb-ink-muted); }
+.sb-btn.sb-history-button:hover { background: var(--sb-surface-hover); }
 .sb-btn.sb-history-button:disabled { cursor: default; opacity: .35; }
-.sb-headword { color: #111827; text-decoration: none; cursor: pointer; }
-.sb-headword:hover { color: #4f46e5; text-decoration: underline; }
+.sb-headword { color: var(--sb-ink); text-decoration: none; cursor: pointer; }
+.sb-headword:hover { color: var(--sb-accent); text-decoration: underline; }
 .sb-headword ruby { ruby-align: center; }
-.sb-headword ruby rt { font-size: 0.5em; font-weight: 600; color: #4f46e5; user-select: none; }
-.sb-popup-reading { font-size: 14px; font-weight: 500; color: #4f46e5; }
-.sb-popup-message { color: #6b7280; }
-.sb-inflection { margin-bottom: 7px; color: #6b7280; font-size: 12px; }
-.sb-study-unavailable { flex: 0 0 auto; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 11px; }
+.sb-headword ruby rt { font-size: 0.5em; font-weight: 600; color: var(--sb-accent); user-select: none; }
+.sb-popup-reading { font-size: 14px; font-weight: 500; color: var(--sb-accent); }
+.sb-popup-message { color: var(--sb-ink-subtle); }
+.sb-inflection { margin-bottom: 7px; color: var(--sb-ink-subtle); font-size: 12px; }
+.sb-study-unavailable { flex: 0 0 auto; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--sb-outline); color: var(--sb-ink-subtle); font-size: 11px; }
 
 .sb-body { flex: 0 1 auto; min-height: 0; overflow-y: auto; margin-top: 8px; }
 
@@ -822,53 +910,56 @@ const CSS = `
   margin-left: auto; align-self: center; color: inherit; background: transparent;
   padding: 2px 6px; border-radius: 8px; font-size: 15px; line-height: 1;
 }
-.sb-btn.sb-audio:hover { background: #f3f4f6; }
+.sb-btn.sb-audio:hover { background: var(--sb-surface-muted); }
 
 .sb-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .sb-badge {
   font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
   letter-spacing: 0.02em;
 }
-.sb-badge-common { background: #dcfce7; color: #166534; }
-.sb-badge-jlpt { background: #e0e7ff; color: #3730a3; }
-.sb-badge-freq { background: #f3f4f6; color: #4b5563; font-variant-numeric: tabular-nums; }
+.sb-badge-common { background: var(--sb-common-bg); color: var(--sb-common-fg); }
+.sb-badge-jlpt { background: var(--sb-jlpt-bg); color: var(--sb-jlpt-fg); }
+.sb-badge-freq { background: var(--sb-surface-muted); color: var(--sb-ink-muted); font-variant-numeric: tabular-nums; }
 
 .sb-pitch { margin-bottom: 8px; }
 .sb-pitch-item { display: flex; align-items: center; gap: 8px; }
 .sb-pitch-svg { height: 46px; }
-.sb-pitch-svg line { stroke: #4f46e5; stroke-width: 2; }
-.sb-pitch-svg circle { fill: #4f46e5; }
-.sb-pitch-mora { fill: #6b7280; font-size: 11px; font-family: inherit; }
-.sb-pitch-num { font-size: 12px; font-weight: 600; color: #9ca3af; font-variant-numeric: tabular-nums; }
+.sb-pitch-svg line { stroke: var(--sb-accent); stroke-width: 2; }
+.sb-pitch-svg circle { fill: var(--sb-accent); }
+.sb-pitch-mora { fill: var(--sb-ink-subtle); font-size: 11px; font-family: inherit; }
+.sb-pitch-num { font-size: 12px; font-weight: 600; color: var(--sb-ink-faint); font-variant-numeric: tabular-nums; }
 .sb-kanji-strip { display: flex; gap: 5px; margin: 8px 0; }
-.sb-btn.sb-kanji-button { cursor: pointer; min-width: 30px; border: 1px solid #d1d5db; border-radius: 7px; padding: 4px 7px; background: #fff; color: #312e81; font-size: 17px; }
-.sb-btn.sb-kanji-button:hover { background: #eef2ff; border-color: #a5b4fc; }
+.sb-btn.sb-kanji-button {
+  cursor: pointer; min-width: 30px; border: 1px solid var(--sb-outline-strong); border-radius: 7px;
+  padding: 4px 7px; background: var(--sb-surface); color: var(--sb-accent); font-size: 17px;
+  text-decoration: none;
+}
+.sb-btn.sb-kanji-button:hover { background: var(--sb-accent-tint); border-color: var(--sb-accent-border); }
 
 .sb-senses { margin: 0; padding-left: 18px; }
 .sb-senses li { margin: 4px 0; }
-.sb-source { font-size: 11px; font-weight: 600; color: #6366f1; }
+.sb-source { font-size: 11px; font-weight: 600; color: var(--sb-source); }
 .sb-pos {
-  display: block; font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.04em; color: #9ca3af;
+  display: block; font-size: 11px; font-weight: 600; color: var(--sb-ink-subtle);
 }
-.sb-tags { color: #9ca3af; }
+.sb-tags { color: var(--sb-ink-faint); }
 
-.sb-examples { margin-top: 10px; padding-top: 8px; border-top: 1px solid #f3f4f6; }
+.sb-examples { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--sb-divider); }
 .sb-example { margin: 6px 0; }
-.sb-example-jp { color: #111827; }
-.sb-example-tr { font-size: 13px; color: #6b7280; }
+.sb-example-jp { color: var(--sb-ink); }
+.sb-example-tr { font-size: 13px; color: var(--sb-ink-subtle); }
 /* Clickable sentence tokens: subtle until hovered; the searched word tinted. */
 .sb-tok {
   color: inherit; text-decoration: none; cursor: pointer;
   border-radius: 3px; text-underline-offset: 2px;
 }
-.sb-tok:hover { text-decoration: underline; background: #f3f4f6; }
-.sb-tok-match { color: #4f46e5; background: #eef2ff; }
-.sb-tok-match:hover { background: #e0e7ff; }
+.sb-tok:hover { text-decoration: underline; background: var(--sb-surface-muted); }
+.sb-tok-match { color: var(--sb-accent); background: var(--sb-accent-tint); }
+.sb-tok-match:hover { background: var(--sb-accent-tint-strong); }
 
-.sb-actions { flex: 0 0 auto; margin-top: 12px; padding-top: 10px; border-top: 1px solid #f3f4f6; }
-.sb-membership { margin-bottom: 6px; color: #4b5563; font-size: 11px; }
-.sb-schedule { margin-bottom: 6px; color: #4b5563; font-size: 12px; }
+.sb-actions { flex: 0 0 auto; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--sb-divider); }
+.sb-membership { margin-bottom: 6px; color: var(--sb-ink-muted); font-size: 11px; }
+.sb-schedule { margin-bottom: 6px; color: var(--sb-ink-muted); font-size: 12px; }
 .sb-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .sb-extra { display: flex; gap: 6px; margin-top: 6px; }
 .sb-extra .sb-btn { flex: 1; }
@@ -877,7 +968,7 @@ const CSS = `
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   font: 600 13px/1 system-ui, sans-serif;
   padding: 7px 8px; border-radius: 8px; border: 1px solid transparent; cursor: pointer;
-  color: #fff;
+  color: var(--sb-on-solid);
 }
 .sb-btn:disabled { cursor: wait; opacity: 0.55; }
 .sb-btn kbd {
@@ -889,25 +980,54 @@ const CSS = `
 .sb-g2 { background: #f59e0b; } .sb-g2:hover { background: #d97706; }
 .sb-g3 { background: #22c55e; } .sb-g3:hover { background: #16a34a; }
 .sb-g4 { background: #3b82f6; } .sb-g4:hover { background: #2563eb; }
-.sb-btn-save { background: #4f46e5; } .sb-btn-save:hover { background: #4338ca; }
-.sb-btn-known { background: #6b7280; } .sb-btn-known:hover { background: #4b5563; }
+.sb-btn-save { background: var(--sb-accent); } .sb-btn-save:hover { background: var(--sb-accent-hover); }
+.sb-btn-known { background: var(--sb-known-btn); } .sb-btn-known:hover { background: var(--sb-known-btn-hover); }
 .sb-btn-known kbd, .sb-btn-save kbd { background: rgba(255, 255, 255, 0.22); }
-.sb-btn-context { background: #fff; color: #4b5563; border-color: #d1d5db; }
-.sb-btn-context:hover { background: #f3f4f6; }
+.sb-btn-context { background: var(--sb-surface); color: var(--sb-ink-muted); border-color: var(--sb-outline-strong); }
+.sb-btn-context:hover { background: var(--sb-surface-muted); }
 .sb-context-editor { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
-.sb-context-editor textarea, .sb-context-editor input { grid-column: 1 / -1; width: 100%; border: 1px solid #d1d5db; border-radius: 7px; padding: 7px; font: 13px/1.45 system-ui,sans-serif; }
+.sb-context-editor textarea, .sb-context-editor input {
+  grid-column: 1 / -1; width: 100%; border: 1px solid var(--sb-outline-strong); border-radius: 7px;
+  padding: 7px; font: 13px/1.45 system-ui,sans-serif;
+  background: var(--sb-surface); color: var(--sb-ink);
+}
 .sb-context-editor textarea { min-height: 72px; resize: vertical; }
-.sb-context-editor button { cursor: pointer; border: 1px solid #d1d5db; border-radius: 7px; padding: 6px 8px; background: #fff; }
-.sb-context-check, .sb-context-file, .sb-context-media-feedback { grid-column: 1 / -1; font: 12px/1.4 system-ui,sans-serif; color: #4b5563; }
+.sb-context-editor button {
+  cursor: pointer; border: 1px solid var(--sb-outline-strong); border-radius: 7px;
+  padding: 6px 8px; background: var(--sb-surface); color: var(--sb-ink);
+}
+.sb-context-check, .sb-context-file, .sb-context-media-feedback { grid-column: 1 / -1; font: 12px/1.4 system-ui,sans-serif; color: var(--sb-ink-muted); }
 .sb-context-check { cursor: pointer; }
 .sb-context-check input { width: auto; }
 .sb-context-file input { margin-top: 4px; }
 
-.sb-feedback { display: block; margin-top: 8px; font-size: 12px; color: #6b7280; }
-.sb-feedback.sb-error { color: #b91c1c; }
+.sb-feedback { display: block; margin-top: 8px; font-size: 12px; color: var(--sb-ink-subtle); }
+.sb-feedback.sb-error { color: var(--sb-error); }
+.sb-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 8px;
+  border: 1px solid var(--sb-accent-border, var(--sb-outline-strong));
+  background: var(--sb-accent-tint, var(--sb-surface-muted));
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sb-accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+.sb-card-link:hover {
+  background: var(--sb-accent-tint-strong, var(--sb-surface-muted));
+  color: var(--sb-accent-hover, var(--sb-accent));
+  text-decoration: none;
+}
 .sb-btn:focus-visible, .sb-headword:focus-visible, .sb-tok:focus-visible,
 .sb-context-editor input:focus-visible, .sb-context-editor textarea:focus-visible {
-  outline: 3px solid #4f46e5; outline-offset: 2px;
+  outline: 3px solid var(--sb-accent); outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
   .sb-popup { transition: none; }

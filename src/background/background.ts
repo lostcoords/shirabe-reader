@@ -3,10 +3,10 @@ import { ext, usesPromiseMessageResponses } from "../common/browser.js";
 import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config } from "../common/config.js";
 import { isR2AudioUrl } from "../common/audio.js";
 import { normalizePattern, refreshRemoteHostRules } from "../common/host-rules.js";
-import { cancelDictionaryInstall, checkDictionaryUpdate, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary } from "../common/offline-dictionary.js";
+import { cancelDictionaryInstall, checkDictionaryUpdate, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary, resumeInterruptedDictionaryInstall } from "../common/offline-dictionary.js";
 import type { Deck, LookupHistoryItem, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
-import { captureException, ingestClientReport, installBackgroundErrorHandlers } from "./telemetry.js";
+import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers } from "./telemetry.js";
 
 // Single API client + our own copy of the config (the client hides it). Both
 // stay in sync with stored settings.
@@ -38,6 +38,8 @@ async function initializeBackground(): Promise<void> {
   void traceBackgroundTask("refresh remote host rules", () => refreshRemoteHostRules(config.apiBase));
   void traceBackgroundTask("check dictionary update", checkAndNotifyDictionary);
   void traceBackgroundTask("sync registered content scripts", () => syncRegisteredContentScript(config));
+  // Popup close can kill an MV3 worker mid-import; pick up the persisted job.
+  resumeInterruptedDictionaryInstall(config.apiBase);
 }
 
 async function tracedBackgroundStep<T>(stage: string, task: () => Promise<T>): Promise<T> {
@@ -159,6 +161,9 @@ async function handle(request: Request, senderTabId?: number): Promise<Response>
             ok: true, type: "parseBatch", tokens: request.texts.map(() => []), dictionaryInstalling: true,
           };
         }
+        // A real parse failure (not the transient "not installed yet" state) —
+        // core functionality broke on this page. Count it, then report as usual.
+        captureMeasurement("parse_failed", 1);
         throw error;
       }
     }
@@ -184,10 +189,25 @@ async function handle(request: Request, senderTabId?: number): Promise<Response>
     case "dictionaryStatus":
       return { ok: true, type: "dictionaryStatus", dictionary: await dictionaryStatus() };
     case "installDictionary": {
-      const manifest = await installDictionary(config.apiBase);
-      lookupCache.clear();
-      await notifyDictionaryChanged();
-      return { ok: true, type: "installDictionary", manifest };
+      // Do not await the full import on this message channel. The popup may close
+      // mid-install; progress is polled via dictionaryStatus, and a keep-alive +
+      // storage snapshot keep the job visible after reopen.
+      const pending = installDictionary(config.apiBase);
+      void pending.then(async () => {
+        lookupCache.clear();
+        await notifyDictionaryChanged();
+      }).catch(() => undefined);
+      try {
+        const manifest = await Promise.race([
+          pending,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 150)),
+        ]);
+        if (manifest) return { ok: true, type: "installDictionary", manifest };
+      } catch (error) {
+        // Fast failures (manifest/network) still surface immediately.
+        throw error;
+      }
+      return { ok: true, type: "installDictionary" };
     }
     case "removeDictionary":
       await removeDictionary();
@@ -564,7 +584,13 @@ function errorResponse(err: unknown, requestType = "unknown"): { ok: false; erro
   const error = formatBackgroundError(err);
   console.error("[Shirabe background] request failed", { requestType, error: err, formatted: error });
   // A telemetry request that fails must not report itself and loop.
-  if (requestType !== "telemetry") captureException(err, "background", { request: requestType });
+  if (requestType !== "telemetry") {
+    captureException(err, "background", { request: requestType });
+    // Named failure counters for the shapes worth alerting on, distinct from the
+    // raw exception: onboarding (dictionary install) and backend health (5xx).
+    if (requestType === "installDictionary") captureEvent("dictionary_install_failed", { request: requestType });
+    if (err instanceof ApiError && err.status >= 500) captureEvent("api_error", { status: String(err.status), request: requestType });
+  }
   return { ok: false, error: `request: ${requestType}\n${error}` };
 }
 
@@ -670,7 +696,10 @@ const audioCache = new LruCache<string>(64);
 async function fetchAudioDataUrl(url: string): Promise<string> {
   if (!isR2AudioUrl(url)) throw new Error("Refusing to fetch a non-Shirabe audio URL.");
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`Audio fetch failed (${response.status}).`);
+  if (!response.ok) {
+    captureEvent("audio_fetch_failed", { status: String(response.status) });
+    throw new Error(`Audio fetch failed (${response.status}).`);
+  }
   const buffer = new Uint8Array(await response.arrayBuffer());
   const mediaType = response.headers.get("content-type") || "audio/mp4";
   let binary = "";
