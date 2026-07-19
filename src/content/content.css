@@ -19,34 +19,138 @@ html:not(.sb-reader-off) .player-timedtext-text-container {
   user-select: text !important;
 }
 
+/* Raw-text scan highlight: snaps to exactly the matched term under the cursor on
+   an unparsed page (CSS Custom Highlight API, registered in content/popup.ts).
+   A highlight pseudo — it paints over the text without touching the user's real
+   selection, and is a no-op where the browser lacks the API. */
+::highlight(sb-scan) {
+  background-color: rgba(14, 165, 233, 0.28);
+}
+
+/* Caption pills (YouTube / Netflix / asbplayer): room for furigana above the
+   line, state cues as text-decoration, white furigana. The host keeps its own
+   pill (background/color/font) — we only wrap the segment that owns those
+   styles, so we do not re-paint the whole cue. */
+html:not(.sb-reader-off) :is(
+  .ytp-caption-segment,
+  .player-timedtext-text-container > span,
+  .asbplayer-subtitles,
+  .asb-subtitles
+) {
+  padding-top: 0.35em;
+  padding-bottom: 0.35em;
+  /* Reserve the furigana band inside every line box, before we ever wrap a word.
+     Furigana stays in flow (ruby-position: over) so it reserves its own space per
+     line and can't overlap the line above when a cue wraps — but a line-height
+     roomy enough to contain the annotation means a raw line and a furigana line
+     are the same height, so parsing or revealing a reading never jumps the cue. */
+  line-height: 1.9;
+}
+
+html:not(.sb-reader-off) :is(
+  .ytp-caption-segment,
+  .player-timedtext-text-container,
+  .asbplayer-subtitles,
+  .asb-subtitles,
+  .asbplayer-offscreen
+) {
+  .sb-word {
+    --sb-caption-line: transparent;
+    --sb-caption-style: solid;
+    /* Inherit YT's caption ink (usually white) instead of page body color. */
+    color: inherit;
+    border-bottom: 0 !important;
+    text-decoration-line: underline;
+    text-decoration-style: var(--sb-caption-style);
+    text-decoration-color: var(--sb-caption-line);
+    text-underline-offset: 0.1em;
+    text-decoration-thickness: 0.11em;
+    text-decoration-skip-ink: none;
+  }
+  .sb-word:hover {
+    /* Light wash on dark pill — page indigo tint is muddy over video. */
+    background-color: rgba(255, 255, 255, 0.14);
+  }
+  .sb-new { --sb-caption-line: #7dd3fc; }
+  .sb-learning { --sb-caption-line: #fbbf24; }
+  .sb-due { --sb-caption-line: #f87171; }
+  .sb-none { --sb-caption-line: rgba(255, 255, 255, 0.55); --sb-caption-style: dotted; }
+  .sb-known { text-decoration-line: none; }
+
+  /* Caption furigana matches the cue ink + a light outline. It stays in flow
+     over the kanji; the reserved line-height above keeps it from growing (or
+     jumping) the cue and from colliding with the previous line when a cue wraps.
+     A tight rt line-height keeps the annotation itself compact within that band. */
+  .sb-word ruby {
+    ruby-position: over;
+    ruby-align: center;
+    color: inherit;
+  }
+  .sb-word ruby rt {
+    color: inherit;
+    font-size: 0.5em;
+    font-weight: 600;
+    line-height: 1.1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.75);
+  }
+}
+
+html:not(.sb-reader-off)[data-sb-state-preset="colorVision"] :is(
+  .ytp-caption-segment, .player-timedtext-text-container,
+  .asbplayer-subtitles, .asb-subtitles, .asbplayer-offscreen
+) {
+  .sb-new { --sb-caption-line: #7ec8e3; --sb-caption-style: double; text-decoration-thickness: 0.14em; }
+  .sb-learning { --sb-caption-line: #f0c14a; --sb-caption-style: dashed; }
+  .sb-due { --sb-caption-line: #e8a0c0; --sb-caption-style: dotted; }
+}
+html:not(.sb-reader-off)[data-sb-state-preset="minimal"] :is(
+  .ytp-caption-segment, .player-timedtext-text-container,
+  .asbplayer-subtitles, .asb-subtitles, .asbplayer-offscreen
+) {
+  .sb-new { --sb-caption-line: #fff; --sb-caption-style: double; }
+  .sb-learning { --sb-caption-line: #fff; --sb-caption-style: dashed; }
+  .sb-due { --sb-caption-line: #fff; --sb-caption-style: dotted; }
+  .sb-none { --sb-caption-line: rgba(255, 255, 255, 0.65); --sb-caption-style: dotted; }
+}
+
 .sb-word {
   cursor: help;
   border-radius: 3px;
   transition: background-color 0.12s ease;
 }
 .sb-word:hover {
-  background-color: rgba(79, 70, 229, 0.16);
+  background-color: rgba(3, 105, 161, 0.14);
 }
 
 /* Furigana shouldn't blow up line height when readings are shown. */
 .sb-word ruby rt {
   font-size: 0.55em;
-  color: #6366f1;
+  color: #0369a1;
   user-select: none;
 }
+/* Reserve the furigana row even when a reading is hidden, so revealing one on
+   hover — or a cue changing which words are known — never reflows the caption:
+   the classic furigana "twitch". visibility keeps the ruby box in layout (only
+   its paint toggles); display:none would collapse the row and jump the line.
+   A full "off" still collapses it — off never reveals on hover, so it can't
+   twitch. */
 .sb-furigana-unknown .sb-word:not(.sb-none) ruby rt,
-.sb-furigana-hover .sb-word ruby rt { display: none; }
-.sb-furigana-hover .sb-word:hover ruby rt { display: ruby-text; }
+.sb-furigana-hover .sb-word ruby rt { visibility: hidden; }
+.sb-furigana-hover .sb-word:hover ruby rt { visibility: visible; }
 .sb-furigana-off .sb-word ruby rt { display: none; }
 
 /* Off is a visual suspension, not a destructive revert. Keep the parsed DOM
    cached so re-enabling is instant, while making the page look and behave as
-   though Shirabe had not decorated it. */
+   though Shirabe had not decorated it. Caption cues use text-decoration, so
+   clear that too — border-bottom alone is not enough. */
 .sb-reader-off .sb-word,
 .sb-reader-off .sb-word:hover {
   cursor: inherit;
   border-bottom: 0 !important;
   background-color: transparent !important;
+  text-decoration: none !important;
+  text-decoration-line: none !important;
+  color: inherit;
 }
 .sb-reader-off .sb-word ruby rt { display: none !important; }
 .sb-reader-off .sb-i-plus-one { outline: 0 !important; }
@@ -54,7 +158,7 @@ html:not(.sb-reader-off) .player-timedtext-text-container {
 /* State coloring — a left-to-right cue from "learn this" to "got it". Bottom
    border keeps host text legible where a full highlight would be noisy. */
 .sb-new {
-  border-bottom: 2px solid #4f46e5;
+  border-bottom: 2px solid #0369a1;
 }
 .sb-learning {
   border-bottom: 2px solid #f59e0b;
@@ -67,7 +171,7 @@ html:not(.sb-reader-off) .player-timedtext-text-container {
 }
 /* Not yet tracked — a faint dotted hint that it's interactive. */
 .sb-none {
-  border-bottom: 1px dotted rgba(79, 70, 229, 0.5);
+  border-bottom: 1px dotted rgba(3, 105, 161, 0.5);
 }
 
 /* The color-vision preset pairs hue with a distinct line shape; the minimal
@@ -87,10 +191,10 @@ html:not(.sb-reader-off) .player-timedtext-text-container {
 .sb-status-bar {
   --sb-bar-surface: light-dark(#ffffff, #1a1a1e);
   --sb-bar-muted: light-dark(#f9fafb, oklch(25% 0.016 285.7));
-  --sb-bar-hover: light-dark(#eef2ff, oklch(28% 0.06 280));
+  --sb-bar-hover: light-dark(#e2f1fa, oklch(28% 0.06 245));
   --sb-bar-ink: light-dark(#374151, #e8e6e3);
   --sb-bar-outline: light-dark(#d1d5db, oklch(92% 0.02 285.7 / 0.18));
-  --sb-bar-accent: light-dark(#4f46e5, oklch(72% 0.18 280));
+  --sb-bar-accent: light-dark(#0369a1, oklch(72% 0.15 245));
   --sb-bar-shadow: 0 4px 18px light-dark(rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.5));
   color-scheme: light dark;
   position: fixed; z-index: 2147483645; left: 12px; bottom: 12px;
@@ -105,7 +209,7 @@ html:not(.sb-reader-off) .player-timedtext-text-container {
 }
 .sb-status-bar button:hover { background: var(--sb-bar-hover); }
 .sb-status-bar button:focus-visible { outline: 3px solid var(--sb-bar-accent); outline-offset: 2px; }
-.sb-i-plus-one { outline: 2px solid rgba(79, 70, 229, 0.28); outline-offset: 3px; }
+.sb-i-plus-one { outline: 2px solid rgba(3, 105, 161, 0.28); outline-offset: 3px; }
 
 @media (prefers-reduced-motion: reduce) {
   .sb-word { transition: none; }

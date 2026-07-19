@@ -1,7 +1,7 @@
 import { parse } from "../parser.js";
 
 export type DynamicIntegration = "netflix" | "ttsu" | "mokuro";
-type ParseTarget = (root: Node, showFurigana: boolean) => Promise<number>;
+type ParseTarget = (root: HTMLElement, showFurigana: boolean) => Promise<number>;
 
 const SELECTORS: Record<DynamicIntegration, string> = {
   netflix: ".player-timedtext-text-container",
@@ -32,6 +32,11 @@ export function startDynamicReader(integration: DynamicIntegration, showFurigana
 
 // Exported with an injectable parser so maintained site fixtures can prove the
 // selector and context contract without loading a third-party application.
+//
+// Netflix keeps the structure-preserving page parser: timed-text containers
+// often hold several absolutely positioned line spans, and an atomic
+// replaceChildren (YouTube-style) would wipe that layout. YouTube/asbplayer
+// use parseCaptionElement because each target is a single styled cue.
 export async function parseDynamicTargets(
   root: Document | Element,
   integration: DynamicIntegration,

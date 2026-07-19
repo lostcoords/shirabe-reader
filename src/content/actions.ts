@@ -7,12 +7,6 @@ import { applyStateEverywhere } from "./word.js";
 // word on success, and returns a human message for the caller to surface
 // (inline in the popup, or as a toast when fired from the keyboard).
 export type Outcome = { ok: boolean; message: string; cardUrl?: string };
-export type MediaCapture = { captureScreenshot?: boolean; imageDataUrl?: string; audioDataUrl?: string };
-const mediaByWord = new WeakMap<HTMLElement, MediaCapture>();
-
-export function setMediaCapture(word: HTMLElement, media: MediaCapture): void {
-  mediaByWord.set(word, media);
-}
 
 export const GRADES: Record<Rating, string> = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };
 const INTERVAL_KEYS = { 1: "again", 2: "hard", 3: "good", 4: "easy" } as const;
@@ -86,7 +80,11 @@ function numberFrom(value: string | undefined): number | undefined {
 async function saveRequest(word: HTMLElement, rating?: Rating) {
   const config = await loadConfig();
   const sentence = sentenceOf(word);
-  const media = mediaByWord.get(word) ?? {};
+  // Snap the source image for the mined card (Shirabe chrome hidden). Sentence
+  // text can be edited later in Shirabe. For a video subtitle, crop to the video
+  // frame — the surrounding page (comments, sidebar, browser chrome) isn't the
+  // scene the learner mined.
+  const imageDataUrl = await capturePageScreenshot(videoFrameFor(word));
   return send({
     type: "save",
     lemma: lemmaOf(word),
@@ -95,7 +93,77 @@ async function saveRequest(word: HTMLElement, rating?: Rating) {
     ...(config.preferredDeckId == null ? {} : { deckId: config.preferredDeckId }),
     ...(sentence ? { sentence } : {}),
     ...(rating == null ? {} : { rating }),
-    ...media,
+    ...(imageDataUrl ? { imageDataUrl } : {}),
+  });
+}
+
+// The video a mined subtitle plays over, or null for an ordinary page word.
+// data-media-timestamp is set on the caption context only when a video is
+// present (YouTube/asbplayer/Netflix), so it's the signal that a crop applies.
+function videoFrameFor(word: HTMLElement): HTMLVideoElement | null {
+  if (!word.closest("[data-media-timestamp]")) return null;
+  return document.querySelector("video");
+}
+
+/** Hide extension UI, snapshot the visible tab, restore UI, crop if asked. */
+async function capturePageScreenshot(cropTo?: HTMLVideoElement | null): Promise<string | undefined> {
+  const chrome = [...document.querySelectorAll<HTMLElement>(".sb-host, .sb-status-bar, .sb-toast")];
+  const previous = chrome.map((el) => el.style.getPropertyValue("visibility"));
+  for (const el of chrome) el.style.setProperty("visibility", "hidden", "important");
+  await nextPaint();
+  try {
+    const res = await send({ type: "captureTab" });
+    if (!res.ok) return undefined;
+    if (!cropTo) return res.imageDataUrl;
+    return (await cropToElement(res.imageDataUrl, cropTo)) ?? res.imageDataUrl;
+  } finally {
+    chrome.forEach((el, i) => {
+      if (previous[i]) el.style.setProperty("visibility", previous[i]);
+      else el.style.removeProperty("visibility");
+    });
+  }
+}
+
+// captureVisibleTab returns the whole viewport at device resolution. Map the
+// element's CSS-pixel viewport rect onto that image (scale = image px per CSS
+// px, so any zoom/DPR is handled) and redraw just that region. Returns undefined
+// if the element isn't laid out or the crop can't be produced — the caller then
+// keeps the full-frame shot rather than losing the image entirely.
+async function cropToElement(dataUrl: string, element: HTMLElement): Promise<string | undefined> {
+  const rect = element.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) return undefined;
+  const image = await loadImage(dataUrl).catch(() => undefined);
+  if (!image) return undefined;
+
+  const scaleX = image.naturalWidth / window.innerWidth;
+  const scaleY = image.naturalHeight / window.innerHeight;
+  const sx = Math.max(0, rect.left * scaleX);
+  const sy = Math.max(0, rect.top * scaleY);
+  const sw = Math.min(image.naturalWidth - sx, rect.width * scaleX);
+  const sh = Math.min(image.naturalHeight - sy, rect.height * scaleY);
+  if (sw < 1 || sh < 1) return undefined;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(sw);
+  canvas.height = Math.round(sh);
+  const context = canvas.getContext("2d");
+  if (!context) return undefined;
+  context.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("screenshot decode failed"));
+    image.src = src;
+  });
+}
+
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
 }
 

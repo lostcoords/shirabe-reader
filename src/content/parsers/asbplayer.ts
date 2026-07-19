@@ -1,5 +1,5 @@
-import { parse } from "../parser.js";
-type ParseTarget = (root: Node, showFurigana: boolean) => Promise<number>;
+import { mediaTimestamp, parseCaptionElement } from "../parser.js";
+type ParseTarget = (root: HTMLElement, showFurigana: boolean) => Promise<number>;
 
 // asbplayer subtitle parser. asbplayer injects an offscreen DOM cache of
 // subtitle lines (`.asbplayer-offscreen > div`) on any streaming page or on
@@ -19,6 +19,7 @@ const POLL_MS = 2000;
 
 let started = false;
 let furigana = true;
+let chain: Promise<void> = Promise.resolve();
 
 export function startAsbplayer(showFurigana: boolean): void {
   furigana = showFurigana;
@@ -29,15 +30,20 @@ export function startAsbplayer(showFurigana: boolean): void {
   let offscreen: Element | null = null;
   let debounce: number | undefined;
 
+  const schedule = (): void => {
+    window.clearTimeout(debounce);
+    debounce = window.setTimeout(() => {
+      // Serialize like YouTube so rapid cue updates don't double-wrap a line.
+      chain = chain.then(() => parseAsbplayerLines(document, furigana)).then(() => undefined, () => undefined);
+    }, 60);
+  };
+
   const attach = (root: Element): void => {
     lineObserver?.disconnect();
     offscreen = root;
-    lineObserver = new MutationObserver(() => {
-      window.clearTimeout(debounce);
-      debounce = window.setTimeout(() => void parseAsbplayerLines(document, furigana), 60);
-    });
+    lineObserver = new MutationObserver(() => schedule());
     lineObserver.observe(root, { childList: true, subtree: true, characterData: true });
-    void parseAsbplayerLines(document, furigana);
+    schedule();
   };
 
   const tryAttach = (): boolean => {
@@ -62,21 +68,20 @@ export function startAsbplayer(showFurigana: boolean): void {
   }).observe(document.documentElement, { childList: true, subtree: true });
 }
 
-export async function parseAsbplayerLines(root: Document | Element, showFurigana: boolean, parseTarget: ParseTarget = parse): Promise<number> {
-  const nodes = new Set<Element>();
-  for (const el of root.querySelectorAll(LINE)) nodes.add(el);
-  for (const el of root.querySelectorAll(VISIBLE)) nodes.add(el);
+export async function parseAsbplayerLines(root: Document | Element, showFurigana: boolean, parseTarget: ParseTarget = parseCaptionElement): Promise<number> {
+  const nodes = new Set<HTMLElement>();
+  for (const el of root.querySelectorAll(LINE)) nodes.add(el as HTMLElement);
+  for (const el of root.querySelectorAll(VISIBLE)) nodes.add(el as HTMLElement);
 
   let parsed = 0;
-  for (const el of nodes) {
-    if (el.querySelector(".sb-word") || (el as HTMLElement).dataset.sbParsed) continue;
-    // Skip empty / non-Japanese shells the cache may hold briefly.
-    if (!el.textContent?.trim()) continue;
-    const context = el as HTMLElement;
+  const timestamp = mediaTimestamp();
+  for (const context of nodes) {
+    // Skip empty / non-Japanese shells the cache may hold briefly. Do not skip
+    // just because a prior wrap exists — progressive lines can grow in place.
+    if (!context.textContent?.trim()) continue;
     context.dataset.integration = "asbplayer";
-    const video = document.querySelector("video");
-    if (video) context.dataset.mediaTimestamp = String(Math.round(video.currentTime * 1000));
-    parsed += await parseTarget(el, showFurigana);
+    if (timestamp != null) context.dataset.mediaTimestamp = timestamp;
+    parsed += await parseTarget(context, showFurigana);
   }
   return parsed;
 }

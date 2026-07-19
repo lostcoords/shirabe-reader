@@ -2,7 +2,9 @@ import { send } from "../common/messages.js";
 import type { ParsedToken } from "../common/types.js";
 import { applyStateEverywhere, renderToken } from "./word.js";
 
-const JAPANESE = /[぀-ヿ一-龯㐀-䶿ｦ-ﾟ]/;
+// Keep in sync with offline-dictionary's Japanese character set so caption
+// text that uses full-width alphanumerics (ＣＤ, Ｔシャツ) is still collected.
+const JAPANESE = /[々〇〻\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}０-９Ａ-Ｚａ-ｚｦ-ﾟ]/u;
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "CODE", "PRE", "RUBY", "RT", "RP"]);
 const PARSED_FLAG = "sbParsed"; // dataset key on the wrapper we insert
 let paused = false;
@@ -99,13 +101,50 @@ function buildWrapper(text: string, tokens: ParsedToken[], showFurigana: boolean
   return wrapper;
 }
 
+// Sentence terminators and the quote pairs that suspend them, following
+// Yomitan's sentence-parsing defaults.
+const SENTENCE_BOUNDARY = /[。．！？!?…\n]/;
+const QUOTE_PAIRS = new Map([["「", "」"], ["『", "』"], ["（", "）"], ["(", ")"], ["“", "”"]]);
+const CLOSING_QUOTES = new Map([...QUOTE_PAIRS].map(([open, close]) => [close, open]));
+
+// The sentence around `offset`, used as the mined card's context. A terminator
+// inside quoted speech does NOT end the sentence: 「行くぞ。」と彼は言った。 is one
+// sentence, and breaking on that inner 。 mined the fragment 」と彼は言った。 —
+// stray quote, speech lost. Scanning outward, an unmatched closing quote behind
+// us (or opening quote ahead) means we started inside a quotation, so keep going
+// until it is balanced.
 function sentenceAt(text: string, offset: number): { text: string; start: number } {
   let start = offset;
+  let depth = 0;
+  let insideQuote = false; // we began within a quotation, so it opens before us
+  while (start > 0) {
+    const char = text[start - 1];
+    if (CLOSING_QUOTES.has(char)) depth += 1; // entering a quotation, scanning back
+    else if (QUOTE_PAIRS.has(char)) {
+      if (depth === 0) { insideQuote = true; break; } // unmatched opener: quotation starts here
+      depth -= 1;
+    } else if (depth === 0 && SENTENCE_BOUNDARY.test(char)) break;
+    start -= 1;
+  }
+
   let end = offset;
-  const boundary = /[。！？!?\n]/;
-  while (start > 0 && !boundary.test(text[start - 1])) start -= 1;
-  while (end < text.length && !boundary.test(text[end])) end += 1;
-  const raw = text.slice(start, Math.min(text.length, end + 1));
+  depth = 0;
+  while (end < text.length) {
+    const char = text[end];
+    if (QUOTE_PAIRS.has(char)) depth += 1;
+    else if (CLOSING_QUOTES.has(char)) {
+      if (depth === 0) break; // an unmatched closer: the quotation ends here
+      depth -= 1;
+    } else if (depth === 0 && SENTENCE_BOUNDARY.test(char)) break;
+    end += 1;
+  }
+  // Keep the terminator itself, plus any closing quote that follows it (。」) —
+  // but not when the word sat inside the quotation, where the opening 「 was
+  // excluded too: mining 行く from 「行くぞ。」 gives 行くぞ。, not 行くぞ。」.
+  let stop = Math.min(text.length, end + 1);
+  if (!insideQuote) while (stop < text.length && CLOSING_QUOTES.has(text[stop])) stop += 1;
+
+  const raw = text.slice(start, stop);
   const leading = raw.length - raw.trimStart().length;
   return { text: raw.trim(), start: start + leading };
 }
@@ -127,6 +166,108 @@ export async function parse(root: Node, showFurigana: boolean, opts: ParseOption
   return nodes.length;
 }
 
+// The active <video>'s current time in milliseconds, or null when the frame has
+// no video — stamped onto caption cues (data-media-timestamp) so a mined card
+// can deep-link back to the moment. Read once per caption pass, not per cue.
+export function mediaTimestamp(): string | null {
+  const video = document.querySelector("video");
+  return video ? String(Math.round(video.currentTime * 1000)) : null;
+}
+
+/** True when `root` still has Japanese text outside our wraps. */
+export function hasUnparsedJapanese(root: Node, filter?: string): boolean {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => parseableTextNode(node, filter),
+  });
+  return walker.nextNode() != null;
+}
+
+// Atomic parse for short single-cue subtitle nodes (YouTube segments, asbplayer
+// lines). Uses the full flattened source so nested progressive spans don't split
+// mid-word, and re-runs whenever bare Japanese remains after a partial wrap.
+// Netflix keeps the structure-preserving page parser instead.
+//
+// Read the source with `sourceText`, not raw `textContent`: once a cue is
+// rendered with furigana on, our own `<rt>` readings live in the DOM and
+// `textContent` folds them back in (考え → 考えかんがえ). YouTube streams a cue by
+// appending to the same segment, so each growth trips the re-parse below — with
+// raw textContent the leaked reading re-tokenizes as literal source and
+// compounds on every update (考えかんがえかんがえかんがえた…). Stripping `<rt>`
+// keeps the snapshot to the actual caption text.
+export async function parseCaptionElement(root: HTMLElement, showFurigana: boolean): Promise<number> {
+  if (paused) return 0;
+  // Cheap tree-walk first: a fully-parsed cue just sitting on screen bails here
+  // without paying the deep clone in `sourceText` on every streamed-cue tick.
+  if (!hasUnparsedJapanese(root)) return 0;
+  const snapshot = sourceText(root);
+  if (!snapshot.trim() || !JAPANESE.test(snapshot)) return 0;
+
+  try {
+    const res = await send({ type: "parseBatch", texts: [snapshot] });
+    if (!res.ok) throw new Error(res.error);
+    if (res.dictionaryInstalling) throw new Error("The offline dictionary is still installing.");
+    // Cue moved on while we looked words up — drop the stale result.
+    if (!root.isConnected || sourceText(root) !== snapshot) return 0;
+    const tokens = res.tokens[0] ?? [];
+    reconcileCaption(root, buildWrapper(snapshot, tokens, showFurigana));
+    queueStateRefresh(tokens);
+    return 1;
+  } catch (err) {
+    console.warn("[Shirabe] caption parse failed:", err);
+    return 0;
+  }
+}
+
+// Mount a freshly built caption wrapper by reconciling against the one already
+// on screen, not by replacing it wholesale. Streamed captions grow by re-parsing
+// the whole line each cue (a late character can change a word boundary), but the
+// leading run of words is usually identical — replacing everything re-rendered
+// stable furigana on every frame, which read as a twitch. Keep the matching
+// prefix mounted so only the growing tail (and its ruby) actually re-renders.
+function reconcileCaption(root: HTMLElement, next: HTMLElement): void {
+  const mounted = [...root.children].find(
+    (child): child is HTMLElement => child instanceof HTMLElement && !!child.dataset[PARSED_FLAG],
+  );
+  if (!mounted) {
+    root.replaceChildren(next);
+    return;
+  }
+
+  const olds = [...mounted.childNodes];
+  const news = [...next.childNodes];
+  let i = 0;
+  while (i < olds.length && i < news.length && sameRendered(olds[i], news[i])) {
+    syncCaptionMining(olds[i], news[i]);
+    i += 1;
+  }
+  for (let j = olds.length - 1; j >= i; j -= 1) olds[j].remove();
+  for (let j = i; j < news.length; j += 1) mounted.append(news[j]);
+
+  // Drop the raw text YouTube appended alongside the wrapper as it streamed.
+  for (const sibling of [...root.childNodes]) if (sibling !== mounted) sibling.remove();
+}
+
+// Two rendered caption nodes are interchangeable when they read identically —
+// same gap text, or same word surface and furigana. State colour (a className)
+// is deliberately ignored so a word recoloured by a review stays put.
+function sameRendered(a: Node, b: Node): boolean {
+  if (a.nodeType !== b.nodeType) return false;
+  if (a.nodeType === Node.TEXT_NODE) return a.nodeValue === b.nodeValue;
+  return a instanceof HTMLElement && b instanceof HTMLElement
+    && a.dataset.lemma === b.dataset.lemma
+    && a.dataset.surface === b.dataset.surface
+    && a.innerHTML === b.innerHTML;
+}
+
+// The sentence around a kept word grows as the cue streams, so refresh its
+// mining offsets from the new render — a data-attribute write, no layout cost.
+function syncCaptionMining(a: Node, b: Node): void {
+  if (!(a instanceof HTMLElement) || !(b instanceof HTMLElement)) return;
+  a.dataset.sentence = b.dataset.sentence ?? "";
+  a.dataset.targetStart = b.dataset.targetStart ?? "";
+  a.dataset.targetEnd = b.dataset.targetEnd ?? "";
+}
+
 // ── Lazy viewport parsing ─────────────────────────────────────────────────────
 // Instead of parsing a whole page at once, discover its text blocks in idle
 // slices and parse them only as they near the viewport.
@@ -139,6 +280,12 @@ let lazyOpts: ParseOptions = {};
 const queuedBlocks = new Set<HTMLElement>();
 const pendingBlocks = new Set<HTMLElement>();
 const visibleBlocks = new Set<HTMLElement>();
+// In-flight lazy batches, so a block that scrolls out of view can cancel the
+// background lookups for its batch once none of the batch's blocks are visible.
+let parseRequestSeq = 0;
+const batchBlocks = new Map<number, Set<HTMLElement>>(); // requestId → the batch's blocks
+const blockRequest = new Map<HTMLElement, number>(); // block → its in-flight requestId
+const cancelledRequests = new Set<number>(); // requestIds we've told the worker to drop
 let blockFlushFrame = 0;
 const pendingStateLemmas = new Set<string>();
 let stateRefreshFrame = 0;
@@ -244,6 +391,16 @@ function enterBlock(block: HTMLElement): void {
 
 function exitBlock(block: HTMLElement): void {
   queuedBlocks.delete(block);
+  // If the block's batch is still in flight and none of its blocks are visible
+  // any more, cancel the remaining background lookups — nothing on screen needs
+  // them, and they'll re-parse if the reader scrolls back.
+  const requestId = blockRequest.get(block);
+  if (requestId === undefined || cancelledRequests.has(requestId)) return;
+  const members = batchBlocks.get(requestId);
+  if (members && ![...members].some((member) => visibleBlocks.has(member))) {
+    cancelledRequests.add(requestId);
+    void send({ type: "cancelParse", requestId }).catch(() => undefined);
+  }
 }
 
 export function setParsingPaused(value: boolean): void {
@@ -265,13 +422,15 @@ export function revertParsedPage(): void {
   visibleBlocks.clear();
   queuedBlocks.clear();
   for (const wrapper of document.querySelectorAll<HTMLElement>("[data-sb-parsed]")) {
-    wrapper.replaceWith(document.createTextNode(visibleSource(wrapper)));
+    wrapper.replaceWith(document.createTextNode(sourceText(wrapper)));
   }
   for (const block of document.querySelectorAll<HTMLElement>("[data-sb-block]")) delete block.dataset[LAZY_BLOCK_FLAG];
 }
 
-function visibleSource(wrapper: HTMLElement): string {
-  const clone = wrapper.cloneNode(true) as HTMLElement;
+// The element's text as it reads on the page — our injected `<rt>` furigana
+// readings stripped out, so re-parsing never mistakes a reading for source.
+function sourceText(element: HTMLElement): string {
+  const clone = element.cloneNode(true) as HTMLElement;
   for (const reading of clone.querySelectorAll("rt")) reading.remove();
   return clone.textContent ?? "";
 }
@@ -328,18 +487,27 @@ function scheduleBlockRetry(blocks: PreparedBlock[], delay: number): void {
 }
 
 async function parseBlockBatch(blocks: PreparedBlock[]): Promise<void> {
-  for (const item of blocks) pendingBlocks.add(item.block);
+  const requestId = ++parseRequestSeq;
+  batchBlocks.set(requestId, new Set(blocks.map((item) => item.block)));
+  for (const item of blocks) {
+    pendingBlocks.add(item.block);
+    blockRequest.set(item.block, requestId);
+  }
   const startedAt = performance.now();
   const generation = renderGeneration;
   try {
-    const response = await send({ type: "parseBatch", texts: blocks.map((item) => item.text) });
+    const response = await send({ type: "parseBatch", texts: blocks.map((item) => item.text), requestId });
     if (!response.ok) throw new Error(response.error);
     if (response.dictionaryInstalling) {
       scheduleBlockRetry(blocks, 2_000);
       return;
     }
-    if (generation !== renderGeneration) return;
+    // Reverted (full page revert) or fully cancelled (whole batch scrolled off).
+    if (generation !== renderGeneration || cancelledRequests.has(requestId)) return;
     blocks.forEach((item, blockIndex) => {
+      // A block that scrolled out of view mid-flight is left observed (not flagged
+      // parsed) so it re-parses if the reader scrolls back — no wasted render now.
+      if (!item.block.isConnected || !visibleBlocks.has(item.block)) return;
       const tokens = response.tokens[blockIndex] ?? [];
       const replacements = item.nodes.map((node, index) =>
         mappedWrapper(node.nodeValue ?? "", item.starts[index], item.text, tokens, lazyShowFurigana));
@@ -354,7 +522,21 @@ async function parseBlockBatch(blocks: PreparedBlock[]): Promise<void> {
       blocks: blocks.length, chars: blocks.reduce((sum, item) => sum + item.text.length, 0),
     });
   } finally {
-    for (const item of blocks) pendingBlocks.delete(item.block);
+    for (const item of blocks) {
+      pendingBlocks.delete(item.block);
+      blockRequest.delete(item.block);
+    }
+    batchBlocks.delete(requestId);
+    cancelledRequests.delete(requestId);
+    // A block can scroll back into view while its batch is still in flight — the
+    // intersection fires, but `enterBlock` ignores it because the block is still
+    // pending. Once the batch settles (cancelled, reverted, or a block that was
+    // off-screen at render time) nothing re-queues it, and IntersectionObserver
+    // will not fire again for a block that is already intersecting: the paragraph
+    // stays blank until the reader scrolls it out and back. Re-queue here instead.
+    for (const item of blocks) {
+      if (visibleBlocks.has(item.block) && !item.block.dataset[LAZY_BLOCK_FLAG]) enterBlock(item.block);
+    }
   }
 }
 

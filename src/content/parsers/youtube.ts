@@ -1,5 +1,5 @@
-import { parse } from "../parser.js";
-type ParseTarget = (root: Node, showFurigana: boolean) => Promise<number>;
+import { mediaTimestamp, parseCaptionElement } from "../parser.js";
+type ParseTarget = (root: HTMLElement, showFurigana: boolean) => Promise<number>;
 
 // YouTube captions parser. The generic page parser can't handle YouTube: the
 // on-screen subtitle text is injected into an overlay that's rebuilt on every
@@ -7,26 +7,42 @@ type ParseTarget = (root: Node, showFurigana: boolean) => Promise<number>;
 // container and parse each new subtitle segment as it appears. Segments are
 // short and transient, so we parse eagerly (lazy/viewport parsing would be
 // pointless for text that's already on screen and about to be replaced).
+//
+// Progressive/auto captions often grow a line in nested spans. We never skip a
+// segment just because it already has a word wrap — `parseCaptionElement`
+// re-tokenizes the full flattened text whenever bare Japanese remains.
+//
+// Parse only `.ytp-caption-segment` when present. That node owns YouTube's
+// inline styles (dark pill, white ink, font size). Also matching the parent
+// `.caption-visual-line` and calling replaceChildren on it wiped the segment
+// and left white text with no background — unreadable on light frames.
 const PLAYER = ".html5-video-player";
 const CONTAINER = ".ytp-caption-window-container, .caption-window";
-const SEGMENT = ".ytp-caption-segment, .captions-text .caption-visual-line";
+const SEGMENT = ".ytp-caption-segment";
+const SEGMENT_FALLBACK = ".captions-text .caption-visual-line";
 
 export function startYouTubeCaptions(showFurigana: boolean): void {
   const root = document.querySelector(PLAYER) ?? document.body;
   let container: Element | null = null;
   let captionObserver: MutationObserver | null = null;
   let debounce: number | undefined;
+  let chain: Promise<void> = Promise.resolve();
+
+  const schedule = (el: Element): void => {
+    window.clearTimeout(debounce);
+    debounce = window.setTimeout(() => {
+      // Serialize so overlapping cue updates don't double-wrap the same node.
+      chain = chain.then(() => parseYouTubeSegments(el, showFurigana)).then(() => undefined, () => undefined);
+    }, 60);
+  };
 
   const attach = (el: Element): void => {
     captionObserver?.disconnect();
     container = el;
-    captionObserver = new MutationObserver(() => {
-      window.clearTimeout(debounce);
-      debounce = window.setTimeout(() => void parseYouTubeSegments(el, showFurigana), 60);
-    });
+    captionObserver = new MutationObserver(() => schedule(el));
     // Cues change via childList and text updates, so watch both.
     captionObserver.observe(el, { childList: true, subtree: true, characterData: true });
-    void parseYouTubeSegments(el, showFurigana);
+    schedule(el);
   };
 
   const existing = root.querySelector(CONTAINER);
@@ -40,16 +56,21 @@ export function startYouTubeCaptions(showFurigana: boolean): void {
   }).observe(root, { childList: true, subtree: true });
 }
 
-export async function parseYouTubeSegments(container: Element, showFurigana: boolean, parseTarget: ParseTarget = parse): Promise<number> {
+/** Prefer styled caption segments; fall back to visual lines only if needed. */
+export function captionTargets(container: Element): HTMLElement[] {
+  const segments = [...container.querySelectorAll<HTMLElement>(SEGMENT)];
+  if (segments.length) return segments;
+  return [...container.querySelectorAll<HTMLElement>(SEGMENT_FALLBACK)];
+}
+
+export async function parseYouTubeSegments(container: Element, showFurigana: boolean, parseTarget: ParseTarget = parseCaptionElement): Promise<number> {
   let parsed = 0;
-  for (const segment of container.querySelectorAll(SEGMENT)) {
-    // Skip a segment we've already wrapped; YouTube swaps in fresh nodes per cue.
-    if (segment.querySelector(".sb-word") || (segment as HTMLElement).querySelector("[data-sb-parsed]")) continue;
-    const context = segment as HTMLElement;
+  const timestamp = mediaTimestamp();
+  for (const context of captionTargets(container)) {
+    if (!context.textContent?.trim()) continue;
     context.dataset.integration = "youtube_captions";
-    const video = document.querySelector("video");
-    if (video) context.dataset.mediaTimestamp = String(Math.round(video.currentTime * 1000));
-    parsed += await parseTarget(segment, showFurigana);
+    if (timestamp != null) context.dataset.mediaTimestamp = timestamp;
+    parsed += await parseTarget(context, showFurigana);
   }
   return parsed;
 }

@@ -1,9 +1,10 @@
 import { send, type Rating } from "../common/messages.js";
 import { sendDictionary } from "../common/dictionary-port.js";
 import type { Definition, Example, Sense, SentenceToken } from "../common/types.js";
-import { applyStudyDetails, cardUrlFor, grade, GRADES, markKnown, save, setMediaCapture, studyUrlForWord, type MediaCapture, type Outcome } from "./actions.js";
+import { applyStudyDetails, cardUrlFor, grade, GRADES, markKnown, save, studyUrlForWord, type Outcome } from "./actions.js";
 import { refreshStatusBar } from "./status-bar.js";
-import { furiganaSegments, hasKanji } from "./word.js";
+import { rangeFromCaret } from "./dom-text.js";
+import { appendFurigana, hasKanji } from "./word.js";
 import { isR2AudioUrl } from "../common/audio.js";
 import { toast } from "./toast.js";
 
@@ -18,7 +19,7 @@ let currentKey: string | null = null;
 let showTimer: number | undefined;
 let hideTimer: number | undefined;
 let token = 0; // guards against a slow lookup landing after we've moved on
-let canWrite = false; // key carries WRITE_SRS → render the mining controls
+let canWrite = false; // WRITE_SRS + entitled → render mining controls
 const lookupHistory: PopupTarget[] = [];
 let historyIndex = -1;
 let navigatingHistory = false;
@@ -114,7 +115,7 @@ export function showNow(word: HTMLElement): void {
 // the text window beginning at the caret and the first character's rectangle;
 // the local dictionary chooses the longest/deinflected match. A detached word
 // element carries the same action data contract as parsed `.sb-word` spans.
-export function scheduleTextLookup(query: string, rect: DOMRect, sentence: string, targetStart = 0): void {
+export function scheduleTextLookup(query: string, rect: DOMRect, sentence: string, targetStart = 0, anchor?: ScanAnchor): void {
   window.clearTimeout(hideTimer);
   window.clearTimeout(showTimer);
   showTimer = window.setTimeout(() => {
@@ -124,7 +125,7 @@ export function scheduleTextLookup(query: string, rect: DOMRect, sentence: strin
     word.dataset.state = "none";
     word.dataset.sentence = sentence;
     word.dataset.targetStart = String(targetStart);
-    void showTarget({ key: `scan:${query}:${Math.round(rect.left)}:${Math.round(rect.top)}`, query, rect, word, depth: 0 });
+    void showTarget({ key: `scan:${query}:${Math.round(rect.left)}:${Math.round(rect.top)}`, query, rect, word, depth: 0, anchor });
   }, 120);
 }
 
@@ -133,9 +134,22 @@ export function scheduleHide(): void {
   hideTimer = window.setTimeout(hide, 250); // grace to cross the gap onto the popup
 }
 
+// A page-level highlight of the matched span for raw-text scans, via the CSS
+// Custom Highlight API — it never touches the user's real text selection. Styled
+// by `::highlight(sb-scan)` in content.css; a no-op where the API is unsupported.
+const SCAN_HIGHLIGHT = "sb-scan";
+function highlightScan(range: Range | null): void {
+  const registry = (CSS as unknown as { highlights?: { set(name: string, value: unknown): void; delete(name: string): void } }).highlights;
+  const HighlightCtor = (globalThis as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
+  if (!registry || !HighlightCtor) return;
+  if (range) registry.set(SCAN_HIGHLIGHT, new HighlightCtor(range));
+  else registry.delete(SCAN_HIGHLIGHT);
+}
+
 function hide(): void {
   box?.classList.remove("sb-visible");
   currentKey = null;
+  highlightScan(null);
 }
 
 // Close now (a click outside): cancel any pending show/hide too.
@@ -154,7 +168,12 @@ function showWord(word: HTMLElement): void {
   void showTarget({ key: `word:${lemma}`, query: lemma, rect: word.getBoundingClientRect(), word, depth: 0 });
 }
 
-type PopupTarget = { key: string; query: string; rect: DOMRect; word: HTMLElement; depth: number; kind?: "word" | "kanji" };
+// Where a raw-text scan started, so we can highlight exactly the matched span on
+// the page once the dictionary tells us how long the match is (Yomitan's
+// `originalTextLength`). Absent for `.sb-word` hovers (already highlighted) and
+// nested/selection lookups.
+type ScanAnchor = { node: Text; offset: number };
+type PopupTarget = { key: string; query: string; rect: DOMRect; word: HTMLElement; depth: number; kind?: "word" | "kanji"; anchor?: ScanAnchor };
 
 async function showTarget(target: PopupTarget): Promise<void> {
   if (target.key === currentKey && box?.classList.contains("sb-visible")) return;
@@ -163,10 +182,11 @@ async function showTarget(target: PopupTarget): Promise<void> {
   if (!navigatingHistory) recordHistory(target);
   navigatingHistory = false;
   const mine = ++token;
+  highlightScan(null); // drop any previous scan highlight until this match resolves
 
   const el = element();
   el.replaceChildren(loadingRow(target.query));
-  position(target.rect);
+  position(target.rect, target.word);
   el.classList.add("sb-visible");
 
   const res = await send({ type: "lookup", query: target.query, kind: target.kind ?? "word" });
@@ -178,7 +198,7 @@ async function showTarget(target: PopupTarget): Promise<void> {
   }
   if (res.dictionaryInstalling) {
     el.replaceChildren(loadingRow(target.query), messageRow("Preparing the offline dictionary…"));
-    position(target.rect);
+    position(target.rect, target.word);
     void ensureDictionaryInstallation();
     void retryWhenDictionaryReady(target, mine);
     return;
@@ -187,10 +207,13 @@ async function showTarget(target: PopupTarget): Promise<void> {
     target.word.dataset.lemma = res.definition.headword;
     target.word.dataset.surface = res.definition.sourceForm ?? target.query;
     if (res.definition.reading) target.word.dataset.reading = res.definition.reading;
+    const matched = res.definition.sourceForm ?? target.query;
     const targetStart = Number(target.word.dataset.targetStart);
     if (Number.isInteger(targetStart) && targetStart >= 0) {
-      target.word.dataset.targetEnd = String(targetStart + (res.definition.sourceForm ?? target.query).length);
+      target.word.dataset.targetEnd = String(targetStart + matched.length);
     }
+    // Snap the on-page highlight to exactly the matched span (raw-text scans).
+    if (target.anchor?.node.isConnected) highlightScan(rangeFromCaret(target.anchor.node, target.anchor.offset, matched.length));
     if (canWrite) {
       const states = await send({ type: "states", lemmas: [res.definition.headword] });
       if (mine !== token) return;
@@ -206,7 +229,7 @@ async function showTarget(target: PopupTarget): Promise<void> {
     }
   }
   el.replaceChildren(...definitionRows(res.definition, target.query, target.word));
-  position(target.rect);
+  position(target.rect, target.word);
 }
 
 function ensureDictionaryInstallation(): Promise<void> {
@@ -237,7 +260,7 @@ async function retryWhenDictionaryReady(target: PopupTarget, mine: number): Prom
         : "";
       const stage = response.dictionary.stage ?? "Preparing the offline dictionary";
       element().replaceChildren(loadingRow(target.query), messageRow(`${stage}${progress}`));
-      position(target.rect);
+      position(target.rect, target.word);
       continue;
     }
     currentKey = null;
@@ -247,7 +270,15 @@ async function retryWhenDictionaryReady(target: PopupTarget, mine: number): Prom
   }
 }
 
-function position(rect: DOMRect): void {
+// Caption line/cue boxes to clear when a subtitle word is looked up — the popup
+// must never cover the rest of the caption, only sit beside or clear of it.
+const CAPTION_SELECTOR = [
+  ".caption-window", ".ytp-caption-window-container", // YouTube
+  ".player-timedtext-text-container", // Netflix
+  ".asbplayer-subtitles", // asbplayer
+].join(",");
+
+function position(rect: DOMRect, word?: HTMLElement): void {
   if (!host) return;
   const margin = 12;
   host.style.visibility = "hidden";
@@ -257,26 +288,30 @@ function position(rect: DOMRect): void {
   const viewW = document.documentElement.clientWidth;
   const viewH = document.documentElement.clientHeight;
 
-  const roomRight = viewW - rect.right - margin;
-  const roomLeft = rect.left - margin;
+  // The box the popup must not overlap. For a subtitle word that's the whole
+  // caption line (so we don't bury the rest of the sentence being read); for an
+  // ordinary page word it's just the word, preserving the original behaviour.
+  const avoid = captionRect(word) ?? rect;
+  const roomRight = viewW - avoid.right - margin;
+  const roomLeft = avoid.left - margin;
   let left: number;
   let top: number;
 
-  // Prefer the page margin beside the word when a fixed-size card fits there;
-  // this preserves the sentence being read. Narrow layouts fall back above or
-  // below without ever overlapping the target word itself.
+  // Prefer the page margin beside the obstacle when a fixed-size card fits there;
+  // this preserves the sentence being read. Narrow layouts (or a wide caption
+  // spanning the frame) fall back above or below, clearing the obstacle entirely.
   if (roomRight >= width) {
-    left = rect.right + margin;
+    left = avoid.right + margin;
     top = rect.top;
   } else if (roomLeft >= width) {
-    left = rect.left - width - margin;
+    left = avoid.left - width - margin;
     top = rect.top;
   } else {
     left = rect.left + rect.width / 2 < viewW / 2 ? rect.left : rect.right - width;
-    const roomBelow = viewH - rect.bottom - margin;
-    const roomAbove = rect.top - margin;
-    top = rect.bottom + margin;
-    if (height > roomBelow && roomAbove > roomBelow) top = rect.top - height - margin;
+    const roomBelow = viewH - avoid.bottom - margin;
+    const roomAbove = avoid.top - margin;
+    top = avoid.bottom + margin;
+    if (height > roomBelow && roomAbove > roomBelow) top = avoid.top - height - margin;
   }
   left = Math.max(margin, Math.min(left, viewW - width - margin));
   top = Math.max(margin, Math.min(top, viewH - height - margin));
@@ -284,6 +319,14 @@ function position(rect: DOMRect): void {
   host.style.left = `${window.scrollX + left}px`;
   host.style.top = `${window.scrollY + top}px`;
   host.style.visibility = "";
+}
+
+// The caption line's on-screen rect when `word` is a subtitle, else null. Prefers
+// the cue container (full line width); falls back to the media caption context we
+// tag with data-media-timestamp.
+function captionRect(word?: HTMLElement): DOMRect | null {
+  const caption = word?.closest(CAPTION_SELECTOR) ?? word?.closest("[data-media-timestamp]");
+  return caption ? caption.getBoundingClientRect() : null;
 }
 
 function loadingRow(lemma: string): Node {
@@ -372,26 +415,18 @@ function headRow(def: Definition): Node {
 
   // Furigana sits over the headword when it carries kanji — the reading then
   // reads in place, so the separate reading chip beside it would be redundant.
-  // A kana-only headword keeps the plain text + reading chip (nothing to gloss).
+  // A kana-only headword keeps the plain text, and shows the reading chip only
+  // when it actually adds something — for この the reading IS この, so drop it.
   if (def.reading && hasKanji(def.headword)) {
-    // Furigana sits over each kanji run only; okurigana/kana render plain.
-    for (const segment of furiganaSegments(def.headword, def.reading)) {
-      if (!segment.ruby) {
-        link.append(segment.text);
-        continue;
-      }
-      const ruby = document.createElement("ruby");
-      ruby.append(segment.text);
-      const rt = document.createElement("rt");
-      rt.textContent = segment.ruby;
-      ruby.append(rt);
-      link.append(ruby);
-    }
+    // Furigana sits over each kanji run only; okurigana/kana render plain. The
+    // headword is always the dictionary form, so its reading needs no inflection
+    // adjustment (unlike a token surface) — pass it straight through.
+    appendFurigana(link, def.headword, def.reading);
     head.append(link);
   } else {
     link.textContent = def.headword;
     head.append(link);
-    if (def.reading) {
+    if (def.reading && def.reading !== def.headword) {
       const reading = document.createElement("span");
       reading.className = "sb-popup-reading";
       reading.textContent = def.reading;
@@ -646,25 +681,14 @@ function renderActions(word: HTMLElement, wrap: HTMLElement): void {
       grades.append(button(`${GRADES[r]}${intervals?.[key] ? ` ${intervals[key]}` : ""}`, `sb-grade sb-g${r}`, `${r}`, () => run(word, wrap, () => grade(word, r))));
     }
     wrap.append(grades);
-  } else if (saved) {
-    const schedule = document.createElement("div");
-    schedule.className = "sb-schedule";
-    schedule.textContent = word.dataset.state === "new"
-      ? "Ready for its first review in Shirabe"
-      : word.dataset.state === "known"
-        ? "Marked known"
-        : "Next review is already scheduled";
-    wrap.append(schedule);
   }
-
-  // Always offer a Shirabe deep-link once the word is a card — exact card when
-  // we know cardId, otherwise the card browser search for the lemma.
-  if (saved) wrap.append(cardLink(word));
 
   const extra = document.createElement("div");
   extra.className = "sb-extra";
+  // Open card sits beside Known once the word is saved (exact card when we
+  // know cardId, otherwise the card browser search for the lemma).
+  if (saved) extra.append(cardLink(word));
   if (!saved) extra.append(button("＋ Save", "sb-btn-save", "S", () => run(word, wrap, () => save(word))));
-  if (!saved && word.dataset.sentence) extra.append(button("Edit context", "sb-btn-context", "", () => editContext(word, wrap)));
   extra.append(button("✓ Known", "sb-btn-known", "K", () => run(word, wrap, () => markKnown(word))));
   wrap.append(extra);
 
@@ -683,10 +707,11 @@ function intervalPreviews(word: HTMLElement): { again: string; hard: string; goo
 
 function cardLink(word: HTMLElement): HTMLAnchorElement {
   const link = document.createElement("a");
-  link.className = "sb-card-link";
+  // Same row / weight as Known — solid accent (site primary).
+  link.className = "sb-btn sb-btn-open";
   link.target = "_blank";
   link.rel = "noopener noreferrer";
-  link.textContent = "Open card in Shirabe →";
+  link.textContent = "Open card";
   // Synchronous placeholder so the control is always clickable immediately;
   // then upgrade to the real host (and card_id when known).
   link.href = word.dataset.cardUrl || "#";
@@ -708,74 +733,6 @@ function cardLink(word: HTMLElement): HTMLAnchorElement {
     });
   }
   return link;
-}
-
-function editContext(word: HTMLElement, wrap: HTMLElement): void {
-  const editor = document.createElement("form");
-  editor.className = "sb-context-editor";
-  const sentence = document.createElement("textarea");
-  sentence.value = word.dataset.sentence ?? "";
-  sentence.setAttribute("aria-label", "Sentence context");
-  const translation = document.createElement("input");
-  translation.value = word.dataset.translation ?? "";
-  translation.placeholder = "Translation (optional)";
-  const screenshotLabel = document.createElement("label");
-  screenshotLabel.className = "sb-context-check";
-  const screenshot = document.createElement("input");
-  screenshot.type = "checkbox";
-  screenshotLabel.append(screenshot, " Attach a screenshot of the visible page");
-  const mediaLabel = document.createElement("label");
-  mediaLabel.className = "sb-context-file";
-  mediaLabel.textContent = "Or attach an image/audio clip";
-  const mediaInput = document.createElement("input");
-  mediaInput.type = "file";
-  mediaInput.accept = "image/png,image/jpeg,image/webp,audio/mpeg,audio/mp4,audio/ogg,audio/webm,audio/wav";
-  mediaLabel.append(mediaInput);
-  const media: MediaCapture = {};
-  const mediaFeedback = document.createElement("span");
-  mediaFeedback.className = "sb-context-media-feedback";
-  mediaInput.addEventListener("change", async () => {
-    const file = mediaInput.files?.[0];
-    delete media.imageDataUrl;
-    delete media.audioDataUrl;
-    if (!file) return;
-    const max = file.type.startsWith("image/") ? 5 * 1024 * 1024 : 2 * 1024 * 1024;
-    if (file.size > max) {
-      mediaFeedback.textContent = `Choose a ${file.type.startsWith("image/") ? "picture under 5 MB" : "clip under 2 MB"}.`;
-      mediaInput.value = "";
-      return;
-    }
-    const dataUrl = await fileDataUrl(file);
-    if (file.type.startsWith("image/")) media.imageDataUrl = dataUrl;
-    else media.audioDataUrl = dataUrl;
-    mediaFeedback.textContent = file.name;
-  });
-  const saveButton = document.createElement("button");
-  saveButton.type = "submit";
-  saveButton.textContent = "Use this context";
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.textContent = "Cancel";
-  cancel.addEventListener("click", () => renderActions(word, wrap));
-  editor.append(sentence, translation, screenshotLabel, mediaLabel, mediaFeedback, saveButton, cancel);
-  editor.addEventListener("submit", (event) => {
-    event.preventDefault();
-    word.dataset.sentence = sentence.value.trim();
-    word.dataset.translation = translation.value.trim();
-    setMediaCapture(word, { ...media, captureScreenshot: screenshot.checked && !media.imageDataUrl });
-    renderActions(word, wrap);
-  });
-  wrap.replaceChildren(editor);
-  sentence.focus();
-}
-
-function fileDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error("Could not read media."));
-    reader.readAsDataURL(file);
-  });
 }
 
 async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<Outcome>): Promise<void> {
@@ -849,16 +806,18 @@ const CSS = `
   --sb-outline: light-dark(#e5e7eb, oklch(92% 0.02 285.7 / 0.14));
   --sb-outline-strong: light-dark(#d1d5db, oklch(92% 0.02 285.7 / 0.22));
   --sb-divider: light-dark(#f3f4f6, oklch(92% 0.02 285.7 / 0.1));
-  --sb-accent: light-dark(#4f46e5, oklch(72% 0.18 280));
-  --sb-accent-hover: light-dark(#4338ca, oklch(78% 0.16 280));
-  --sb-accent-tint: light-dark(#eef2ff, oklch(26% 0.08 280));
-  --sb-accent-tint-strong: light-dark(#e0e7ff, oklch(32% 0.1 280));
-  --sb-accent-border: light-dark(#a5b4fc, oklch(60% 0.14 280));
-  --sb-source: light-dark(#6366f1, oklch(75% 0.16 280));
+  /* Site primary (sky) — pitch, readings, Save, Open card, links. Same tokens
+     as shirabe.org --primary so the popup never reads purple. */
+  --sb-accent: light-dark(#0369a1, oklch(72% 0.15 245));
+  --sb-accent-hover: light-dark(#025a83, oklch(80% 0.13 245));
+  --sb-accent-tint: light-dark(#e2f1fa, oklch(26% 0.08 245));
+  --sb-accent-tint-strong: light-dark(#cfe7f6, oklch(32% 0.1 245));
+  --sb-accent-border: light-dark(#7eb8d9, oklch(60% 0.1 245));
+  --sb-source: light-dark(#0369a1, oklch(72% 0.15 245));
   --sb-common-bg: light-dark(#dcfce7, oklch(26% 0.09 155));
   --sb-common-fg: light-dark(#166534, oklch(83% 0.19 155));
-  --sb-jlpt-bg: light-dark(#e0e7ff, oklch(26% 0.09 280));
-  --sb-jlpt-fg: light-dark(#3730a3, oklch(80% 0.14 280));
+  --sb-jlpt-bg: light-dark(#e2f1fa, oklch(26% 0.08 245));
+  --sb-jlpt-fg: light-dark(#025a83, oklch(78% 0.13 245));
   --sb-error: light-dark(#b91c1c, oklch(75% 0.17 25));
   --sb-shadow: 0 10px 30px light-dark(rgba(15, 23, 42, 0.18), rgba(0, 0, 0, 0.55));
   --sb-on-solid: #ffffff;
@@ -959,7 +918,6 @@ const CSS = `
 
 .sb-actions { flex: 0 0 auto; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--sb-divider); }
 .sb-membership { margin-bottom: 6px; color: var(--sb-ink-muted); font-size: 11px; }
-.sb-schedule { margin-bottom: 6px; color: var(--sb-ink-muted); font-size: 12px; }
 .sb-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .sb-extra { display: flex; gap: 6px; margin-top: 6px; }
 .sb-extra .sb-btn { flex: 1; }
@@ -983,57 +941,24 @@ const CSS = `
 .sb-btn-save { background: var(--sb-accent); } .sb-btn-save:hover { background: var(--sb-accent-hover); }
 .sb-btn-known { background: var(--sb-known-btn); } .sb-btn-known:hover { background: var(--sb-known-btn-hover); }
 .sb-btn-known kbd, .sb-btn-save kbd { background: rgba(255, 255, 255, 0.22); }
-.sb-btn-context { background: var(--sb-surface); color: var(--sb-ink-muted); border-color: var(--sb-outline-strong); }
-.sb-btn-context:hover { background: var(--sb-surface-muted); }
-.sb-context-editor { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
-.sb-context-editor textarea, .sb-context-editor input {
-  grid-column: 1 / -1; width: 100%; border: 1px solid var(--sb-outline-strong); border-radius: 7px;
-  padding: 7px; font: 13px/1.45 system-ui,sans-serif;
-  background: var(--sb-surface); color: var(--sb-ink);
+/* Solid accent — pairs with Known in .sb-extra. */
+.sb-btn-open {
+  background: var(--sb-accent);
+  color: var(--sb-on-solid);
+  text-decoration: none;
 }
-.sb-context-editor textarea { min-height: 72px; resize: vertical; }
-.sb-context-editor button {
-  cursor: pointer; border: 1px solid var(--sb-outline-strong); border-radius: 7px;
-  padding: 6px 8px; background: var(--sb-surface); color: var(--sb-ink);
-}
-.sb-context-check, .sb-context-file, .sb-context-media-feedback { grid-column: 1 / -1; font: 12px/1.4 system-ui,sans-serif; color: var(--sb-ink-muted); }
-.sb-context-check { cursor: pointer; }
-.sb-context-check input { width: auto; }
-.sb-context-file input { margin-top: 4px; }
+.sb-btn-open:hover { background: var(--sb-accent-hover); color: var(--sb-on-solid); text-decoration: none; }
 
 .sb-feedback { display: block; margin-top: 8px; font-size: 12px; color: var(--sb-ink-subtle); }
 .sb-feedback.sb-error { color: var(--sb-error); }
-.sb-card-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 8px 0 4px;
-  padding: 8px 10px;
-  width: 100%;
-  box-sizing: border-box;
-  border-radius: 8px;
-  border: 1px solid var(--sb-accent-border, var(--sb-outline-strong));
-  background: var(--sb-accent-tint, var(--sb-surface-muted));
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--sb-accent);
-  text-decoration: none;
-  cursor: pointer;
-}
-.sb-card-link:hover {
-  background: var(--sb-accent-tint-strong, var(--sb-surface-muted));
-  color: var(--sb-accent-hover, var(--sb-accent));
-  text-decoration: none;
-}
-.sb-btn:focus-visible, .sb-headword:focus-visible, .sb-tok:focus-visible,
-.sb-context-editor input:focus-visible, .sb-context-editor textarea:focus-visible {
+.sb-btn:focus-visible, .sb-headword:focus-visible, .sb-tok:focus-visible {
   outline: 3px solid var(--sb-accent); outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
   .sb-popup { transition: none; }
 }
 @media (forced-colors: active) {
-  .sb-popup, .sb-btn, .sb-context-editor input, .sb-context-editor textarea { border: 1px solid ButtonText; }
+  .sb-popup, .sb-btn { border: 1px solid ButtonText; }
   .sb-popup { box-shadow: none; }
 }
 `;
