@@ -147,12 +147,17 @@ async function notifyProfileChanged(): Promise<void> {
 const tabMetrics = new Map<number, PageMetrics>();
 ext.tabs.onRemoved.addListener((tabId) => tabMetrics.delete(tabId));
 
-async function handle(request: Request, senderTabId?: number): Promise<Response> {
+async function handle(request: Request, senderTabId?: number, senderWindowId?: number): Promise<Response> {
   await ready;
   switch (request.type) {
+    case "cancelParse":
+      cancelLocalParse(request.requestId);
+      return { ok: true, type: "cancelParse" };
     case "parseBatch": {
+      const control = { cancelled: false };
+      if (request.requestId != null) activeParses.set(request.requestId, control);
       try {
-        const tokens = await parseBatchLocally(request.texts);
+        const tokens = await parseBatchLocally(request.texts, control);
         return { ok: true, type: "parseBatch", tokens };
       } catch (error) {
         if (error instanceof DictionaryNotInstalledError) {
@@ -165,6 +170,8 @@ async function handle(request: Request, senderTabId?: number): Promise<Response>
         // core functionality broke on this page. Count it, then report as usual.
         captureMeasurement("parse_failed", 1);
         throw error;
+      } finally {
+        if (request.requestId != null) activeParses.delete(request.requestId);
       }
     }
     case "lookup": {
@@ -217,9 +224,16 @@ async function handle(request: Request, senderTabId?: number): Promise<Response>
     case "cancelDictionaryInstall":
       cancelDictionaryInstall();
       return { ok: true, type: "cancelDictionaryInstall" };
+    case "captureTab": {
+      const imageDataUrl = await ext.tabs.captureVisibleTab(senderWindowId, { format: "jpeg", quality: 82 });
+      return { ok: true, type: "captureTab", imageDataUrl };
+    }
     case "save": {
-      const { type: _type, captureScreenshot, ...options } = request;
-      const imageDataUrl = options.imageDataUrl || (captureScreenshot ? await ext.tabs.captureVisibleTab(undefined, { format: "jpeg", quality: 82 }) : undefined);
+      const { type: _type, ...options } = request;
+      // Content scripts capture with chrome hidden; fall back to a direct tab
+      // grab so saves always attach an image when the tab is capturable.
+      const imageDataUrl = options.imageDataUrl
+        || await ext.tabs.captureVisibleTab(senderWindowId, { format: "jpeg", quality: 82 }).catch(() => undefined);
       const result = await api.save({ ...options, ...(imageDataUrl ? { imageDataUrl } : {}) });
       await cacheStates({ [request.lemma]: result.state }, { [request.lemma]: result });
       return { ok: true, type: "save", result };
@@ -242,7 +256,7 @@ async function handle(request: Request, senderTabId?: number): Promise<Response>
         else tabMetrics.delete(senderTabId);
       }
       const text = request.metrics.total ? `${request.metrics.occurrenceCoverage}%` : "";
-      await ext.action?.setBadgeBackgroundColor({ color: "#4f46e5", ...(senderTabId == null ? {} : { tabId: senderTabId }) });
+      await ext.action?.setBadgeBackgroundColor({ color: "#0369a1", ...(senderTabId == null ? {} : { tabId: senderTabId }) });
       await ext.action?.setBadgeText({ text, ...(senderTabId == null ? {} : { tabId: senderTabId }) });
       return { ok: true, type: "pageMetrics" };
     }
@@ -294,21 +308,34 @@ async function handle(request: Request, senderTabId?: number): Promise<Response>
 // so instead. Only lemmas leave the device, during the separate state refresh.
 const LOCAL_PARSE_CONCURRENCY = 4;
 
+// Live parse controls keyed by the content script's requestId, so a `cancelParse`
+// message can stop the worker between text nodes. Only holds in-flight requests —
+// each entry is removed the moment its parse settles, so a late cancel is a no-op
+// and nothing leaks.
+const activeParses = new Map<number, { cancelled: boolean }>();
+
+export function cancelLocalParse(requestId: number): void {
+  const control = activeParses.get(requestId);
+  if (control) control.cancelled = true;
+}
+
 // A transport batch used to be parsed serially inside the worker, so grouping
 // many text nodes saved message overhead but not parsing time. Run a small
 // number concurrently: enough to keep IndexedDB busy without opening hundreds
-// of lookup streams on a large page.
-async function parseBatchLocally(texts: string[]): Promise<ParsedToken[][]> {
+// of lookup streams on a large page. `control.cancelled` short-circuits the
+// remaining nodes when every block in the batch has scrolled out of view.
+async function parseBatchLocally(texts: string[], control?: { cancelled: boolean }): Promise<ParsedToken[][]> {
   const startedAt = performance.now();
   const lists = new Array<ParsedToken[]>(texts.length);
   let next = 0;
   const worker = async () => {
-    while (next < texts.length) {
+    while (next < texts.length && !control?.cancelled) {
       const index = next++;
       lists[index] = await parseOffline(texts[index], config.languages, config.apiBase);
     }
   };
   await Promise.all(Array.from({ length: Math.min(LOCAL_PARSE_CONCURRENCY, texts.length) }, worker));
+  for (let index = 0; index < lists.length; index += 1) lists[index] ??= []; // cancelled tail
   recordBackgroundPerformance("local-parse", startedAt, {
     texts: texts.length,
     chars: texts.reduce((sum, text) => sum + text.length, 0),
@@ -536,7 +563,10 @@ const ACCOUNT_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
 
 async function refreshAccount(force = false): Promise<void> {
   if (!isConnected(config)) return;
-  if (!force && Date.parse(config.accountCheckedAt) >= Date.now() - ACCOUNT_CACHE_MAX_AGE_MS) return;
+  // While not entitled, re-check often so an upgrade shows mining controls
+  // without waiting out the full cache window (or re-connecting).
+  const maxAge = config.entitled ? ACCOUNT_CACHE_MAX_AGE_MS : 30_000;
+  if (!force && Date.parse(config.accountCheckedAt) >= Date.now() - maxAge) return;
   try {
     const { name, entitled, languages } = await api.me();
     // The account's language order wins while connected, so the offline pack
@@ -613,7 +643,7 @@ function formatBackgroundError(error: unknown, depth = 0): string {
 // Keeping the two contracts explicit prevents Firefox from losing the original
 // installer exception behind its generic "An unexpected error occurred".
 ext.runtime.onMessage.addListener((request: Request, sender, sendResponse) => {
-  const response = handle(request, sender.tab?.id).catch((error) => errorResponse(error, request.type));
+  const response = handle(request, sender.tab?.id, sender.tab?.windowId).catch((error) => errorResponse(error, request.type));
   if (usesPromiseMessageResponses) return response;
   void response.then(sendResponse);
   return true;

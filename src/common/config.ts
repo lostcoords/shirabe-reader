@@ -92,10 +92,12 @@ export async function loadConfig(): Promise<Config> {
   return config;
 }
 
-// Signed in iff we hold a key. Mining (save/grade/known) additionally needs the
-// WRITE_SRS scope — a read-only key still colors and defines words.
+// Signed in iff we hold a key. Mining (save/grade/known) needs WRITE_SRS *and*
+// SRS entitlement (Pro or school) — matching require_srs_pro! on the API. A
+// free account still gets dictionary lookup and word coloring.
 export const isConnected = (config: Config): boolean => config.apiKey.length > 0;
-export const canWriteSrs = (config: Config): boolean => config.scopes.includes("WRITE_SRS");
+export const canWriteSrs = (config: Config): boolean =>
+  config.scopes.includes("WRITE_SRS") && config.entitled;
 
 // Connected study features are usable iff signed in and SRS-entitled. Local
 // dictionary lookup and parsing never depend on this predicate.

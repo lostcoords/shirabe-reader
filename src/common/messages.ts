@@ -44,8 +44,8 @@ export type PageMetrics = {
 export type Status = {
   connected: boolean;
   account: string;
-  canWrite: boolean; // key carries WRITE_SRS → mining buttons are usable
-  entitled: boolean; // owner is SRS-entitled (Pro or a school member) → reader is usable
+  canWrite: boolean; // WRITE_SRS + entitled → mining buttons are usable
+  entitled: boolean; // owner is SRS-entitled (Pro or a school member)
   connecting: boolean; // a device-login handshake is mid-flight
   apiBase: string;
 };
@@ -54,7 +54,10 @@ export type Status = {
 // directly — the background worker owns the API key, the device-login
 // handshake, and rate limiting. Everything goes through these.
 export type Request =
-  | { type: "parseBatch"; texts: string[] }
+  // `requestId` lets the content script cancel a batch whose blocks all scrolled
+  // out of view before the local worker finished looking their words up.
+  | { type: "parseBatch"; texts: string[]; requestId?: number }
+  | { type: "cancelParse"; requestId: number }
   // Words and kanji are separate corpora, as on the web: a word search never
   // answers with a kanji. `kind: "kanji"` is the explicit kanji-breakdown path.
   | { type: "lookup"; query: string; kind?: "word" | "kanji" }
@@ -64,7 +67,7 @@ export type Request =
   | { type: "cancelDictionaryInstall" }
   | {
       type: "save"; lemma: string; surface?: string; reading?: string; deckId?: number; sentence?: SentenceCapture; rating?: Rating;
-      captureScreenshot?: boolean; imageDataUrl?: string; audioDataUrl?: string;
+      imageDataUrl?: string; audioDataUrl?: string;
     }
   | { type: "decks" }
   | { type: "states"; lemmas: string[] }
@@ -80,6 +83,9 @@ export type Request =
   // Fetch a pronunciation clip in the background (bypasses the page CSP that
   // blocks cross-origin media) and get it back as a playable data: URL.
   | { type: "audioClip"; url: string }
+  // Capture the visible tab as a data URL. Content scripts hide Shirabe chrome
+  // (popup + status bar) before requesting this so the mine image is clean.
+  | { type: "captureTab" }
   // Page contexts can't reach the collector under a page CSP, so they forward
   // captured errors to the background worker, which batches and ships them.
   | { type: "telemetry"; report: ClientReport }
@@ -87,6 +93,7 @@ export type Request =
 
 export type Response =
   | { ok: true; type: "parseBatch"; tokens: ParsedToken[][]; dictionaryInstalling?: boolean }
+  | { ok: true; type: "cancelParse" }
   | { ok: true; type: "lookup"; definition: Definition | null; dictionaryInstalling?: boolean }
   | { ok: true; type: "dictionaryStatus"; dictionary: DictionaryStatus }
   // `manifest` is set when install finished immediately (already current).
@@ -107,6 +114,7 @@ export type Response =
   | { ok: true; type: "syncProfile" }
   | { ok: true; type: "updateLanguages"; languages: GlossLanguage[] }
   | { ok: true; type: "audioClip"; dataUrl: string }
+  | { ok: true; type: "captureTab"; imageDataUrl: string }
   | { ok: true; type: "telemetry" }
   | { ok: true; type: "status"; status: Status }
   | { ok: false; error: string };

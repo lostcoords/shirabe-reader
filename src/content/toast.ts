@@ -28,6 +28,7 @@ const CSS = `
 export function toast(message: string, ok = true): void {
   if (!box) {
     host = document.createElement("div");
+    host.className = "sb-toast"; // so screenshot capture can hide chrome uniformly
     const root = host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = CSS;

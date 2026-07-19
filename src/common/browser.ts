@@ -30,7 +30,7 @@ type WebExt = {
     onConnect: { addListener(fn: (port: RuntimePort) => void): void };
     onMessage: {
       addListener(
-        fn: (message: any, sender: { tab?: { id?: number } }, sendResponse: (response?: unknown) => void) => boolean | void | Promise<unknown>,
+        fn: (message: any, sender: { tab?: { id?: number; windowId?: number } }, sendResponse: (response?: unknown) => void) => boolean | void | Promise<unknown>,
       ): void;
     };
     onInstalled?: { addListener(fn: (details: { reason: "install" | "update" | "chrome_update" | "shared_module_update" }) => void): void };
