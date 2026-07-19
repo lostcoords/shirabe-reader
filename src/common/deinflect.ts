@@ -18,6 +18,7 @@ export type Deinflection = {
   term: string;
   inflections: string[]; // surface → dictionary order, e.g. ["-た", "-ます"]
   dictionaryForm: boolean; // the chain landed on a real dictionary form
+  conditions: number; // grammatical class the dictionary form must satisfy (bitflags)
 };
 
 // Friendly names for the rules, kept identical to daidai's LABELS — daidai calls
@@ -177,16 +178,49 @@ function transform(source: string): TransformedText[] {
 // Every candidate base form for `text`, each with its named inflection chain.
 // Drops the zero-transform identity: callers probe the exact form separately.
 export function deinflect(text: string): Deinflection[] {
-  const seen = new Set<string>();
-  const out: Deinflection[] = [];
+  const byKey = new Map<string, Deinflection>();
   for (const result of transform(text)) {
     if (!result.trace.length) continue;
     // trace is innermost-first; reverse so names read surface → dictionary form.
     const inflections = result.trace.slice().reverse().map((frame) => TRANSFORMS_BY_ID.get(frame.transform)?.name ?? frame.transform);
     const key = `${result.text}\0${inflections.join(",")}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ term: result.text, inflections, dictionaryForm: (result.conditions & DICTIONARY_MASK) !== 0 });
+    // Two rules can reach the same form by the same-named path but declare
+    // different classes — 来た → 来る fires both the generic ichidan た→る (v1) and
+    // the kuru 来た→来る (vk). OR their conditions so the candidate advertises every
+    // class it could be; otherwise the first-seen (v1) shadows the real vk and a
+    // part-of-speech-gated lookup rejects 来る against its vk entry.
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.conditions |= result.conditions;
+      existing.dictionaryForm ||= (result.conditions & DICTIONARY_MASK) !== 0;
+    } else {
+      byKey.set(key, { term: result.text, inflections, dictionaryForm: (result.conditions & DICTIONARY_MASK) !== 0, conditions: result.conditions });
+    }
   }
-  return out;
+  return [...byKey.values()];
+}
+
+// Which grammatical class(es) a set of JMdict part-of-speech codes satisfies, as
+// deinflection condition bitflags. Lets a caller reject a deinflection whose
+// dictionary form can't be that class — e.g. いつだった "deinflects" to いつだつ by
+// the godan った→つ rule (conditionsOut v5), but 逸脱 is a noun/suru-verb, never a
+// godan verb, so the match is spurious and must be dropped. Codes that aren't a
+// conjugating class (nouns, particles, vt/vi, expressions) contribute nothing.
+export function posConditionFlags(pos: readonly string[]): number {
+  let flags = 0;
+  for (const code of pos) {
+    const condition = conditionForPos(code);
+    if (condition) flags |= CONDITION_FLAGS[condition] ?? 0;
+  }
+  return flags;
+}
+
+function conditionForPos(code: string): string | null {
+  if (code === "adj-i" || code === "adj-ix") return "adj-i";
+  if (code === "vk") return "vk"; // 来る
+  if (code === "vz") return "vz"; // ずる
+  if (code.startsWith("vs")) return "vs"; // する: vs, vs-s, vs-i, vs-c
+  if (code.startsWith("v1")) return "v1"; // 一段: v1, v1-s
+  if (code.startsWith("v5")) return "v5"; // 五段: every class
+  return null;
 }

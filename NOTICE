@@ -16,6 +16,14 @@ and the transformer in src/common/deinflect.ts are ported from Yomitan's Japanes
 language transforms (ext/js/language/ja/japanese-transforms.js) and its
 LanguageTransformer, by way of daidai's Ruby port.
 
+The lookup pipeline in src/common/offline-dictionary.ts also follows Yomitan:
+`collapseEmphatic` ports collapseEmphaticSequences and `katakanaToHiragana`
+follows convertKatakanaToHiragana (ext/js/language/ja/japanese.js); the
+part-of-speech gate on deinflected candidates (`posSatisfiesInflection`) and the
+ranking tiebreakers in `contextualCompare` — prefer the most literal spelling,
+then the shortest inflection chain — follow Translator's conditionsMatch check
+and _sortTermDictionaryEntries (ext/js/language/translator.js).
+
     Yomitan — https://github.com/yomidevs/yomitan
     Licensed under the GNU General Public License v3.
 
@@ -41,3 +49,6 @@ manifest and the extension's in-product license notices for full attribution.
 Third-party libraries
 -------------------------------------------------------------------------------
     @noble/hashes — MIT License — https://github.com/paulmillr/noble-hashes
+    kanji-processor — MIT License — https://www.npmjs.com/package/kanji-processor
+        Maps old/variant kanji to their modern standard form (萬 → 万); the same
+        table Yomitan uses for its "Convert kanji variants" text processor.

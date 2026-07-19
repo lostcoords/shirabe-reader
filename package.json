@@ -28,9 +28,11 @@
     "fake-indexeddb": "^6.2.4",
     "happy-dom": "^20.10.6",
     "typescript": "^5.6.0",
-    "web-ext": "^10.5.0"
+    "web-ext": "^10.5.0",
+    "yaml": "^2.9.0"
   },
   "dependencies": {
-    "@noble/hashes": "^2.0.1"
+    "@noble/hashes": "^2.0.1",
+    "kanji-processor": "^1.0.2"
   }
 }

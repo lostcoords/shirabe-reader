@@ -20,17 +20,19 @@ const records = [
     frequencies: [{ source: "jiten-global", text: "食べる", reading: "たべる", rank: 100 }],
   },
   ...[
-    ["2", "日本語", "にほんご", "Japanese language", "idioma japonés", "noun", 200],
-    ["3", "勉強する", "べんきょうする", "to study", "estudiar", "verb", 300],
-    ["4", "書く", "かく", "to write", "escribir", "verb", 400],
-    ["5", "読む", "よむ", "to read", "leer", "verb", 500],
-    ["6", "高い", "たかい", "high", "alto", "adjective", 600],
-    ["7", "猫", "ねこ", "cat", "gato", "noun", 700],
-    ["8", "見る", "みる", "to see", "ver", "verb", 800],
+    // POS are real JMdict class codes so deinflection's part-of-speech gate lets
+    // each conjugated form reach its dictionary entry (v1/v5/vs/adj-i…).
+    ["2", "日本語", "にほんご", "Japanese language", "idioma japonés", "n", 200],
+    ["3", "勉強する", "べんきょうする", "to study", "estudiar", "vs", 300],
+    ["4", "書く", "かく", "to write", "escribir", "v5k", 400],
+    ["5", "読む", "よむ", "to read", "leer", "v5m", 500],
+    ["6", "高い", "たかい", "high", "alto", "adj-i", 600],
+    ["7", "猫", "ねこ", "cat", "gato", "n", 700],
+    ["8", "見る", "みる", "to see", "ver", "v1", 800],
     // "hurl (" / "curl (" contain the substring "url (" — real JMdict glosses
     // that a careless CSS-injection guard rejects, aborting the whole install.
-    ["10", "投げつける", "なげつける", "to hurl (at)", "lanzar", "verb", 1000],
-    ["11", "カール", "かーる", "to curl (hair)", "rizar", "verb", 1100],
+    ["10", "投げつける", "なげつける", "to hurl (at)", "lanzar", "v1", 1000],
+    ["11", "カール", "かーる", "to curl (hair)", "rizar", "vs", 1100],
   ].map(([id, headword, reading, english, spanish, pos, rank]) => ({
     type: "term", id: `jmdict:${id}`, dictionary: "jmdict", headword,
     expressions: [{ text: headword, script: "mixed", common: true, tags: [] }],
@@ -72,6 +74,9 @@ const records = [
   {
     type: "term", id: "jmdict:16", dictionary: "jmdict", headword: "について",
     expressions: [
+      // Real JMdict lists the kana itself as an expression, not only as a
+      // reading — that is the shape that exposed the uk-demotion bug.
+      { text: "について", script: "kana", common: true, tags: [] },
       { text: "に就いて", script: "mixed", common: false, tags: ["rK"] },
       { text: "に付いて", script: "mixed", common: false, tags: ["rK"] },
     ],
@@ -88,6 +93,57 @@ const records = [
     senses: [{ glosses: { eng: ["at (place); in; on"], spa: ["en; a"] }, partsOfSpeech: ["prt"], fields: [], misc: [], dialects: [], restrictions: [] }],
     frequencies: [{ source: "jiten-global", text: "に", reading: "に", rank: 1 }],
   },
+  // 来る (kuru, vk): the POS gate must still admit it. 来た deinflects to 来る with
+  // v1 from the generic ichidan rule AND vk from the kuru rule; the two share a
+  // dedup key, so conditions must OR (not first-wins) or the vk entry is rejected.
+  {
+    type: "term", id: "jmdict:20", dictionary: "jmdict", headword: "来る",
+    expressions: [{ text: "来る", script: "mixed", common: true, tags: [] }],
+    readings: [{ text: "くる", kind: "kana" }],
+    senses: [{ glosses: { eng: ["to come"], spa: ["venir"] }, partsOfSpeech: ["vk"], fields: [], misc: [], dialects: [], restrictions: [] }],
+    frequencies: [{ source: "jiten-global", text: "来る", reading: "くる", rank: 50 }],
+  },
+  // 逸脱 (いつだつ) is a noun/suru-verb. Without the POS gate, the godan past rule
+  // った→つ "deinflects" いつだった into いつだつ and matches it here — burying いつ.
+  {
+    type: "term", id: "jmdict:18", dictionary: "jmdict", headword: "逸脱",
+    expressions: [{ text: "逸脱", script: "mixed", common: true, tags: [] }],
+    readings: [{ text: "いつだつ", kind: "kana" }],
+    senses: [{ glosses: { eng: ["deviation; departure"], spa: ["desviación"] }, partsOfSpeech: ["n", "vs"], fields: [], misc: [], dialects: [], restrictions: [] }],
+    frequencies: [{ source: "jiten-global", text: "逸脱", reading: "いつだつ", rank: 15_000 }],
+  },
+  // いつ (when): usually-kana, so a bare kana surface is a confident exact match —
+  // it should win once 逸脱's spurious deinflection is rejected.
+  {
+    type: "term", id: "jmdict:19", dictionary: "jmdict", headword: "何時",
+    expressions: [{ text: "何時", script: "mixed", common: true, tags: ["rK"] }],
+    readings: [{ text: "いつ", kind: "kana" }],
+    senses: [{ glosses: { eng: ["when; how soon"], spa: ["cuándo"] }, partsOfSpeech: ["pn", "adv"], fields: [], misc: ["uk"], dialects: [], restrictions: [] }],
+    frequencies: [{ source: "jiten-global", text: "何時", reading: "いつ", rank: 500 }],
+  },
+  // 凄い is usually-kana; emphasis katakana (スゴイ) and stretched kana (すっごい,
+  // すごーい) are pervasive in captions and must fold/collapse back to it.
+  {
+    type: "term", id: "jmdict:21", dictionary: "jmdict", headword: "凄い",
+    expressions: [{ text: "凄い", script: "mixed", common: false, tags: ["rK"] }],
+    readings: [{ text: "すごい", kind: "kana" }],
+    senses: [{ glosses: { eng: ["amazing; incredible"], spa: ["increíble"] }, partsOfSpeech: ["adj-i"], fields: [], misc: ["uk"], dialects: [], restrictions: [] }],
+    frequencies: [{ source: "jiten-global", text: "凄い", reading: "すごい", rank: 800 }],
+  },
+  // `uk` on a MINOR later sense must not flip the whole entry to kana: the backend
+  // reads `facets.first` (Entry#usually_kana?), so only the primary sense counts.
+  // 表 is ordinarily written in kanji; a secondary "front side" sense tagged uk
+  // must leave the kanji headword alone.
+  {
+    type: "term", id: "jmdict:22", dictionary: "jmdict", headword: "表",
+    expressions: [{ text: "表", script: "mixed", common: true, tags: [] }],
+    readings: [{ text: "ひょう", kind: "kana" }],
+    senses: [
+      { glosses: { eng: ["table; chart"], spa: ["tabla"] }, partsOfSpeech: ["n"], fields: [], misc: [], dialects: [], restrictions: [] },
+      { glosses: { eng: ["front side"], spa: ["anverso"] }, partsOfSpeech: ["n"], fields: [], misc: ["uk"], dialects: [], restrictions: [] },
+    ],
+    frequencies: [{ source: "jiten-global", text: "表", reading: "ひょう", rank: 900 }],
+  },
   { type: "kanji", id: "kanjidic:食", char: "食", readings: { on: ["ショク"], kun: ["た.べる"] }, meanings: { eng: ["eat"], spa: ["comer"] }, strokes: 9 },
   // KANJIDIC lists pinyin/korean/vietnam before the Japanese readings, and 猫 is
   // also a word — both of which the lookup has to see past.
@@ -101,12 +157,19 @@ const records = [
 
 const compressed = gzipSync(records.map((record) => JSON.stringify(record)).join("\n") + "\n");
 const checksum = createHash("sha256").update(compressed).digest("hex");
+// Derived, not hand-counted: the installer rejects a pack whose record counts
+// disagree with its manifest, so adding a fixture term must not mean editing a
+// magic number in two places.
+const counts = {
+  terms: records.filter((record) => record.type === "term").length,
+  kanji: records.filter((record) => record.type === "kanji").length,
+};
 
 function manifest(revision: string, sha256 = checksum) {
   return {
     schemaVersion: 3, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
     artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
-    bytes: compressed.byteLength, sha256, counts: { terms: 17, kanji: 3 }, languages: ["eng", "spa"],
+    bytes: compressed.byteLength, sha256, counts, languages: ["eng", "spa"],
     dictionaries: [{ slug: "jmdict", version: "test" }], modifications: [], sources: [], downloadUrl: "https://packs.test/dictionary.gz",
   } as const;
 }
@@ -177,6 +240,21 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     "a usually-kana expression parses as one token, not split into に + つい + て",
   );
 
+  // An out-of-dictionary katakana run (a loanword/name the pack doesn't carry)
+  // is one token, not one code point each. It stops at the script boundary, so
+  // the following particle still tokenizes on its own.
+  assert.deepEqual(
+    (await parseOffline("ミュンヘンに", ["eng"], "https://shirabe.test")).map((token) => [token.surface, token.content]),
+    [["ミュンヘン", false], ["に", true]],
+    "an unknown katakana run coalesces into a single token, split at the script boundary",
+  );
+
+  // `uk` is read from the PRIMARY sense only, matching the backend's
+  // `facets.first` — a uk tag on a minor later sense must not turn the kanji
+  // headword into kana.
+  assert.equal((await lookupOffline("表", ["eng"], "https://shirabe.test"))?.headword, "表",
+    "uk on a non-primary sense does not flip the headword to kana");
+
   // Language ORDER is the contract: the reader's stack decides which meaning
   // block renders first, exactly as the web walks Locales.source_stack_for in
   // WordCard#build_meanings. One block per language, preferred first.
@@ -220,6 +298,48 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     corpusTokens.filter((token) => token.content).map((token) => [token.surface, token.lemma]),
     [["日本語", "日本語"], ["勉強していた", "勉強する"], ["猫", "猫"], ["見ました", "見る"], ["高くなかった", "高い"], ["読みませんでした", "読む"], ["書いている", "書く"]],
   );
+  // Deinflection must respect part-of-speech: いつだった must not collapse into the
+  // noun/suru-verb 逸脱 via the godan past rule (った→つ). いつ is segmented on its own.
+  const itsuTokens = await parseOffline("いつだったか", ["eng"], "https://shirabe.test");
+  const itsu = itsuTokens.find((token) => token.content);
+  assert.equal(itsu?.surface, "いつ", "いつ is not swallowed into 逸脱");
+  assert.ok(!itsuTokens.some((token) => token.lemma === "逸脱"), "逸脱 is never matched for いつだった");
+  // A usually-kana word leads with its kana, not its rare kanji (何時), like the site.
+  assert.equal(itsu?.lemma, "いつ", "the uk word displays as kana いつ, not 何時");
+  assert.equal((await lookupOffline("いつ", ["eng"], "https://shirabe.test"))?.headword, "いつ", "いつ lookup leads with kana");
+  assert.equal((await lookupOffline("何時", ["eng"], "https://shirabe.test"))?.headword, "何時", "looking up the kanji spelling still leads with 何時");
+  // A usually-kana word's KANA spelling stays confident — only its kanji spellings
+  // are demoted. JMdict lists について as a real expression, and demoting every uk
+  // spelling shredded it into に + つい + て.
+  assert.deepEqual(
+    (await parseOffline("猫について", ["eng"], "https://shirabe.test")).filter((token) => token.content).map((token) => token.surface),
+    ["猫", "について"],
+    "a uk word's kana expression is not demoted",
+  );
+
+  // The POS gate must not drop irregular verbs: 来た/来て/来ない all reach 来る (vk).
+  for (const form of ["来た", "来て", "来ない", "来ます"]) {
+    assert.equal((await lookupOffline(form, ["eng"], "https://shirabe.test"))?.headword, "来る", `${form} deinflects to 来る (vk not rejected)`);
+  }
+
+  // Text-processor variants (Yomitan-style): emphasis katakana folds to hiragana
+  // and stretched kana collapses, so caption/subtitle spellings reach the entry —
+  // while the on-page surface is preserved and a lone mora (ミ) is never folded.
+  for (const surface of ["スゴイ", "すっごい", "すごーい", "すっっごーい"]) {
+    const first = (await parseOffline(surface, ["eng"], "https://shirabe.test")).find((token) => token.content);
+    assert.equal(first?.surface, surface, `${surface} keeps its on-page spelling`);
+    assert.equal(first?.lemma, "すごい", `${surface} folds/collapses to すごい`);
+  }
+  // A single mora is never emphasis katakana, so it must not fold: ミ would
+  // otherwise become み and deinflect to 見る, shredding an unknown katakana name.
+  assert.equal(
+    (await parseOffline("ミ", ["eng"], "https://shirabe.test")).find((token) => token.content),
+    undefined,
+    "a lone katakana mora is never folded into a hiragana word",
+  );
+  // The verbatim spelling outranks a folded one: 見る stays 見る, not a folded rival.
+  assert.equal((await lookupOffline("見る", ["eng"], "https://shirabe.test"))?.headword, "見る");
+
   const intlWords = [...new Intl.Segmenter("ja", { granularity: "word" }).segment(corpus)]
     .filter((segment) => segment.isWordLike).map((segment) => segment.segment);
   const intlExact = expectedSurfaces.filter((surface) => intlWords.includes(surface)).length;
