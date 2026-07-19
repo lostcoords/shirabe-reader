@@ -1,0 +1,197 @@
+# Golden segmentation corpus — the ratchet for the offline parser.
+#
+# Each case pins the CONTENT words a sentence must produce, in order, as
+# `surface[=lemma]`. Only content tokens are listed. `=lemma` is checked only when
+# given, so a case can pin the boundary without over-pinning the dictionary form.
+# `tokens:` optionally pins EVERY token surface, for cases where the boundary of a
+# non-content run is the whole point.
+#
+# `expect` records what the parser does TODAY, so any change shows up as a failure.
+# Where today's answer is wrong, `todo:` states the answer we actually want — the
+# case still asserts current behaviour (so it is a real ratchet) while naming the
+# gap. Fix the parser, then move the `todo:` value into `expect:`.
+#
+# It runs against the real dictionary pack when one is built locally
+# (storage/dictionary_packs/current, or $SHIRABE_PACK), which is the only way a
+# JMdict refresh can be caught; otherwise it falls back to the small bundled
+# fixture and skips `pack: full` cases. Expectations below are the REAL-pack
+# answers — the fixture is a much smaller competitive field.
+
+- name: itsu-datta-not-itsudatsu
+  text: いつだったか
+  expect: [いつ, だった, か]
+  why: >
+    いつだった must not collapse into the noun/suru-verb 逸脱 via the godan past
+    rule った→つ. Guarded by the part-of-speech gate on deinflected candidates.
+
+- name: emphasis-katakana
+  text: スゴイ
+  expect: [スゴイ]
+  why: >
+    Emphasis katakana reaches the usually-kana entry. Against the real pack JMdict
+    already lists スゴイ as its own spelling, so this exercises the katakana fold
+    only in fixture mode; the fold itself is unit-tested separately.
+
+- name: stretched-kana-sokuon
+  text: すっごい
+  expect: [すっごい]
+  why: Interior っ collapses (Yomitan collapseEmphaticSequences); JMdict also lists すっごい.
+
+- name: stretched-kana-prolonged
+  text: すごーい
+  expect: [すごーい=すごい]
+  why: >
+    The prolonged mark collapses across the FULL span. Regression guard: the
+    variant probe must not be deduped away by the verbatim one (they resolve to
+    the same term), or the span is lost and the word shreds into す + ごーい.
+
+- name: stretched-kana-both
+  text: すっっごーい
+  expect: [すっっごーい=すごい]
+  why: Repeated mixed elongation collapses across the full span.
+
+- name: unknown-katakana-run
+  text: ミュンヘンに
+  expect: [ミュンヘン, に]
+  tokens: [ミュンヘン, に]
+  why: >
+    A katakana run stays ONE token rather than shredding. Against the real pack
+    ミュンヘン is a JMnedict name (so it is a content word); in fixture mode it is
+    unknown and coalesces as a non-content run. Either way a lone mora must never
+    fold (ミ → み → 見る), which is what used to shred it.
+
+- name: kuru-irregular-past
+  text: 来た
+  expect: [来た=来る]
+  why: >
+    来た deinflects to 来る by both the generic ichidan rule (v1) and the kuru
+    rule (vk); conditions must OR so the POS gate does not reject the vk entry.
+
+- name: kuru-irregular-te
+  text: 来て
+  expect: [来て=来る]
+  why: Same kuru path via the te-form.
+
+- name: usually-kana-expression
+  text: 猫について
+  expect: [猫, について]
+  why: >
+    について is one usually-kana expression. JMdict lists the kana as a real
+    expression, so demoting every uk spelling shredded it into に + つい + て;
+    only a uk word's KANJI spellings may be demoted (the web tokenizer's
+    `script != "kana"` rule).
+
+- name: godan-polite-past
+  text: 読みませんでした
+  expect: [読みませんでした=読む]
+  why: Deinflection must reach 読む, not stop at the shorter noun 読み.
+
+- name: i-adjective-negative-past
+  text: 高くなかった
+  expect: [高くなかった=高い]
+  why: An i-adjective chain must not be treated as a verb, nor stop at 高.
+
+- name: fullwidth-headword
+  text: Ｔシャツを買った
+  expect: [Ｔシャツ, を, 買った=買う]
+  why: NFKC-normalised full-width headwords stay reachable.
+
+- name: yoji-expression
+  text: 一石二鳥は便利だ
+  expect: [一石二鳥, は, 便利, だ]
+  why: A yoji/idiom entry merges rather than splitting into 一石 + 二鳥.
+
+# --- Real dictionary only (not in the small test fixture) -------------------
+# Drawn from the YouTube captions this parser is built for.
+
+- name: kangxi-old-kanji
+  text: 學校
+  expect: [學校=学校]
+  pack: full
+  why: >
+    Old-form kanji standardise across the whole span (學校 → 学校). JMdict lists
+    學校 itself as a rare spelling, so the verbatim probe is demoted — the
+    standardised variant must survive dedup to carry the span.
+
+- name: polite-form-over-spurious-exact
+  text: ここに本があります。
+  merges: [あります]
+  splits: [あり, ます]
+  pack: full
+  why: >
+    あります must deinflect to ある. It nearly cannot: 有益 is a name entry read
+    あります, so an exact match covered the span and suppressed deinflection of it,
+    leaving あり + ます. Only a CONTEXTUALLY CONFIDENT exact match may suppress
+    deinflection of its own span — a spurious one must not.
+
+- name: te-progressive-vs-auxiliary
+  text: 手紙を書いている。
+  merges: [書いている]
+  pack: full
+  why: >
+    ている is an inflection and stays merged — the guard that the te-auxiliary
+    lookahead (which splits 授けて + いただく) does not over-fire here.
+
+- name: counter-splits-into-parts
+  text: バナナが七本あります。
+  merges: [七, 本]
+  splits: [七本]
+  pack: full
+  why: >
+    Number + counter splits into its parts so the counter word itself is
+    clickable and counts toward coverage — the web's 2026-07-14 decision
+    (三匹 → 三 · 匹). JMdict is inconsistent here (it lists 七本 and 六人 as nouns
+    but not 三匹), so matching it literally hid 本/人 behind "seven long
+    cylindrical things". The counter is confirmed against the pack's `ctr` POS
+    across ALL entries for the spelling, since 人 leads as the noun ひと.
+
+- name: counter-splits-multi-digit
+  text: 三十本のバナナ
+  merges: [三十, 本]
+  splits: [三十本]
+  pack: full
+  why: A multi-digit numeral stays whole (三十), only the counter separates.
+
+- name: non-counter-compound-intact
+  text: 一石二鳥は便利だ
+  merges: [一石二鳥]
+  pack: full
+  why: >
+    The counter split must not fire on a numeral-led word that is not a counter
+    compound — 一石二鳥 stays one yoji expression.
+
+- name: old-kanji-rescue
+  text: 鐵道
+  expect: [鐵道=鉄道]
+  pack: full
+  why: >
+    The case that justifies the kanji-processor dependency: 鐵道 (old form of
+    鉄道, railway) is NOT a JMdict spelling, so only standardising the kanji
+    reaches the entry. Most old forms (學校, 國家, 會社…) ARE listed by JMdict and
+    need no rescue — this one measures the part that actually pays.
+
+- name: caption-line-kangaeta
+  text: いつだったか考えたことがある。
+  expect: [いつ, だった, か, 考えた=考える, ことがある]
+  pack: full
+  why: >
+    The caption line that exposed the 逸脱 mis-parse. ことがある now merges as the
+    single grammar expression JMdict records, rather than こと + が + ある.
+
+- name: caption-line-chikara
+  text: この力も結果も果たして
+  expect: [この, 力, も, 結果, も, 果たして]
+  pack: full
+  why: Second line of the same cue. Parses correctly end to end.
+
+- name: caption-sazukete
+  text: 目を授けていただく
+  expect: [目, を, 授けて=授ける, いただく]
+  pack: full
+  why: >
+    Greedy longest-match alone reads the valid-but-wrong 授けていた (授ける + ている +
+    た) and strands だく. One step of lookahead fixes it: the match ended STRICTLY
+    INSIDE the following te-auxiliary いただく, so the shorter reading that leaves
+    the auxiliary whole wins. The Rails tokenizer merges the whole predicate into
+    one chip (授けていただく) — recorded as a divergence in
+    test/tokenizer_eval/cross_engine.yml; both agree the verb is 授ける.
