@@ -2,6 +2,7 @@ import { ext } from "../common/browser.js";
 import {
   toException,
   toFaroPayload,
+  type ClientContext,
   type ClientReport,
   type FaroIdentity,
   type SignalContext,
@@ -116,11 +117,16 @@ export function captureMeasurement(metric: string, value: number, context: Signa
   enqueue(measurement);
 }
 
+const CLIENT_CONTEXTS: readonly ClientContext[] = ["content", "popup", "options"];
+
 // Ingest a batch forwarded from a page context. The page can only send its own
 // origin's signals (client-reporter filters to our code), and we re-stamp the
-// context here so a compromised page can't spoof "background".
+// context here so a compromised page can't spoof "background". The report is
+// attacker-shaped JSON, so its claimed context is checked rather than trusted;
+// anything unrecognized is attributed to the least privileged context.
 export function ingestClientReport(report: ClientReport): void {
-  enqueue(...report.signals.map((signal) => ({ ...signal, context: report.context })));
+  const context = CLIENT_CONTEXTS.includes(report.context) ? report.context : "content";
+  enqueue(...report.signals.map((signal) => ({ ...signal, context })));
 }
 
 // Global crash handlers for the service worker itself — every unhandled error

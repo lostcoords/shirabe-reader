@@ -1,6 +1,6 @@
 import { send } from "../common/messages.js";
 import type { ParsedToken } from "../common/types.js";
-import { applyStateEverywhere, renderToken } from "./word.js";
+import { applyStateEverywhere, forgetRenderedWords, renderToken } from "./word.js";
 
 // Keep in sync with offline-dictionary's Japanese character set so caption
 // text that uses full-width alphanumerics (ＣＤ, Ｔシャツ) is still collected.
@@ -425,6 +425,7 @@ export function revertParsedPage(): void {
     wrapper.replaceWith(document.createTextNode(sourceText(wrapper)));
   }
   for (const block of document.querySelectorAll<HTMLElement>("[data-sb-block]")) delete block.dataset[LAZY_BLOCK_FLAG];
+  forgetRenderedWords();
 }
 
 // The element's text as it reads on the page — our injected `<rt>` furigana
@@ -604,8 +605,20 @@ export function mappedWrapper(nodeText: string, nodeStart: number, context: stri
     const localStart = start - nodeStart;
     if (localStart > cursor) wrapper.append(nodeText.slice(cursor, localStart));
     const surface = nodeText.slice(localStart, end - nodeStart);
-    const rendered = renderToken({ ...token, start: localStart, length: surface.length, surface }, showFurigana);
+    // A token can straddle inline markup (`<b>日本</b>語`), leaving one fragment
+    // per text node. The reading belongs to the whole word and cannot be split
+    // across them, so rendering it on a fragment stamps the full にほんご over
+    // 日本 *and* again over 語. Drop the furigana rather than show it twice.
+    const clipped = surface.length !== token.length;
+    const rendered = renderToken(
+      { ...token, start: localStart, length: surface.length, surface, reading: clipped ? null : token.reading },
+      showFurigana,
+    );
     if (rendered instanceof HTMLElement) {
+      // Fragments after the first are the same word continuing across inline
+      // markup. They stay real words for lookup and state, but the page metrics
+      // must not count one word as two occurrences.
+      if (token.start < nodeStart) rendered.dataset.continuation = "1";
       const sentence = sentenceAt(context, token.start);
       rendered.dataset.sentence = sentence.text;
       rendered.dataset.targetStart = String(token.start - sentence.start);

@@ -59,13 +59,20 @@ export function startAsbplayer(showFurigana: boolean): void {
 
   // Lazy: asbplayer mounts when the user loads subs, often long after page load.
   const poll = window.setInterval(() => {
-    if (tryAttach()) window.clearInterval(poll);
+    if (!tryAttach()) return;
+    window.clearInterval(poll);
+    watcher.disconnect();
   }, POLL_MS);
 
   // Also catch a late-created offscreen via body mutations (faster than the poll).
-  new MutationObserver(() => {
-    tryAttach();
-  }).observe(document.documentElement, { childList: true, subtree: true });
+  // Stop both watchers on success — otherwise every mutation on every page the
+  // content script touches keeps running a whole-document querySelector forever.
+  const watcher = new MutationObserver(() => {
+    if (!tryAttach()) return;
+    watcher.disconnect();
+    window.clearInterval(poll);
+  });
+  watcher.observe(document.documentElement, { childList: true, subtree: true });
 }
 
 export async function parseAsbplayerLines(root: Document | Element, showFurigana: boolean, parseTarget: ParseTarget = parseCaptionElement): Promise<number> {

@@ -1,9 +1,10 @@
 import { send, type Rating } from "../common/messages.js";
 import { sendDictionary } from "../common/dictionary-port.js";
 import type { Definition, Example, Sense, SentenceToken } from "../common/types.js";
-import { applyStudyDetails, cardUrlFor, grade, GRADES, markKnown, save, studyUrlForWord, type Outcome } from "./actions.js";
+import { applyStudyDetails, cardUrlFor, grade, GRADES, markKnown, save, setScanOrigin, studyUrlForWord, type Outcome } from "./actions.js";
 import { refreshStatusBar } from "./status-bar.js";
 import { rangeFromCaret } from "./dom-text.js";
+import { placeCard } from "./placement.js";
 import { appendFurigana, hasKanji } from "./word.js";
 import { isR2AudioUrl } from "../common/audio.js";
 import { toast } from "./toast.js";
@@ -14,8 +15,10 @@ import { toast } from "./toast.js";
 // cached in the background worker).
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
-let box: HTMLElement | null = null;
+let box: HTMLElement | null = null; // outer dialog shell (visibility + max-height)
+let content: HTMLElement | null = null; // replaced on each lookup; close lives outside it
 let currentKey: string | null = null;
+let currentTarget: PopupTarget | null = null; // what an open card is anchored to
 let showTimer: number | undefined;
 let hideTimer: number | undefined;
 let token = 0; // guards against a slow lookup landing after we've moved on
@@ -31,7 +34,7 @@ export function setCanWrite(value: boolean): void {
 }
 
 function element(): HTMLElement {
-  if (box) return box;
+  if (content) return content;
   host = document.createElement("div");
   host.className = "sb-host";
   root = host.attachShadow({ mode: "open" });
@@ -41,15 +44,36 @@ function element(): HTMLElement {
   box.className = "sb-popup";
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-label", "Shirabe dictionary");
+
+  // Permanent chrome — survives content swaps so every state (loading, error,
+  // definition) has an explicit close, not only hover-away / click-outside.
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "sb-btn sb-close";
+  close.textContent = "×";
+  close.title = "Close";
+  close.setAttribute("aria-label", "Close");
+  close.addEventListener("click", (event) => {
+    event.stopPropagation();
+    dismiss();
+  });
+
+  content = document.createElement("div");
+  content.className = "sb-popup-content";
+  box.append(close, content);
   root.append(style, box);
-  box.addEventListener("dblclick", (event) => {
-    const selection = window.getSelection()?.toString().trim();
+  content.addEventListener("dblclick", (event) => {
+    // Firefox exposes a selection inside an open shadow root on the root itself,
+    // not on `window`, so reading only `window.getSelection()` makes
+    // double-click-a-gloss silently do nothing there.
+    const shadow = root as ShadowRoot & { getSelection?: () => Selection | null };
+    const selection = (shadow.getSelection?.() ?? window.getSelection())?.toString().trim();
     const target = event.target as HTMLElement | null;
     if (selection && target) nestedLookup(selection, target.getBoundingClientRect(), currentDepth);
   });
   document.body.append(host);
   installHoverGuards();
-  return box;
+  return content;
 }
 
 // The popup stays open while the pointer is over the *safe zone* — the hovered
@@ -62,8 +86,24 @@ function installHoverGuards(): void {
   if (guardsInstalled) return;
   guardsInstalled = true;
 
+  window.addEventListener("resize", scheduleReposition);
+  // Capture phase so scrolling inside the page's own containers counts, and only
+  // for captions — see `scheduleReposition`.
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (currentTarget && captionRect(anchorElement(currentTarget))) scheduleReposition();
+    },
+    { passive: true, capture: true },
+  );
+
   document.addEventListener("mouseover", (e) => {
     if (visible() && inSafeZone(e)) window.clearTimeout(hideTimer);
+  });
+  // The pointer leaving the document fires no further mousemove, so the scan
+  // path never gets another chance to close the card.
+  document.addEventListener("mouseleave", () => {
+    if (visible()) scheduleHide();
   });
   document.addEventListener("mouseout", (e) => {
     // Only when actually crossing *out* of the safe zone (word/popup → elsewhere),
@@ -125,6 +165,7 @@ export function scheduleTextLookup(query: string, rect: DOMRect, sentence: strin
     word.dataset.state = "none";
     word.dataset.sentence = sentence;
     word.dataset.targetStart = String(targetStart);
+    setScanOrigin(word, anchor?.node.parentElement); // the detached span's link back to the page
     void showTarget({ key: `scan:${query}:${Math.round(rect.left)}:${Math.round(rect.top)}`, query, rect, word, depth: 0, anchor });
   }, 120);
 }
@@ -149,7 +190,39 @@ function highlightScan(range: Range | null): void {
 function hide(): void {
   box?.classList.remove("sb-visible");
   currentKey = null;
+  currentTarget = null;
+  // Retire the in-flight lookup too. Without this its `mine !== token` guard
+  // still passes, and a lookup the user already dismissed goes on to register a
+  // scan highlight — a highlighted span on the page with no card above it.
+  token++;
   highlightScan(null);
+}
+
+// Re-anchor when the viewport changes under an open card. Ordinary page scrolling
+// needs nothing — the host is positioned in document coordinates, so it travels
+// with the word — but a subtitle overlay is `position: fixed`: the caption stays
+// put while the page moves, leaving the card stranded. A resize invalidates every
+// placement decision, caption or not. Coalesced onto one frame so a scroll burst
+// costs a single measure.
+let repositionFrame = 0;
+function scheduleReposition(): void {
+  if (repositionFrame || !visible() || !currentTarget) return;
+  repositionFrame = requestAnimationFrame(() => {
+    repositionFrame = 0;
+    if (!visible() || !currentTarget) return;
+    position(currentTarget);
+  });
+}
+
+// The target's rect as it is *now*. The one captured at lookup time goes stale as
+// soon as the page moves; a raw-text scan's word element is detached, so its own
+// rect is empty and the scan anchor is what still knows where the match sits.
+function liveRect(target: PopupTarget): DOMRect {
+  if (target.word.isConnected) return target.word.getBoundingClientRect();
+  if (target.anchor?.node.isConnected) {
+    return rangeFromCaret(target.anchor.node, target.anchor.offset, 1).getBoundingClientRect();
+  }
+  return target.rect;
 }
 
 // Close now (a click outside): cancel any pending show/hide too.
@@ -178,6 +251,7 @@ type PopupTarget = { key: string; query: string; rect: DOMRect; word: HTMLElemen
 async function showTarget(target: PopupTarget): Promise<void> {
   if (target.key === currentKey && box?.classList.contains("sb-visible")) return;
   currentKey = target.key;
+  currentTarget = target;
   currentDepth = target.depth;
   if (!navigatingHistory) recordHistory(target);
   navigatingHistory = false;
@@ -186,8 +260,11 @@ async function showTarget(target: PopupTarget): Promise<void> {
 
   const el = element();
   el.replaceChildren(loadingRow(target.query));
-  position(target.rect, target.word);
-  el.classList.add("sb-visible");
+  position(target);
+  // The visibility class belongs on the dialog shell, not the content wrapper
+  // `element()` returns — `.sb-popup.sb-visible` is what the stylesheet, `hide`,
+  // and `visible()` all key off.
+  box?.classList.add("sb-visible");
 
   const res = await send({ type: "lookup", query: target.query, kind: target.kind ?? "word" });
   if (mine !== token) return; // user moved to another word meanwhile
@@ -198,8 +275,8 @@ async function showTarget(target: PopupTarget): Promise<void> {
   }
   if (res.dictionaryInstalling) {
     el.replaceChildren(loadingRow(target.query), messageRow("Preparing the offline dictionary…"));
-    position(target.rect, target.word);
-    void ensureDictionaryInstallation();
+    position(target);
+    void ensureDictionaryInstallation(target.key);
     void retryWhenDictionaryReady(target, mine);
     return;
   }
@@ -229,14 +306,16 @@ async function showTarget(target: PopupTarget): Promise<void> {
     }
   }
   el.replaceChildren(...definitionRows(res.definition, target.query, target.word));
-  position(target.rect, target.word);
+  position(target);
 }
 
-function ensureDictionaryInstallation(): Promise<void> {
+function ensureDictionaryInstallation(key: string): Promise<void> {
   if (dictionaryInstallPromise) return dictionaryInstallPromise;
   dictionaryInstallPromise = sendDictionary({ type: "installDictionary" })
     .then((response) => {
-      if (!response.ok && visible()) element().replaceChildren(messageRow(response.error));
+      // The install is shared, but the card is not: by the time it fails the user
+      // may be reading a definition that arrived from the API in the meantime.
+      if (!response.ok && visible() && currentKey === key) element().replaceChildren(messageRow(response.error));
     })
     .finally(() => {
       dictionaryInstallPromise = null;
@@ -249,6 +328,7 @@ async function retryWhenDictionaryReady(target: PopupTarget, mine: number): Prom
     await new Promise((resolve) => window.setTimeout(resolve, 1_000));
     if (mine !== token || !visible() || currentKey !== target.key) return;
     const response = await sendDictionary({ type: "dictionaryStatus" });
+    if (mine !== token || currentKey !== target.key) return; // moved on while the status was in flight
     if (!response.ok) return;
     if (response.dictionary.error) {
       element().replaceChildren(messageRow(response.dictionary.error));
@@ -260,7 +340,7 @@ async function retryWhenDictionaryReady(target: PopupTarget, mine: number): Prom
         : "";
       const stage = response.dictionary.stage ?? "Preparing the offline dictionary";
       element().replaceChildren(loadingRow(target.query), messageRow(`${stage}${progress}`));
-      position(target.rect, target.word);
+      position(target);
       continue;
     }
     currentKey = null;
@@ -278,53 +358,60 @@ const CAPTION_SELECTOR = [
   ".asbplayer-subtitles", // asbplayer
 ].join(",");
 
-function position(rect: DOMRect, word?: HTMLElement): void {
-  if (!host) return;
-  const margin = 12;
+function position(target: PopupTarget): void {
+  if (!host || !box) return;
+  const rect = liveRect(target);
   host.style.visibility = "hidden";
   host.style.left = "0px";
   host.style.top = "0px";
-  const { width, height } = host.getBoundingClientRect();
-  const viewW = document.documentElement.clientWidth;
-  const viewH = document.documentElement.clientHeight;
+  box.style.maxHeight = ""; // measure the card's natural size, not last placement's cap
+  // Parked at 0,0 the host's own rect tells us where its containing block starts
+  // in viewport coordinates, so the offsets below need no assumption about what
+  // that block is. Adding `scrollX/scrollY` instead only worked while `<body>`
+  // was static and untransformed — a site with `body { position: relative }`
+  // pushed the card off by the body's origin.
+  const { width, height, left: originLeft, top: originTop } = host.getBoundingClientRect();
 
-  // The box the popup must not overlap. For a subtitle word that's the whole
-  // caption line (so we don't bury the rest of the sentence being read); for an
-  // ordinary page word it's just the word, preserving the original behaviour.
-  const avoid = captionRect(word) ?? rect;
-  const roomRight = viewW - avoid.right - margin;
-  const roomLeft = avoid.left - margin;
-  let left: number;
-  let top: number;
+  const place = placeCard({
+    rect,
+    // What the card must clear. For a subtitle word that's the whole caption
+    // line (so we don't bury the rest of the sentence being read); for an
+    // ordinary page word it's just the word.
+    avoid: captionRect(anchorElement(target)) ?? rect,
+    size: { width, height },
+    view: { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight },
+    vertical: isVerticalWriting(anchorElement(target)),
+  });
 
-  // Prefer the page margin beside the obstacle when a fixed-size card fits there;
-  // this preserves the sentence being read. Narrow layouts (or a wide caption
-  // spanning the frame) fall back above or below, clearing the obstacle entirely.
-  if (roomRight >= width) {
-    left = avoid.right + margin;
-    top = rect.top;
-  } else if (roomLeft >= width) {
-    left = avoid.left - width - margin;
-    top = rect.top;
-  } else {
-    left = rect.left + rect.width / 2 < viewW / 2 ? rect.left : rect.right - width;
-    const roomBelow = viewH - avoid.bottom - margin;
-    const roomAbove = avoid.top - margin;
-    top = avoid.bottom + margin;
-    if (height > roomBelow && roomAbove > roomBelow) top = avoid.top - height - margin;
-  }
-  left = Math.max(margin, Math.min(left, viewW - width - margin));
-  top = Math.max(margin, Math.min(top, viewH - height - margin));
-
-  host.style.left = `${window.scrollX + left}px`;
-  host.style.top = `${window.scrollY + top}px`;
+  // The cap belongs on `.sb-popup` inside the shadow root — it owns the scrollable
+  // body. Capping the host instead would leave the card overflowing it, uncapped.
+  if (place.maxHeight != null) box.style.maxHeight = `${place.maxHeight}px`;
+  host.style.left = `${place.left - originLeft}px`;
+  host.style.top = `${place.top - originTop}px`;
   host.style.visibility = "";
+}
+
+// Whether the looked-up text is laid out vertically, which flips which side of
+// the word is "in the flow". Read off the word itself — writing mode inherits
+// from whatever container the page laid the text out in.
+function isVerticalWriting(el: Element | null): boolean {
+  return el ? /^(vertical|sideways)/.test(getComputedStyle(el).writingMode) : false;
+}
+
+// The connected element the target actually lives in. A raw-text scan's word
+// element is detached — it never entered the page — so the scan anchor's text
+// node is what still knows which container, and which writing mode, the match
+// sits in. Without this every scan lookup on a vertical reader like ttsu would
+// be measured against `document.body` and treated as horizontal.
+function anchorElement(target: PopupTarget): Element | null {
+  if (target.word.isConnected) return target.word;
+  return target.anchor?.node.parentElement ?? null;
 }
 
 // The caption line's on-screen rect when `word` is a subtitle, else null. Prefers
 // the cue container (full line width); falls back to the media caption context we
 // tag with data-media-timestamp.
-function captionRect(word?: HTMLElement): DOMRect | null {
+function captionRect(word?: Element | null): DOMRect | null {
   const caption = word?.closest(CAPTION_SELECTOR) ?? word?.closest("[data-media-timestamp]");
   return caption ? caption.getBoundingClientRect() : null;
 }
@@ -402,7 +489,8 @@ function studyUnavailable(): HTMLElement {
   return row;
 }
 
-// Headword (links to its shirabe.org page) + reading + an R2-backed audio button.
+// Headword (links to its shirabe.org page) + reading + history. Audio sits next
+// to pitch; the shell owns the close button in the top-right corner.
 function headRow(def: Definition): Node {
   const head = document.createElement("div");
   head.className = "sb-popup-head";
@@ -446,14 +534,6 @@ function headRow(def: Definition): Node {
   forward.toggleAttribute("disabled", historyIndex >= lookupHistory.length - 1);
   navigation.append(back, forward);
   head.append(navigation);
-
-  const audioUrl = def.pitch.map((pitch) => pitch.audioUrl).find(isR2AudioUrl);
-  if (audioUrl) {
-    const audio = button("🔊", "sb-audio", "", () => void playAudio(audioUrl));
-    audio.title = "Play pronunciation";
-    audio.setAttribute("aria-label", "Play pronunciation");
-    head.append(audio);
-  }
   return head;
 }
 
@@ -515,16 +595,28 @@ function badgeRow(def: Definition): Node | null {
   return row;
 }
 
-// One NHK-style pitch graph + [downstep] per accent pattern.
+// One NHK-style pitch graph + [downstep] per accent pattern. Audio (when the
+// pack has an R2 clip) sits left of the graphs so pronunciation and pitch read
+// as one unit.
 function pitchRows(pitch: Definition["pitch"], reading: string): Node {
   const wrap = document.createElement("div");
   wrap.className = "sb-pitch";
+  const audioUrl = pitch.map((entry) => entry.audioUrl).find(isR2AudioUrl);
+  if (audioUrl) {
+    const audio = button("🔊", "sb-audio", "", () => void playAudio(audioUrl));
+    audio.title = "Play pronunciation";
+    audio.setAttribute("aria-label", "Play pronunciation");
+    wrap.append(audio);
+  }
+  const patterns = document.createElement("div");
+  patterns.className = "sb-pitch-patterns";
   for (const p of pitch) {
     const row = document.createElement("div");
     row.className = "sb-pitch-item";
     row.append(pitchGraph(reading, p.downstep), chip("sb-pitch-num", `[${p.downstep}]`));
-    wrap.append(row);
+    patterns.append(row);
   }
+  wrap.append(patterns);
   return wrap;
 }
 
@@ -739,7 +831,22 @@ async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<O
   if (wrap.dataset.running === "true") return;
   wrap.dataset.running = "true";
   for (const control of wrap.querySelectorAll<HTMLButtonElement>("button")) control.disabled = true;
-  const outcome = await action();
+  // A rejection here (the extension context going away mid-click, a failed config
+  // read) would otherwise leave `running` set and every button disabled, with no
+  // message and no way back short of reopening the card.
+  let outcome: Outcome;
+  try {
+    outcome = await action();
+  } catch (error) {
+    delete wrap.dataset.running;
+    for (const control of wrap.querySelectorAll<HTMLButtonElement>("button")) control.disabled = false;
+    const note = wrap.querySelector<HTMLElement>(".sb-feedback");
+    if (note) {
+      note.textContent = error instanceof Error ? error.message : "That did not go through. Try again.";
+      note.classList.add("sb-error");
+    }
+    return;
+  }
   const { ok, message, cardUrl } = outcome;
   if (cardUrl) word.dataset.cardUrl = cardUrl;
   delete wrap.dataset.running;
@@ -825,6 +932,7 @@ const CSS = `
   --sb-known-btn-hover: light-dark(#4b5563, oklch(52% 0.02 260));
 }
 .sb-popup {
+  position: relative;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -846,10 +954,43 @@ const CSS = `
 }
 .sb-popup.sb-visible { opacity: 1; visibility: visible; transform: translateY(0); }
 
+/* Content column fills the shell; head/actions pin, body scrolls. */
+.sb-popup-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* Explicit close — top-right chrome, outside content swaps. */
+.sb-btn.sb-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sb-ink-muted);
+  font: 600 18px/1 system-ui, sans-serif;
+}
+.sb-btn.sb-close:hover { background: var(--sb-surface-muted); color: var(--sb-ink); }
+
 /* Head + actions stay pinned; the body (badges, pitch, senses, examples)
    scrolls (Yomitan-style) so the reading is always visible. min-height:0 lets
    the flex child shrink below its content height. */
-.sb-popup-head { flex: 0 0 auto; display: flex; align-items: baseline; gap: 8px; font-size: 20px; font-weight: 700; }
+.sb-popup-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-right: 28px; /* clear the absolute close button */
+  font-size: 20px;
+  font-weight: 700;
+}
 .sb-history-nav { display: inline-flex; gap: 3px; margin-left: auto; }
 .sb-btn.sb-history-button { cursor: pointer; border: 0; border-radius: 5px; padding: 3px 6px; background: var(--sb-surface-muted); color: var(--sb-ink-muted); }
 .sb-btn.sb-history-button:hover { background: var(--sb-surface-hover); }
@@ -859,15 +1000,21 @@ const CSS = `
 .sb-headword ruby { ruby-align: center; }
 .sb-headword ruby rt { font-size: 0.5em; font-weight: 600; color: var(--sb-accent); user-select: none; }
 .sb-popup-reading { font-size: 14px; font-weight: 500; color: var(--sb-accent); }
-.sb-popup-message { color: var(--sb-ink-subtle); }
+.sb-popup-message { color: var(--sb-ink-subtle); padding-right: 28px; }
 .sb-inflection { margin-bottom: 7px; color: var(--sb-ink-subtle); font-size: 12px; }
 .sb-study-unavailable { flex: 0 0 auto; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--sb-outline); color: var(--sb-ink-subtle); font-size: 11px; }
 
 .sb-body { flex: 0 1 auto; min-height: 0; overflow-y: auto; margin-top: 8px; }
 
 .sb-btn.sb-audio {
-  margin-left: auto; align-self: center; color: inherit; background: transparent;
-  padding: 2px 6px; border-radius: 8px; font-size: 15px; line-height: 1;
+  flex: 0 0 auto;
+  align-self: center;
+  color: inherit;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1;
 }
 .sb-btn.sb-audio:hover { background: var(--sb-surface-muted); }
 
@@ -880,7 +1027,8 @@ const CSS = `
 .sb-badge-jlpt { background: var(--sb-jlpt-bg); color: var(--sb-jlpt-fg); }
 .sb-badge-freq { background: var(--sb-surface-muted); color: var(--sb-ink-muted); font-variant-numeric: tabular-nums; }
 
-.sb-pitch { margin-bottom: 8px; }
+.sb-pitch { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sb-pitch-patterns { display: grid; gap: 4px; min-width: 0; }
 .sb-pitch-item { display: flex; align-items: center; gap: 8px; }
 .sb-pitch-svg { height: 46px; }
 .sb-pitch-svg line { stroke: var(--sb-accent); stroke-width: 2; }
@@ -916,7 +1064,7 @@ const CSS = `
 .sb-tok-match { color: var(--sb-accent); background: var(--sb-accent-tint); }
 .sb-tok-match:hover { background: var(--sb-accent-tint-strong); }
 
-.sb-actions { flex: 0 0 auto; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--sb-divider); }
+.sb-actions { flex: 0 0 auto; margin-top: 12px; }
 .sb-membership { margin-bottom: 6px; color: var(--sb-ink-muted); font-size: 11px; }
 .sb-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .sb-extra { display: flex; gap: 6px; margin-top: 6px; }
@@ -951,7 +1099,7 @@ const CSS = `
 
 .sb-feedback { display: block; margin-top: 8px; font-size: 12px; color: var(--sb-ink-subtle); }
 .sb-feedback.sb-error { color: var(--sb-error); }
-.sb-btn:focus-visible, .sb-headword:focus-visible, .sb-tok:focus-visible {
+.sb-btn:focus-visible, .sb-headword:focus-visible, .sb-tok:focus-visible, .sb-btn.sb-close:focus-visible {
   outline: 3px solid var(--sb-accent); outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {

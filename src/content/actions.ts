@@ -52,19 +52,32 @@ async function rememberCard(word: HTMLElement, cardId: number | undefined): Prom
 
 const lemmaOf = (word: HTMLElement) => word.dataset.lemma ?? word.dataset.surface ?? "";
 
+// A raw-text scan hands us a detached `<span>` — it never entered the page — so
+// `closest()` on it finds nothing: no caption context, no source URL, no media
+// timestamp. The popup registers where the scan actually came from, so mining a
+// subtitle the caption parser hasn't wrapped yet still resolves its integration
+// and timestamp instead of silently saving as a plain web page.
+const scanOrigin = new WeakMap<HTMLElement, Element>();
+
+export function setScanOrigin(word: HTMLElement, origin: Element | null | undefined): void {
+  if (origin) scanOrigin.set(word, origin);
+}
+
+const contextOf = (word: HTMLElement): Element | null => (word.isConnected ? word : scanOrigin.get(word) ?? null);
+
 function sentenceOf(word: HTMLElement): SentenceCapture | undefined {
   const text = word.dataset.sentence?.trim();
   if (!text) return;
   const targetStart = numberFrom(word.dataset.targetStart);
   const targetEnd = numberFrom(word.dataset.targetEnd);
-  const mediaTimestampMs = numberFrom(word.closest<HTMLElement>("[data-media-timestamp]")?.dataset.mediaTimestamp);
+  const mediaTimestampMs = numberFrom(contextOf(word)?.closest<HTMLElement>("[data-media-timestamp]")?.dataset.mediaTimestamp);
   return {
     text,
     ...(word.dataset.translation ? { translation: word.dataset.translation } : {}),
-    url: word.closest<HTMLElement>("[data-source-url]")?.dataset.sourceUrl || location.href,
+    url: contextOf(word)?.closest<HTMLElement>("[data-source-url]")?.dataset.sourceUrl || location.href,
     title: document.title,
     capturedAt: new Date().toISOString(),
-    integration: word.closest<HTMLElement>("[data-integration]")?.dataset.integration || "web_page",
+    integration: contextOf(word)?.closest<HTMLElement>("[data-integration]")?.dataset.integration || "web_page",
     ...(mediaTimestampMs == null ? {} : { mediaTimestampMs }),
     ...(targetStart == null ? {} : { targetStart }),
     ...(targetEnd == null ? {} : { targetEnd }),
@@ -101,7 +114,7 @@ async function saveRequest(word: HTMLElement, rating?: Rating) {
 // data-media-timestamp is set on the caption context only when a video is
 // present (YouTube/asbplayer/Netflix), so it's the signal that a crop applies.
 function videoFrameFor(word: HTMLElement): HTMLVideoElement | null {
-  if (!word.closest("[data-media-timestamp]")) return null;
+  if (!contextOf(word)?.closest("[data-media-timestamp]")) return null;
   return document.querySelector("video");
 }
 

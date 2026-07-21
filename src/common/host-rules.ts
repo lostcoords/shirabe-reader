@@ -54,12 +54,43 @@ export const BUILTIN_RULES: HostRule[] = [
 const REMOTE_KEY = "hostRules"; // storage cache of server-refreshed rules
 const REMOTE_VERSION_KEY = "hostRulesVersion";
 
-// Glob match: "*" → ".*", both scheme+host+path anchored. "<all_urls>" always
-// matches. Mirrors JitenReader's match-url semantics (only "*" wildcards).
+// Match patterns, matched per component the way the browsers do it: scheme, then
+// host, then path. Compiling the whole pattern to one regex does not work — the
+// leading "*" of "*://" becomes ".*", which swallows any prefix and defeats the
+// anchor, so "*://example.com/*" matched every URL that merely *contained*
+// "://example.com/" (a redirect target, a share link, a search result).
+// "<all_urls>" always matches.
 export function matchUrl(pattern: string, url: string): boolean {
   if (pattern === "<all_urls>") return true;
-  const regex = new RegExp("^" + pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$");
-  return regex.test(url);
+  const parts = /^([^:]+):\/\/([^/]*)(\/.*)$/.exec(pattern);
+  if (!parts) return false;
+  const [, scheme, host, path] = parts;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  // "*" as the scheme means web pages only, never file:/data:/moz-extension:.
+  if (scheme === "*") {
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  } else if (parsed.protocol !== `${scheme}:`) return false;
+
+  // "*.example.com" covers example.com itself and any subdomain; anything else
+  // is an exact host. A bare "*" is any host.
+  if (host !== "*") {
+    if (host.startsWith("*.")) {
+      const base = host.slice(2);
+      if (parsed.hostname !== base && !parsed.hostname.endsWith(`.${base}`)) return false;
+    } else if (parsed.hostname !== host) return false;
+  }
+
+  // Only the path keeps glob semantics, and it is matched against path+query so
+  // patterns like "/watch*" still see "?v=…".
+  const target = parsed.pathname + parsed.search;
+  return new RegExp("^" + path.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$").test(target);
 }
 
 function ruleMatches(rule: HostRule, url: string): boolean {

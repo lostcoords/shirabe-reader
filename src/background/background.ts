@@ -135,13 +135,6 @@ async function checkAndNotifyDictionary(): Promise<void> {
   }
 }
 
-async function notifyProfileChanged(): Promise<void> {
-  const tabs = await ext.tabs.query({});
-  await Promise.all(tabs.filter((tab) => tab.id != null).map((tab) =>
-    ext.tabs.sendMessage(tab.id as number, { command: "profileChanged" }).catch(() => undefined),
-  ));
-}
-
 // Last known coverage per tab, pushed by each parse/recolour. A service worker
 // that gets evicted simply forgets, and the popup falls back to offering a parse.
 const tabMetrics = new Map<number, PageMetrics>();
@@ -177,7 +170,12 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
     case "lookup": {
       try {
         const kind = request.kind ?? "word";
-        const definition = await lookupCache.fetch(`${kind}:${config.languages.join(",")}:${request.query}`, async () => {
+        // The connection state belongs in the key, because it decides the answer:
+        // a signed-out miss caches `null` for a word the pack doesn't carry, and
+        // after signing in that word must reach the server instead of replaying
+        // "no definition" until something else happens to clear the cache.
+        const scope = isConnected(config) ? "online" : "offline";
+        const definition = await lookupCache.fetch(`${kind}:${scope}:${config.languages.join(",")}:${request.query}`, async () => {
           // The kanji breakdown has no server counterpart (/v1 search excludes
           // KANJIDIC), so it answers from the local pack or not at all.
           if (kind === "kanji") return lookupKanjiOffline(request.query, config.languages, config.apiBase);
@@ -200,20 +198,23 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       // mid-install; progress is polled via dictionaryStatus, and a keep-alive +
       // storage snapshot keep the job visible after reopen.
       const pending = installDictionary(config.apiBase);
+      // Fast failures (manifest/network) reject the race and surface immediately
+      // to the caller, which reports them through errorResponse.
+      const manifest = await Promise.race([
+        pending,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 150)),
+      ]);
+      // Past that window nobody is left on the channel to surface a failure, and
+      // a multi-megabyte download almost always fails later than 150ms — so the
+      // install reports its own outcome from here on, or the counter is dead.
       void pending.then(async () => {
         lookupCache.clear();
         await notifyDictionaryChanged();
-      }).catch(() => undefined);
-      try {
-        const manifest = await Promise.race([
-          pending,
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 150)),
-        ]);
-        if (manifest) return { ok: true, type: "installDictionary", manifest };
-      } catch (error) {
-        // Fast failures (manifest/network) still surface immediately.
-        throw error;
-      }
+      }, (error) => {
+        captureException(error, "background", { request: "installDictionary" });
+        captureEvent("dictionary_install_failed", { request: "installDictionary" });
+      });
+      if (manifest) return { ok: true, type: "installDictionary", manifest };
       return { ok: true, type: "installDictionary" };
     }
     case "removeDictionary":
@@ -275,11 +276,6 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
     case "disconnect":
       await disconnect();
       return { ok: true, type: "disconnect" };
-    case "syncProfile":
-      await refreshAccount(true);
-      await clearProfileCaches();
-      await notifyProfileChanged();
-      return { ok: true, type: "syncProfile" };
     case "audioClip": {
       const dataUrl = await audioCache.fetch(request.url, () => fetchAudioDataUrl(request.url));
       return { ok: true, type: "audioClip", dataUrl };

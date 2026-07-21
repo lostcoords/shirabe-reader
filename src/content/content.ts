@@ -4,8 +4,8 @@ import { loadHostRules, resolveHostMode, type HostRule } from "../common/host-ru
 import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
 import { send } from "../common/messages.js";
 import { grade, markKnown, save, type Outcome } from "./actions.js";
-import { observeLazy, parse, refreshRenderedStates, setParsingPaused } from "./parser.js";
-import { hideStatusBar, refreshStatusBar, setStatusOptions, showStatusBar } from "./status-bar.js";
+import { observeLazy, parse, setParsingPaused } from "./parser.js";
+import { hideStatusBar, refreshStatusBar, setStatusOptions, showStatusBar, statusPaused } from "./status-bar.js";
 import { startAsbplayer } from "./parsers/asbplayer.js";
 import { startYouTubeCaptions } from "./parsers/youtube.js";
 import { startDynamicReader } from "./parsers/dynamic-reader.js";
@@ -77,13 +77,13 @@ function boot(): void {
       setParsingPaused(true);
       hideStatusBar();
     } else {
-      setParsingPaused(false);
+      setParsingPaused(statusPaused()); // a settings change must not undo the bar's Pause
       if (parsed && isTopFrame) showStatusBar(parsePage);
     }
 
     // asbplayer injects subtitle text into arbitrary video hosts (and iframes).
     // Always watch when connected — no-op until `.asbplayer-offscreen` appears.
-    // Not an exclusive host rule: Wikipedia/Mokuro parsing still runs above.
+    // Not exclusive: page scanning and custom adapters still run in the top frame.
     if ((localDictionaryReady || isConnected(config)) && mode !== "off") startAsbplayer(showFurigana);
 
     // Subframes only run the asbplayer watcher (above). Host-rule page parsing
@@ -92,9 +92,10 @@ function boot(): void {
       return;
     }
 
-    // Reader-on pages parse on load once; off pages do nothing. A rule may name
-    // a dedicated custom parser
-    // (e.g. YouTube captions) instead of the generic page parser.
+    // Reader-on pages parse on load. Parsing is local, so there is nothing to
+    // ask permission for — the hotkey and context menu re-parse rather than
+    // enable. A rule may name a dedicated custom parser (YouTube captions,
+    // Netflix, Mokuro, …) in place of the generic page parser.
     if (mode === "auto" && (localDictionaryReady || isConnected(config)) && !parsed) {
       if (rule?.custom) startCustomParser(rule.custom);
       else parsePage();
@@ -109,7 +110,7 @@ function boot(): void {
   }
 
   // Resolve host rules first (they gate the mode), then apply config; re-apply on
-  // every settings change so per-site Auto/Off toggles take effect immediately.
+  // every settings change so per-site reader on/off takes effect immediately.
   Promise.all([loadHostRules(), loadConfig()]).then(([loadedRules, config]) => {
     rules = loadedRules;
     apply(config);
@@ -191,8 +192,14 @@ function boot(): void {
     if (mode === "off" || !localDictionaryReady || (!force && !wantPopup(event))) return;
     const element = event.target as Element | null;
     if (element?.closest?.(".sb-word, .sb-host, input, textarea, select, [contenteditable='true']")) return;
+    // Anything that isn't Japanese text should let an open scan card go — a
+    // scan target is bare page text, not a `.sb-word`, so the popup's own
+    // pointer-out guard never fires for it and nothing else would close it.
     const caret = caretAt(event.clientX, event.clientY);
-    if (!caret || caret.node.nodeType !== Node.TEXT_NODE) return;
+    if (!caret || caret.node.nodeType !== Node.TEXT_NODE) {
+      scheduleHide();
+      return;
+    }
     const logical = logicalTextAt(caret.node, caret.offset);
     const text = logical.text;
     if (!startsJapanese(text)) {
@@ -203,7 +210,10 @@ function boot(): void {
     range.setStart(caret.node, caret.offset);
     range.setEnd(caret.node, Math.min(caret.offset + 1, caret.node.length));
     const rect = range.getBoundingClientRect();
-    if (!rect.width && !rect.height) return;
+    if (!rect.width && !rect.height) {
+      scheduleHide();
+      return;
+    }
     const sentence = sentenceAround(logical.context, logical.contextOffset);
     scheduleTextLookup(text, rect, sentence.text, sentence.targetStart, { node: caret.node, offset: caret.offset });
   }
@@ -313,18 +323,23 @@ function boot(): void {
   }
 
   function parseSelection(): void {
-    const range = window.getSelection()?.getRangeAt(0);
-    const node = range?.commonAncestorContainer;
+    // The command is broadcast to every frame in the tab, and `getRangeAt(0)`
+    // throws where there is no selection — which is all of them but one.
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    const node = range.commonAncestorContainer;
     const root = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement;
     if (root) parse(root, showFurigana, ruleOptions()); // eager: a selection is parsed now
   }
 
   ext.runtime.onMessage.addListener((message: { command?: string }) => {
-    if (message.command === "parsePage") parsePage();
+    // Broadcast reaches every frame; page parsing stays top-frame so nested ads
+    // and widgets don't get decorated, matching the `apply()` guard.
+    if (message.command === "parsePage") { if (isTopFrame) parsePage(); }
     else if (message.command === "parseSelection") parseSelection();
     else if (message.command === "lookupSelection") lookupSelection();
     else if (message.command === "dictionaryChanged") void sendDictionaryStatus();
-    else if (message.command === "profileChanged") void refreshRenderedStates();
   });
 
   function lookupSelection(): void {

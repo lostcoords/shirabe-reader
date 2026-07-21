@@ -178,6 +178,14 @@ function register(lemma: string, word: HTMLElement): void {
   set.add(word);
 }
 
+// Reverting unwraps every span at once. Pruning is otherwise lazy — it only
+// happens for a lemma that gets refreshed — and revert also pauses parsing, so
+// nothing would ever refresh again and the whole page's spans would be retained
+// for the life of the tab.
+export function forgetRenderedWords(): void {
+  byLemma.clear();
+}
+
 // Reflect a freshly-set learning state on one already-rendered word.
 export function applyState(word: HTMLElement, state: WordState): void {
   word.className = word.className.replace(STATE_CLASS, `sb-${state}`);
