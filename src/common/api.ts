@@ -199,10 +199,13 @@ export class ShirabeApi {
   // Needs READ_ACCOUNT (the device key has it). `entitled` mirrors the server's
   // srs_entitled? — the popup gates the whole reader on it.
   //
-  // `languages` is the account's ordered gloss stack (Prefs#languages, in UI
-  // codes like ["es","en"]). Carrying it here is what keeps the extension's
-  // meaning order identical to the website's for the same reader; it is empty
-  // for an account that has never customized it.
+  // `languages` is the account's ordered gloss languages, in UI codes like
+  // ["es","en"]. Server-side it's *derived* from the reader's dictionary stack
+  // (Prefs#sources) — the distinct languages of it, in order. We read the
+  // derived list rather than the stack because this pack is a single
+  // dictionary: dictionary order is a distinction it can't represent.
+  // Carrying it keeps the extension's meaning order identical to the website's
+  // for the same reader; it is empty for an account that has never customized.
   async me(): Promise<{ name: string; entitled: boolean; languages: GlossLanguage[] }> {
     const data = await this.get<{
       user: { displayName?: string; name?: string };
@@ -216,6 +219,10 @@ export class ShirabeApi {
     };
   }
 
+  // Sending `languages` (rather than the full `dictionaries` stack) asks the
+  // server for a projection: it keeps the reader's dictionary order exactly as
+  // it is and re-languages each one. So changing languages from here can never
+  // scramble an ordering this client can't see.
   async updateLanguages(languages: readonly GlossLanguage[]): Promise<GlossLanguage[]> {
     const data = await this.patch<{ preferences: { languages: string[] } }>(
       "/v1/preferences",

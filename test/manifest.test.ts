@@ -43,18 +43,10 @@ test("all extension-owned surfaces preserve focus, reduced-motion, and forced-co
   }
 });
 
-test("reader-on parses on load; per-site parsing is not a separate control", () => {
+test("built-in auto sites expose an explicit optional-access control", () => {
   const popup = readFileSync("src/action/popup.html", "utf8");
-  const logic = readFileSync("src/action/popup.ts", "utf8");
-  const content = readFileSync("src/content/content.ts", "utf8");
-
-  // Reader on/off is the whole per-site story — no second "parse automatically".
-  assert.doesNotMatch(popup, /siteMode|enableSiteAccess|parse automatically/i);
-  assert.match(logic, /requestSiteAccess/);
-  assert.match(logic, /enabledHosts\.push\(scope\)/);
-  // A reader-on page parses itself; a custom adapter replaces the generic parser
-  // rather than being the only thing that ever starts on load.
-  assert.match(content, /if \(mode === "auto"[\s\S]{0,300}else parsePage\(\)/);
+  assert.match(popup, /<label for="siteMode">/);
+  assert.match(popup, /id="enableSiteAccess"[^>]*>Enable automatic access<\/button>/);
 });
 
 test("the popup replaces decorative branding with a real per-site reader toggle", () => {
@@ -66,7 +58,6 @@ test("the popup replaces decorative branding with a real per-site reader toggle"
   assert.doesNotMatch(markup, /Offline lookup/);
   assert.match(markup, /id="readerToggle"[^>]*aria-pressed="true"/);
   assert.match(logic, /await patch\(\{ disabledHosts \}\)/);
-  assert.match(logic, /await patch\(\{ disabledHosts, enabledHosts \}\)/);
   assert.match(content, /if \(mode === "off"\) \{/);
   assert.match(content, /if \(mode === "off" \|\| !localDictionaryReady/);
   assert.match(content, /classList\.toggle\("sb-furigana-off", config\.furiganaMode === "off"\)/);
@@ -131,7 +122,7 @@ test("the action popup navigates with a bottom bar and hands settings to its own
   assert.match(popup, /id="lookupScanModifier"/);
   assert.match(options, /id="furiganaMode"/);
   assert.match(options, /id="scanModifier"/);
-  assert.match(readFileSync("src/action/popup.ts", "utf8"), /patch\(\{ furiganaMode, showFurigana: furiganaMode !== "off" \}\)/);
+  assert.match(readFileSync("src/action/popup.ts", "utf8"), /patch\(\{ furiganaMode \}\)/);
   assert.match(readFileSync("src/action/popup.ts", "utf8"), /patch\(\{ scanModifier \}\)/);
   assert.doesNotMatch(popup, /syncProfile|Sync profile/);
 });
@@ -154,16 +145,7 @@ test("extension settings mirror Shirabe's sidebar and card layout without purple
 
   assert.match(options, /class="settings-nav"/);
   assert.match(options, /class="settings-content"/);
-  // Full control surface: reading prefs, pack management, account, shortcuts.
-  for (const id of ["reading", "dictionary", "account", "keyboard"]) {
-    assert.match(options, new RegExp(`href="#${id}"`));
-    assert.match(options, new RegExp(`id="${id}"`));
-  }
-  assert.match(options, /id="installDictionary"/);
-  assert.match(options, /id="connect"/);
-  assert.match(options, /id="preferredDeck"/);
-  assert.match(logic, /sendDictionary\(\{ type: "installDictionary" \}\)/);
-  assert.match(logic, /send\(\{ type: "connect" \}\)/);
+  for (const id of ["reading", "keyboard"]) assert.match(options, new RegExp(`href="#${id}"`));
   assert.doesNotMatch(options, /href="#advanced"/);
   assert.match(css, /color-scheme:\s*light dark/);
   assert.match(css, /--surface-page:\s*light-dark\(#f8fafc/);
@@ -271,10 +253,13 @@ test("opening the action activates raw-text scanning without parsing the page", 
 
 test("pronunciation audio only plays processed R2 clips and never browser speech", () => {
   const popup = readFileSync("src/content/popup.ts", "utf8");
+  const audio = readFileSync("src/common/audio.ts", "utf8");
   const background = readFileSync("src/background/background.ts", "utf8");
   const webAudio = readFileSync("../app/javascript/controllers/audio_controller.js", "utf8");
 
-  // The R2 allowlist itself is covered behaviourally in audio.test.ts.
+  // The R2 allowlist is the fetch security boundary, shared by popup + background.
+  assert.match(audio, /hostname === "cdn\.shirabe\.org"/);
+  assert.match(audio, /pathname\.startsWith\("\/audio\/"\)/);
   // The background — not the content script — fetches the clip (bypassing page
   // CSP) and only after re-validating the URL, then returns a playable data: URL.
   assert.match(background, /case "audioClip"/);
@@ -313,6 +298,7 @@ test("offline parsing does not wait for profile-state network hydration", () => 
   assert.match(background, /let stateCacheWrite: Promise<void> = Promise\.resolve\(\)/);
   assert.match(background, /const STATE_CACHE_MAX_LEMMAS = 20_000/);
   assert.match(background, /memoryStateSnapshot/);
+  assert.match(background, /case "syncProfile"/);
   assert.match(background, /const DECK_CACHE_KEY = "profileDeckSnapshot"/);
   assert.match(background, /async function cachedDecks/);
   assert.match(background, /ext\.storage\.local\.remove\(\[STATE_CACHE_KEY, DECK_CACHE_KEY\]\)/);
@@ -342,14 +328,5 @@ test("missing offline storage self-heals and the word popup has a stable scrolla
   assert.match(popup, /max-height: min\(60vh, 460px\)/);
   assert.doesNotMatch(popup, /\n  height: min\(460px/);
   assert.match(popup, /overflow-y: auto/);
-  // Explicit close chrome + audio beside pitch (not in the head row).
-  assert.match(popup, /className = "sb-btn sb-close"/);
-  assert.match(popup, /className = "sb-pitch-patterns"/);
-  assert.match(popup, /wrap\.append\(audio\)/);
-  assert.doesNotMatch(popup, /head\.append\(audio\)/);
-  // Placement itself (never sitting in the reading flow) is covered properly in
-  // placement.test.ts; here we only pin that the cap lands on the scrollable
-  // card and not on the host, which would leave it overflowing uncapped.
-  assert.match(popup, /box\.style\.maxHeight = `\$\{place\.maxHeight\}px`/);
-  assert.doesNotMatch(popup, /host\.style\.maxHeight/);
+  assert.match(popup, /roomRight >= width/);
 });

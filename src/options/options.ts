@@ -75,7 +75,6 @@ $<HTMLFormElement>("prefs").addEventListener("change", async (event) => {
   }
   await patch({
     furiganaMode: prefs.furiganaMode.value as FuriganaMode,
-    showFurigana: prefs.furiganaMode.value !== "off",
     scanModifier: prefs.scanModifier.value as ScanModifier,
     languages,
     statePreset: prefs.statePreset.value as StatePreset,

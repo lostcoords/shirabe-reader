@@ -116,7 +116,7 @@ $<HTMLSelectElement>("lookupScanModifier").addEventListener("change", async (eve
 
 $<HTMLSelectElement>("lookupFuriganaMode").addEventListener("change", async (event) => {
   const furiganaMode = (event.currentTarget as HTMLSelectElement).value as FuriganaMode;
-  await patch({ furiganaMode, showFurigana: furiganaMode !== "off" });
+  await patch({ furiganaMode });
   status("Furigana setting saved");
 });
 

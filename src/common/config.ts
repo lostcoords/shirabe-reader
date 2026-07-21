@@ -29,7 +29,6 @@ export type Config = {
   accountCheckedAt: string; // last successful /v1/me refresh
   scopes: string[]; // scopes the connected key carries (gates mining buttons)
   entitled: boolean; // owner may write to the SRS (Pro or a school member)
-  showFurigana: boolean;
   furiganaMode: FuriganaMode;
   // Ordered, preferred first — the extension's copy of the account's
   // Prefs#languages. Synced from GET /v1/me while connected; edited locally
@@ -52,7 +51,6 @@ export const DEFAULTS: Config = {
   accountCheckedAt: "",
   scopes: [],
   entitled: false,
-  showFurigana: true,
   furiganaMode: "all",
   languages: ["eng"],
   scanModifier: "shift",
