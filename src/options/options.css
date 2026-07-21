@@ -13,6 +13,9 @@
   --primary-hover: light-dark(#025a83, oklch(80% 0.13 245));
   --primary-tint: light-dark(#e2f1fa, oklch(26% 0.08 245));
   --success-text: light-dark(#15803d, oklch(83% 0.19 155));
+  --danger-text: light-dark(#b91c1c, oklch(75% 0.17 25));
+  --danger-tint: light-dark(#fef2f2, oklch(28% 0.06 25));
+  --on-primary: #ffffff;
   --radius-button: 12px;
   --radius-card: 18px;
   --shadow-e1: 0 1px 2px light-dark(rgb(15 23 42 / 0.05), rgb(0 0 0 / 0.45));
@@ -106,6 +109,62 @@ input[type="checkbox"] { width: 17px; height: 17px; margin: 1px 0 0; accent-colo
   transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 .kb-btn:hover, .kb-btn.capturing { border-color: var(--primary); background: var(--primary-tint); color: var(--primary); }
+
+/* Dictionary pack + account status panes */
+.status-stack { display: grid; gap: 12px; margin-top: 16px; }
+.status-stack > div { display: grid; gap: 10px; }
+.status-line { margin: 0; font-size: 14px; font-weight: 700; }
+.primary, .ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: fit-content;
+  border-radius: var(--radius-button);
+  font-weight: 650;
+  text-decoration: none;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.primary {
+  min-height: 40px;
+  border: 1px solid var(--primary);
+  padding: 9px 13px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 700;
+}
+.primary:hover { border-color: var(--primary-hover); background: var(--primary-hover); color: var(--on-primary); text-decoration: none; }
+.ghost {
+  min-height: 38px;
+  border: 1px solid var(--outline);
+  padding: 8px 11px;
+  background: var(--surface);
+  color: var(--ink-muted);
+}
+.ghost:hover { border-color: var(--primary); background: var(--primary-tint); color: var(--primary); }
+.ghost.danger { color: var(--danger-text); }
+.ghost.danger:hover { border-color: var(--danger-text); background: var(--danger-tint); color: var(--danger-text); }
+.button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.button-row > * { flex: 1 1 auto; min-width: 0; }
+.deck-row { display: grid; gap: 5px; max-width: 360px; }
+progress { width: 100%; max-width: 420px; height: 8px; border: 0; border-radius: 999px; overflow: hidden; accent-color: var(--primary); background: var(--surface-muted); }
+.credits { margin: 0; }
+.credits summary { cursor: pointer; color: var(--ink-muted); font-size: 12px; font-weight: 650; list-style: none; }
+.credits summary::-webkit-details-marker { display: none; }
+.credits ul { margin: 8px 0 0; padding-left: 18px; }
+.credits li { font-size: 12px; }
+.diagnostics {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: text;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  padding: 8px;
+  color: var(--ink-muted);
+  font: 10px/1.45 ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+.diagnostics:empty { display: none; }
 
 .footer-note { border-radius: 12px; background: var(--surface-muted); padding: 12px 14px; text-align: center; }
 .status { min-height: 0; margin: 12px 0 0; color: var(--success-text); font-size: 12px; text-align: center; }

@@ -9,13 +9,14 @@
   <body>
     <header class="page-header">
       <h1>Reader settings</h1>
-      <p>Changes save automatically on this device.</p>
     </header>
 
     <main class="settings-shell">
       <nav class="settings-nav" aria-label="Reader settings">
         <p>Settings</p>
         <a href="#reading" aria-current="true">Reading</a>
+        <a href="#dictionary">Dictionary</a>
+        <a href="#account">Account</a>
         <a href="#keyboard">Keyboard shortcuts</a>
       </nav>
 
@@ -23,7 +24,7 @@
         <section id="reading" class="card">
           <div class="section-title">
             <h2>Reading</h2>
-            <p>Lookup, furigana, and page parsing.</p>
+            <p>Lookup, furigana, and page decoration.</p>
           </div>
           <form id="prefs" class="prefs-grid">
             <label>Open popup on hover<select id="scanModifier"><option value="none">Always</option><option value="alt">Hold Alt / Option</option><option value="ctrl">Hold Ctrl</option><option value="shift">Hold Shift</option><option value="meta">Hold ⌘ Cmd</option></select></label>
@@ -37,19 +38,93 @@
           </form>
         </section>
 
+        <section id="dictionary" class="card">
+          <div class="section-title">
+            <h2>Dictionary pack</h2>
+            <p>Offline English + Spanish lookup data stored on this device. No account required.</p>
+          </div>
+
+          <div class="status-stack" id="dictionaryPanel" aria-label="Offline dictionary">
+            <div data-dictionary-state="missing" hidden>
+              <p class="status-line">Not installed</p>
+              <p class="muted">Install once for offline lookup on any page.</p>
+              <button id="installDictionary" class="primary" type="button">Install dictionary</button>
+            </div>
+            <div data-dictionary-state="installing" hidden>
+              <p class="status-line">Installing…</p>
+              <progress id="dictionaryProgress" max="1" value="0"></progress>
+              <p id="dictionaryProgressLabel" class="muted">Downloading and checking the pack</p>
+              <button id="cancelDictionaryInstall" class="ghost" type="button">Cancel</button>
+            </div>
+            <div data-dictionary-state="installed" hidden>
+              <p class="status-line">Ready</p>
+              <p id="dictionaryVersion" class="muted"></p>
+              <details class="credits">
+                <summary>Dictionary credits</summary>
+                <ul id="dictionaryCredits"></ul>
+                <p><a id="dictionaryLicensesLink" href="#" target="_blank" rel="noopener">Offline license notices</a></p>
+              </details>
+              <div class="button-row">
+                <button id="updateDictionary" class="ghost" type="button">Check for update</button>
+                <button id="removeDictionary" class="ghost danger" type="button">Remove</button>
+              </div>
+            </div>
+            <div data-dictionary-state="error" hidden>
+              <p class="status-line">Install stopped</p>
+              <p id="dictionaryError" class="muted"></p>
+              <pre id="dictionaryDiagnostics" class="diagnostics" aria-label="Dictionary installer diagnostics"></pre>
+              <button id="retryDictionary" class="primary" type="button">Try again</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="account" class="card">
+          <div class="section-title">
+            <h2>Account</h2>
+            <p>Connect for word-state colouring, sentence mining, and FSRS reviews.</p>
+          </div>
+
+          <div class="status-stack" id="accountPanel" aria-label="Shirabe account">
+            <div data-state="connected" hidden>
+              <p class="status-line">Connected<span id="accountName"></span></p>
+              <label id="deckRow" class="deck-row">Save mined words to
+                <select id="preferredDeck"><option value="">Default deck</option></select>
+              </label>
+              <button class="disconnect ghost" type="button">Disconnect</button>
+            </div>
+            <div data-state="connecting" hidden>
+              <p class="status-line">Connecting</p>
+              <p class="muted">Approve access in the window that just opened, then return here.</p>
+            </div>
+            <div data-state="unentitled" hidden>
+              <p class="status-line">Signed in<span id="unentitledName"></span></p>
+              <p class="muted">Pro adds word-state sync, sentence mining, and FSRS reviews.</p>
+              <div class="button-row">
+                <a id="upgradeLink" class="primary" href="#" target="_blank" rel="noopener">Upgrade to Pro</a>
+                <button class="disconnect ghost" type="button">Disconnect</button>
+              </div>
+            </div>
+            <div data-state="disconnected" hidden>
+              <p class="status-line">Not connected</p>
+              <p class="muted">Lookup and the offline dictionary work without an account.</p>
+              <button id="connect" class="primary" type="button">Connect account</button>
+            </div>
+          </div>
+        </section>
+
         <section id="keyboard" class="card">
-        <div class="section-title">
-          <h2>Keyboard shortcuts</h2>
-          <p>Click a shortcut, then press keys. Backspace clears it.</p>
-        </div>
-        <div id="keybinds"></div>
+          <div class="section-title">
+            <h2>Keyboard shortcuts</h2>
+            <p>Click a shortcut, then press keys. Backspace clears it.</p>
+          </div>
+          <div id="keybinds"></div>
         </section>
 
         <p class="muted footer-note">
-        Dictionary lookup and parsing stay on this device. Page context is sent only when you save it.
-        <a id="privacyLink" href="#" target="_blank" rel="noopener">Privacy</a> ·
-        <a id="settingsLink" href="#" target="_blank" rel="noopener">Shirabe settings</a> ·
-        <a id="licensesLink" href="#" target="_blank" rel="noopener">Offline license notices</a>
+          Dictionary lookup and parsing stay on this device. Page context is sent only when you save it.
+          <a id="privacyLink" href="#" target="_blank" rel="noopener">Privacy</a> ·
+          <a id="settingsLink" href="#" target="_blank" rel="noopener">Shirabe settings</a> ·
+          <a id="licensesLink" href="#" target="_blank" rel="noopener">Offline license notices</a>
         </p>
       </article>
     </main>

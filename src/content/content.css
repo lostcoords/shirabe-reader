@@ -114,7 +114,6 @@ html:not(.sb-reader-off)[data-sb-state-preset="minimal"] :is(
 }
 
 .sb-word {
-  cursor: help;
   border-radius: 3px;
   transition: background-color 0.12s ease;
 }
@@ -153,7 +152,8 @@ html:not(.sb-reader-off)[data-sb-state-preset="minimal"] :is(
   color: inherit;
 }
 .sb-reader-off .sb-word ruby rt { display: none !important; }
-.sb-reader-off .sb-i-plus-one { outline: 0 !important; }
+.sb-reader-off .sb-i-plus-one { background: none !important; }
+.sb-reader-off .sb-i-plus-one::after { content: none !important; }
 
 /* State coloring — a left-to-right cue from "learn this" to "got it". Bottom
    border keeps host text legible where a full highlight would be noisy. */
@@ -209,7 +209,24 @@ html:not(.sb-reader-off)[data-sb-state-preset="minimal"] :is(
 }
 .sb-status-bar button:hover { background: var(--sb-bar-hover); }
 .sb-status-bar button:focus-visible { outline: 3px solid var(--sb-bar-accent); outline-offset: 2px; }
-.sb-i-plus-one { outline: 2px solid rgba(3, 105, 161, 0.28); outline-offset: 3px; }
+/* i+1 — a block you can read except for one word, the sentences worth studying.
+   A tint and a badge, not an outline: background takes no layout space, so
+   adjacent blocks can't merge into one stray rectangle the way offset outlines
+   did. The badge says what the marking means. */
+.sb-i-plus-one {
+  background: rgba(3, 105, 161, 0.08);
+}
+.sb-i-plus-one::after {
+  content: "i+1";
+  margin-inline-start: 6px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(3, 105, 161, 0.85);
+  color: #fff;
+  font: 600 10px/1.5 system-ui, sans-serif;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .sb-word { transition: none; }
@@ -220,4 +237,7 @@ html:not(.sb-reader-off)[data-sb-state-preset="minimal"] :is(
   .sb-learning { border-bottom: 2px dashed LinkText; }
   .sb-due { border-bottom: 2px dotted LinkText; }
   .sb-status-bar { border: 1px solid CanvasText; }
+  /* Forced colors drops background and box-shadow, so the i+1 block cue would
+     vanish — the badge carries it instead. */
+  .sb-i-plus-one::after { background: Canvas; color: LinkText; border: 1px solid LinkText; }
 }

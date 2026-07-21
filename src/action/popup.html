@@ -63,22 +63,27 @@
             <span data-band="known"></span><span data-band="due"></span><span data-band="learning"></span><span data-band="unknown"></span>
           </div>
           <ul id="coverageLegend" class="coverage-legend"></ul>
+          <p id="iPlusOne" class="i-plus-one" hidden><span class="i-plus-one-badge">i+1</span><span id="iPlusOneLabel"></span></p>
         </section>
 
-        <section class="card page-card">
-          <div class="site" id="siteRow" hidden>
-            <label for="siteMode"><span><svg><use href="#icon-globe" /></svg>On this site</span><span id="siteHost" class="site-host"></span></label>
-            <select id="siteMode">
-              <option value="auto">On — parse automatically</option>
-              <option value="off">Off</option>
-            </select>
-            <button id="enableSiteAccess" class="ghost site-access" type="button" hidden>Enable automatic access</button>
+        <section class="card language-card" aria-labelledby="lookupScanModifierLabel">
+          <div>
+            <p id="lookupScanModifierLabel" class="account-line">Open popup</p>
+            <p class="muted">When the dictionary popup appears over a word.</p>
           </div>
+          <label class="sr-only" for="lookupScanModifier">Open popup</label>
+          <select id="lookupScanModifier">
+            <option value="none">Always on hover</option>
+            <option value="alt">Hold Alt / Option</option>
+            <option value="ctrl">Hold Ctrl</option>
+            <option value="shift">Hold Shift</option>
+            <option value="meta">Hold ⌘ Cmd</option>
+          </select>
         </section>
         <section class="card language-card" aria-labelledby="lookupFuriganaLabel">
           <div>
             <p id="lookupFuriganaLabel" class="account-line">Furigana</p>
-            <p class="muted">Choose when readings appear above parsed words.</p>
+            <p class="muted">Choose when readings appear above words.</p>
           </div>
           <label class="sr-only" for="lookupFuriganaMode">Furigana</label>
           <select id="lookupFuriganaMode">
@@ -88,7 +93,6 @@
             <option value="off">Off</option>
           </select>
         </section>
-        <p class="muted privacy-note">Lookup and parsing stay on this device. Page context is sent only when you save it. <a id="privacyLink" href="#" target="_blank" rel="noopener">Privacy</a></p>
       </section>
 
       <!-- ── Offline dictionary ─────────────────────────────────────────── -->
@@ -142,10 +146,7 @@
           <div data-state="connected" hidden>
             <div class="card-heading"><span class="icon-box success"><svg><use href="#icon-user" /></svg></span><p class="account-line">Connected<span id="accountName"></span></p></div>
             <label id="deckRow" class="deck-row">Save mined words to<select id="preferredDeck"><option value="">Default deck</option></select></label>
-            <div class="button-row">
-              <button id="syncProfile" class="ghost">Sync profile</button>
-              <button class="disconnect ghost">Disconnect</button>
-            </div>
+            <button class="disconnect ghost">Disconnect</button>
           </div>
           <div data-state="connecting" hidden>
             <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-user" /></svg></span><p class="account-line">Connecting</p></div>

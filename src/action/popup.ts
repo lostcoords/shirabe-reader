@@ -1,5 +1,5 @@
 import { ext } from "../common/browser.js";
-import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage } from "../common/config.js";
+import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type ScanModifier } from "../common/config.js";
 import { sendDictionary } from "../common/dictionary-port.js";
 import { loadHostRules, matchUrl, normalizePattern, resolveHostMode, siteScopeFor, type HostRule } from "../common/host-rules.js";
 import { send } from "../common/messages.js";
@@ -17,9 +17,9 @@ Promise.all([loadConfig(), loadHostRules(), activeTabUrl()]).then(([c, r, url]) 
   config = c;
   rules = r;
   siteUrl = url;
-  $<HTMLAnchorElement>("privacyLink").href = c.apiBase.replace(/\/$/, "") + "/privacy";
   $<HTMLAnchorElement>("licensesLink").href = ext.runtime.getURL("licenses.html");
   $<HTMLSelectElement>("dictionaryLanguages").value = c.languages.join(",");
+  $<HTMLSelectElement>("lookupScanModifier").value = c.scanModifier;
   $<HTMLSelectElement>("lookupFuriganaMode").value = c.furiganaMode;
   void renderHostControls();
   void renderPageState();
@@ -32,6 +32,7 @@ Promise.all([loadConfig(), loadHostRules(), activeTabUrl()]).then(([c, r, url]) 
 onConfigChanged((next) => {
   config = next;
   $<HTMLSelectElement>("dictionaryLanguages").value = next.languages.join(",");
+  $<HTMLSelectElement>("lookupScanModifier").value = next.scanModifier;
   $<HTMLSelectElement>("lookupFuriganaMode").value = next.furiganaMode;
 });
 
@@ -107,31 +108,33 @@ $<HTMLSelectElement>("dictionaryLanguages").addEventListener("change", async (ev
   status(config.apiKey ? "Language synced with your profile" : "Definition language saved");
 });
 
+$<HTMLSelectElement>("lookupScanModifier").addEventListener("change", async (event) => {
+  const scanModifier = (event.currentTarget as HTMLSelectElement).value as ScanModifier;
+  await patch({ scanModifier });
+  status("Popup trigger saved");
+});
+
 $<HTMLSelectElement>("lookupFuriganaMode").addEventListener("change", async (event) => {
   const furiganaMode = (event.currentTarget as HTMLSelectElement).value as FuriganaMode;
   await patch({ furiganaMode, showFurigana: furiganaMode !== "off" });
   status("Furigana setting saved");
 });
 
-// ── Per-site parsing mode ────────────────────────────────────────────────────
-// The select reflects the current page's effective mode. Reader-on always parses
-// locally; persistent site access is requested so this also works after reload.
-const siteRow = $<HTMLElement>("siteRow");
-const siteMode = $<HTMLSelectElement>("siteMode");
-const enableSiteAccess = $<HTMLButtonElement>("enableSiteAccess");
+// ── Per-site reader on/off ───────────────────────────────────────────────────
+// Reader-on means Yomitan-style scanning (and dedicated adapters) on this host.
+// Full-page parse stays opt-in via hotkey / context menu — there is no separate
+// "parse automatically" control. Turning the reader on requests optional host
+// access so the scanner survives reloads without reopening the popup.
 const readerToggle = $<HTMLButtonElement>("readerToggle");
 
 async function renderHostControls(): Promise<void> {
   const scope = siteScopeFor(siteUrl);
   if (!scope || !/^https?:/.test(siteUrl)) {
-    siteRow.hidden = true;
     readerToggle.hidden = true;
     return;
   }
-  siteRow.hidden = false;
   readerToggle.hidden = false;
   const host = new URL(siteUrl).hostname;
-  $<HTMLElement>("siteHost").textContent = host;
   $<HTMLElement>("readerToggleHost").textContent = host;
   const resolution = resolveHostMode(siteUrl, {
     disabledHosts: config.disabledHosts,
@@ -141,8 +144,6 @@ async function renderHostControls(): Promise<void> {
   readerToggle.setAttribute("aria-pressed", String(readerOn));
   readerToggle.setAttribute("aria-label", `Turn reader ${readerOn ? "off" : "on"} for ${host}`);
   $<HTMLElement>("readerToggleLabel").textContent = `Reader is ${readerOn ? "on" : "off"}`;
-  siteMode.value = resolution.mode;
-  enableSiteAccess.hidden = resolution.mode !== "auto" || await hasSiteAccess(siteUrl);
 }
 
 readerToggle.addEventListener("click", async () => {
@@ -150,62 +151,31 @@ readerToggle.addEventListener("click", async () => {
   if (!scope) return;
   const readerOn = readerToggle.getAttribute("aria-pressed") === "true";
   const disabledHosts = config.disabledHosts.filter((pattern) => !matchUrl(normalizePattern(pattern), siteUrl));
-  if (readerOn) disabledHosts.push(scope);
-  await patch({ disabledHosts });
-  await renderHostControls();
-});
 
-siteMode.addEventListener("change", async () => {
-  // Drop any user pattern that currently applies to this page, then persist the
-  // enabled or disabled state for the whole site.
-  const scope = siteScopeFor(siteUrl);
-  const enabledHosts = config.enabledHosts.filter((p) => !matchUrl(normalizePattern(p), siteUrl));
-  const disabledHosts = config.disabledHosts.filter((p) => !matchUrl(normalizePattern(p), siteUrl));
-  const siteAccess = siteMode.value !== "auto" || await requestSiteAccess(siteUrl);
-  if (!siteAccess) status("Automatic access was not granted; this tab still works while open");
-  if (siteMode.value === "auto" && siteAccess) enabledHosts.push(scope);
-  else if (siteMode.value === "off") disabledHosts.push(scope);
-  await patch({ enabledHosts, disabledHosts });
-  if (siteMode.value === "auto") await sendToActiveTab({ command: "parsePage" });
-  await renderHostControls();
-});
-
-enableSiteAccess.addEventListener("click", async () => {
-  if (!(await requestSiteAccess(siteUrl))) {
-    status("Site access was not granted");
-    return;
+  if (readerOn) {
+    // Turning off: suspend scanning on this site. Optional host permission stays
+    // granted so re-enabling does not re-prompt the browser.
+    disabledHosts.push(scope);
+    await patch({ disabledHosts });
+  } else {
+    const enabledHosts = config.enabledHosts.filter((pattern) => !matchUrl(normalizePattern(pattern), siteUrl));
+    const siteAccess = await requestSiteAccess(siteUrl);
+    if (!siteAccess) {
+      status("Site access was not granted; scanning still works in this tab while open");
+    } else {
+      enabledHosts.push(scope);
+    }
+    await patch({ disabledHosts, enabledHosts });
   }
-  const scope = siteScopeFor(siteUrl);
-  const enabledHosts = config.enabledHosts.filter((pattern) => !matchUrl(normalizePattern(pattern), siteUrl));
-  enabledHosts.push(scope);
-  const disabledHosts = config.disabledHosts.filter((pattern) => !matchUrl(normalizePattern(pattern), siteUrl));
-  await patch({ enabledHosts, disabledHosts });
-  await sendToActiveTab({ command: "parsePage" });
   await renderHostControls();
+  void activateScannerOnActiveTab();
 });
-
-async function hasSiteAccess(url: string): Promise<boolean> {
-  if (!/^https?:/.test(url)) return false;
-  return ext.permissions.contains({ origins: [`${new URL(url).origin}/*`] });
-}
 
 async function requestSiteAccess(url: string): Promise<boolean> {
   if (!/^https?:/.test(url)) return false;
   const origin = `${new URL(url).origin}/*`;
   if (await ext.permissions.contains({ origins: [origin] })) return true;
   return ext.permissions.request({ origins: [origin] });
-}
-
-async function sendToActiveTab(message: unknown): Promise<void> {
-  const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id == null) return;
-  try {
-    await ext.tabs.sendMessage(tab.id, message);
-  } catch {
-    await ext.scripting.insertCSS({ target: { tabId: tab.id }, files: ["content.css"] });
-    await ext.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
-    await ext.tabs.sendMessage(tab.id, message);
-  }
 }
 
 // ── Connection card ──────────────────────────────────────────────────────────
@@ -257,15 +227,6 @@ async function refreshDecks(): Promise<void> {
 $<HTMLSelectElement>("preferredDeck").addEventListener("change", (event) => {
   const value = (event.currentTarget as HTMLSelectElement).value;
   void patch({ preferredDeckId: value ? Number(value) : null });
-});
-
-$<HTMLButtonElement>("syncProfile").addEventListener("click", async (event) => {
-  const button = event.currentTarget as HTMLButtonElement;
-  button.disabled = true;
-  const res = await send({ type: "syncProfile" });
-  button.disabled = false;
-  status(res.ok ? "Profile synced" : res.error);
-  if (res.ok) await refresh();
 });
 
 $<HTMLButtonElement>("connect").addEventListener("click", async () => {
@@ -518,6 +479,9 @@ async function renderPageState(): Promise<void> {
     const segment = bar.querySelector<HTMLElement>(`[data-band="${band.key}"]`);
     if (segment) segment.style.width = `${share}%`;
   }
+  $("iPlusOne").hidden = !metrics.iPlusOne;
+  $("iPlusOneLabel").textContent = `${metrics.iPlusOne.toLocaleString()} ${metrics.iPlusOne === 1 ? "sentence" : "sentences"} with one new word`;
+
   $<HTMLUListElement>("coverageLegend").replaceChildren(...BANDS.filter((band) => metrics.occurrences[band.key]).map((band) => {
     const item = document.createElement("li");
     const swatch = document.createElement("span");

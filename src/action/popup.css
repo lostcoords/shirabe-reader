@@ -196,13 +196,6 @@ details[open] > summary > svg { transform: rotate(180deg); }
 .history-query { cursor: pointer; border: 0; background: transparent; color: var(--primary); padding: 3px; text-align: left; }
 .history-query:hover { color: var(--primary-hover); text-decoration: underline; }
 
-.page-card { display: grid; gap: 10px; }
-.site { display: grid; gap: 7px; border-top: 1px solid var(--outline); padding-top: 12px; }
-.site label { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
-.site label > span:first-child { display: flex; align-items: center; gap: 6px; font-weight: 700; }
-.site label svg { width: 16px; height: 16px; color: var(--primary); }
-.site-host { overflow: hidden; color: var(--ink-subtle); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-
 form { margin: 0; }
 label { color: var(--ink-muted); font-size: 12px; font-weight: 650; }
 select {
@@ -218,7 +211,6 @@ select {
 input:focus, select:focus { border-color: var(--primary); box-shadow: var(--ring); }
 .deck-row { display: grid; gap: 5px; }
 
-.privacy-note { border-radius: 12px; background: var(--surface-muted); padding: 9px 11px; }
 .status { min-height: 0; margin: 0; padding: 0 16px 8px; color: var(--success-text); font-size: 12px; text-align: center; }
 .status:empty { display: none; }
 
@@ -242,6 +234,10 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: var(--ring
 .coverage-bar [data-band="unknown"] { background: var(--state-unknown); }
 .coverage-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; padding: 0; color: var(--ink-muted); font-size: 12px; list-style: none; }
 .coverage-legend li { display: flex; align-items: center; gap: 5px; }
+/* Mirrors the badge the content script draws on the page, so the count here and
+   the marking over there read as one thing. */
+.i-plus-one { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--ink-muted); font-size: 12px; }
+.i-plus-one-badge { padding: 1px 6px; border-radius: 999px; background: var(--brand-deep); color: #fff; font-size: 10px; font-weight: 600; }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
 
 .primary:disabled { cursor: not-allowed; border-color: var(--outline); background: var(--surface-muted); color: var(--ink-subtle); box-shadow: none; }
