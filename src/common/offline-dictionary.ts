@@ -79,7 +79,9 @@ type OfflineTerm = {
   dictionary: string;
   headword: string;
   expressions: Array<{ text: string; script: string; common: boolean; tags: string[] }>;
-  readings: Array<{ text: string; kind: string }>;
+  // `appliesTo` carries JMdict's per-writing restriction, present only when it
+  // narrows: よいてんき spells 良い天気 and よい天気, but never いい天気.
+  readings: Array<{ text: string; kind: string; appliesTo?: string[] }>;
   senses: OfflineSense[];
   pitch?: Array<{ text: string; reading: string; downstep: number; audioUrl: string }>;
   frequencies?: Array<{ source: string; text: string; reading: string | null; rank: number }>;
@@ -667,6 +669,20 @@ function matchingExpression(hit: LookupHit) {
   return hit.term.expressions.find((expression) => normalize(expression.text) === normalized);
 }
 
+// The kana that spells the form the surface matched — mirrors WordCard#reading_for.
+// A kana form reads as itself; a written form takes the first reading JMdict says
+// applies to it, so 良い天気 reads よいてんき while いい天気 reads いいてんき. Pairing a
+// form with a reading it doesn't own leaves the two unalignable, and furigana
+// smears over the whole word instead of sitting on the kanji.
+function readingFor(term: Stored<OfflineTerm>, matched: string | undefined): string | null {
+  const kana = term.readings.filter((item) => item.kind === "kana");
+  const applicable = matched
+    ? kana.find((item) => item.text === matched) ??
+      kana.find((item) => !item.appliesTo || item.appliesTo.includes(matched))
+    : undefined;
+  return (applicable ?? kana[0] ?? term.readings[0])?.text ?? null;
+}
+
 // The form to LEAD the card with — mirrors WordCard#headword / #canonical_headword.
 // A specific written form the surface matched leads (look up 狗 → 狗, not 犬); a
 // usually-kana word otherwise leads with its kana (いつ, not 何時), matching the
@@ -1124,7 +1140,7 @@ function validateTerm(term: OfflineTerm): void {
   const allowed = new Set(["type", "id", "dictionary", "headword", "expressions", "readings", "senses", "pitch", "frequencies", "jlpt"]);
   if (Object.keys(term).some((key) => !allowed.has(key)) || !plainString(term.id) || !plainString(term.dictionary) || !plainString(term.headword) ||
       !Array.isArray(term.expressions) || !term.expressions.length || term.expressions.some((item) => !exactKeys(item, ["text", "script", "common", "tags"]) || !plainString(item.text) || !plainString(item.script) || typeof item.common !== "boolean" || !stringArray(item.tags)) ||
-      !Array.isArray(term.readings) || term.readings.some((item) => !exactKeys(item, ["text", "kind"]) || !plainString(item.text) || !plainString(item.kind)) ||
+      !Array.isArray(term.readings) || term.readings.some((item) => !exactKeys(item, ["text", "kind", "appliesTo"]) || !plainString(item.text) || !plainString(item.kind) || (item.appliesTo != null && !stringArray(item.appliesTo))) ||
       !Array.isArray(term.senses) || !term.senses.length || term.senses.some((sense) => !exactKeys(sense, ["glosses", "partsOfSpeech", "fields", "misc", "dialects", "restrictions"]) || !glossMap(sense.glosses, new Set(["eng", "spa"])) || !stringArray(sense.partsOfSpeech) || !stringArray(sense.fields) || !stringArray(sense.misc) || !stringArray(sense.dialects) || !stringArray(sense.restrictions)) ||
       (term.pitch != null && (!Array.isArray(term.pitch) || term.pitch.some((item) => !exactKeys(item, ["text", "reading", "downstep", "audioUrl"]) || !plainString(item.text) || !plainString(item.reading) || !Number.isInteger(item.downstep) || !r2AudioUrl(item.audioUrl)))) ||
       (term.frequencies != null && (!Array.isArray(term.frequencies) || term.frequencies.some((item) => !exactKeys(item, ["source", "text", "reading", "rank"]) || !plainString(item.source) || !plainString(item.text) || (item.reading !== null && !plainString(item.reading)) || !Number.isFinite(item.rank)))) ||
@@ -1251,7 +1267,7 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
       }];
     });
   });
-  const reading = term.readings.find((item) => item.kind === "kana")?.text ?? term.readings[0]?.text ?? null;
+  const reading = readingFor(term, matchingExpression(hit)?.text);
   const headword = displayHeadword(hit, reading);
   const exactPitch = (term.pitch ?? []).filter((item) => item.text === headword && item.reading === reading);
   const displayedPitch = exactPitch.length || headword === reading

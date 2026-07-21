@@ -37,6 +37,7 @@ export type PageMetrics = {
   unique: number;
   occurrences: StateCounts;
   uniques: StateCounts;
+  iPlusOne: number; // blocks on the page with exactly one unknown word
 };
 
 // What the action popup needs to render the connection state without holding
@@ -78,7 +79,6 @@ export type Request =
   | { type: "setState"; lemma: string; state: "known" | "reviewing" }
   | { type: "connect" } // begin device login; resolves with the code to show
   | { type: "disconnect" }
-  | { type: "syncProfile" }
   | { type: "updateLanguages"; languages: GlossLanguage[] }
   // Fetch a pronunciation clip in the background (bypasses the page CSP that
   // blocks cross-origin media) and get it back as a playable data: URL.
@@ -111,7 +111,6 @@ export type Response =
   | { ok: true; type: "setState"; state: WordState }
   | { ok: true; type: "connect" }
   | { ok: true; type: "disconnect" }
-  | { ok: true; type: "syncProfile" }
   | { ok: true; type: "updateLanguages"; languages: GlossLanguage[] }
   | { ok: true; type: "audioClip"; dataUrl: string }
   | { ok: true; type: "captureTab"; imageDataUrl: string }

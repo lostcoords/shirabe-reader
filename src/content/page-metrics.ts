@@ -3,6 +3,9 @@ import type { WordState } from "../common/types.js";
 
 export type { StateCounts };
 export type DetailedPageMetrics = PageMetrics;
+// What a flat list of words can tell you on its own. The i+1 count needs block
+// structure, so it's added by whoever walks the blocks.
+export type WordMetrics = Omit<PageMetrics, "iPlusOne">;
 export type IPlusOneOptions = { includesLearning: boolean; frequencyMax: number };
 
 const priority: Record<WordState, number> = { none: 0, new: 1, learning: 2, due: 3, known: 4 };
@@ -13,6 +16,7 @@ export const EMPTY_METRICS: DetailedPageMetrics = {
   occurrenceCoverage: 0, uniqueCoverage: 0, total: 0, unique: 0,
   occurrences: { known: 0, learning: 0, due: 0, unknown: 0 },
   uniques: { known: 0, learning: 0, due: 0, unknown: 0 },
+  iPlusOne: 0,
 };
 
 type TrackedWord = { lemma: string; state: WordState };
@@ -46,7 +50,7 @@ export class PageMetricIndex {
     this.uniqueCounts = emptyCounts();
   }
 
-  metrics(): DetailedPageMetrics {
+  metrics(): WordMetrics {
     return {
       occurrenceCoverage: coverage(this.occurrenceCounts, this.tracked.size),
       uniqueCoverage: coverage(this.uniqueCounts, this.statesByLemma.size),
@@ -79,7 +83,7 @@ export class PageMetricIndex {
   }
 }
 
-export function measurePageWords(words: HTMLElement[]): DetailedPageMetrics {
+export function measurePageWords(words: HTMLElement[]): WordMetrics {
   const occurrences = emptyCounts();
   const states = new Map<string, WordState>();
   for (const word of words) {
