@@ -17,7 +17,11 @@
     "scripting",
     "identity"
   ],
-  "host_permissions": ["https://shirabe.org/*", "https://cdn.shirabe.org/*", "https://o.shirabe.org/*"],
+  "host_permissions": [
+    "https://shirabe.org/*",
+    "https://cdn.shirabe.org/*",
+    "https://o.shirabe.org/*"
+  ],
   "optional_host_permissions": ["<all_urls>"],
   "content_scripts": [
     {

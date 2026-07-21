@@ -10,7 +10,16 @@ const targets = requestedTarget ? [requestedTarget] : ["firefox", "chrome"];
 for (const target of targets) {
   const root = join("dist", target);
   const manifest = JSON.parse(await readFile(join(root, "manifest.json"), "utf8"));
-  assert.deepEqual(manifest.host_permissions, ["https://shirabe.org/*"], `${target} has unexpected required hosts`);
+  // Required hosts are first-party Shirabe origins ONLY, listed exhaustively so a
+  // new one has to be added here deliberately: shirabe.org (API), cdn.shirabe.org
+  // (audio clips the background worker fetches — src/common/audio.ts), and
+  // o.shirabe.org (the RUM collector the web app also ships to —
+  // src/common/telemetry.ts). Page access stays optional, asserted below.
+  assert.deepEqual(
+    manifest.host_permissions,
+    ["https://shirabe.org/*", "https://cdn.shirabe.org/*", "https://o.shirabe.org/*"],
+    `${target} has unexpected required hosts`,
+  );
   assert.deepEqual(manifest.optional_host_permissions, ["<all_urls>"], `${target} page access must remain optional`);
 
   for (const file of await filesBelow(root)) {
