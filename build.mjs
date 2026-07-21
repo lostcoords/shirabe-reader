@@ -20,6 +20,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
+// The test suite imports this file for the host lists below, so the build only
+// runs when build.mjs is the entry point rather than on every import.
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 const target = process.argv[2] ?? "firefox";
 const watch = process.argv.includes("--watch");
 const serve = process.argv.includes("--serve");
@@ -28,10 +31,17 @@ const baseManifest = JSON.parse(await readFile(join(root, "manifest.base.json"),
 // A Japanese page to open on launch so the dev browser is ready to test against.
 const START_URL = "https://ja.wikipedia.org/wiki/日本語";
 
-if (!["firefox", "chrome"].includes(target)) {
+if (isMain && !["firefox", "chrome"].includes(target)) {
   console.error(`Unknown target "${target}". Use "firefox" or "chrome".`);
   process.exit(1);
 }
+
+// Shirabe's own pages are the dictionary, not a reading surface, so the reader
+// never parses them. Exported because the test suite compiles against the same
+// `__SHIRABE_OFF_HOSTS__` define: one definition, so dropping a host here fails
+// the tests instead of silently shipping.
+export const RELEASE_OFF_HOSTS = ["*://shirabe.org/*", "*://*.shirabe.org/*"];
+export const DEV_OFF_HOSTS = [...RELEASE_OFF_HOSTS, "*://shirabe.localhost/*"];
 
 const outputArg = process.argv.find((arg) => arg.startsWith("--outdir="));
 const outdir = outputArg
@@ -66,12 +76,8 @@ const buildOptions = {
   // production for shipped one-shot builds. Overridable at runtime via Advanced.
   define: {
     __DEFAULT_API_BASE__: JSON.stringify(watch ? "https://shirabe.localhost" : "https://shirabe.org"),
-    // Full list so production zips never embed a localhost host pattern string.
-    __SHIRABE_OFF_HOSTS__: JSON.stringify(
-      watch
-        ? ["*://shirabe.org/*", "*://*.shirabe.org/*", "*://shirabe.localhost/*"]
-        : ["*://shirabe.org/*", "*://*.shirabe.org/*"],
-    ),
+    // Release list only, so production zips never embed a localhost host pattern.
+    __SHIRABE_OFF_HOSTS__: JSON.stringify(watch ? DEV_OFF_HOSTS : RELEASE_OFF_HOSTS),
     __EXTENSION_VERSION__: JSON.stringify(baseManifest.version),
     // Telemetry ships to the same self-hosted Grafana Faro receiver as the web
     // app's RUM; watch builds report tagged "development" so dev noise stays
@@ -245,11 +251,13 @@ async function startWebExt() {
   child.on("exit", (code) => process.exit(code ?? 0));
 }
 
-buildAll()
-  .then(() => {
-    if (serve) return startWebExt();
-  })
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+if (isMain) {
+  buildAll()
+    .then(() => {
+      if (serve) return startWebExt();
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

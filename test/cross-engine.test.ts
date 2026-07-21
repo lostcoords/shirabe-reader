@@ -15,7 +15,8 @@ import { installDictionary, lookupVariants, parseOffline, removeDictionary } fro
 // of truth, so a fix on one side cannot silently regress the other.
 //
 // Needs the real dictionary (the contract is about real JMdict behaviour), so it
-// skips with a diagnostic when no pack is built locally.
+// reports as skipped — never as a pass — when no pack is built locally, and fails
+// outright when SHIRABE_REQUIRE_PACK demands the real run.
 
 type CrossCase = {
   name: string;
@@ -71,7 +72,13 @@ test("cross-engine tokenization contract (extension side)", async (context) => {
   const corpus = parseYaml(readFileSync(CORPUS_PATH, "utf8")) as Corpus;
   const packPath = realPackPath();
   if (!packPath) {
-    context.diagnostic("cross-engine: no local dictionary pack — skipped (build one with `npm run prepare:dev-pack`)");
+    // A missing pack must never read as a pass: it reports as skipped locally,
+    // and CI sets SHIRABE_REQUIRE_PACK=1 to demand the real run.
+    assert.ok(
+      !process.env.SHIRABE_REQUIRE_PACK,
+      "SHIRABE_REQUIRE_PACK is set but no dictionary pack is installed — build one with `npm run prepare:dev-pack`",
+    );
+    context.skip("no local dictionary pack — build one with `npm run prepare:dev-pack`");
     return;
   }
 
@@ -79,7 +86,7 @@ test("cross-engine tokenization contract (extension side)", async (context) => {
   const subset = subsetFromRealPack(packPath, corpus.cases.map((entry) => entry.sentence));
   const payload = gzipSync(subset.join("\n") + "\n");
   const manifest = {
-    schemaVersion: 3, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: "cross-engine",
+    schemaVersion: 3, buildRecipeVersion: 6, minimumExtensionVersion: "0.2.1", contentRevision: "cross-engine",
     builtAt: "2026-07-15T00:00:00Z", artifact: "dictionary.ndjson.gz", compression: "gzip",
     mediaType: "application/x-ndjson", bytes: payload.byteLength,
     sha256: createHash("sha256").update(payload).digest("hex"),

@@ -68,6 +68,24 @@ const records = [
       ...(headword === "明日天気" ? [{ source: "jiten-global", text: "明日", reading: "あした", rank: 1 }] : []),
     ],
   })),
+  // JMdict restricts a reading to the writings it actually spells: 良い天気 reads
+  // either よいてんき or いいてんき, but いい天気 only ever reads いいてんき. Taking the
+  // entry's first kana regardless pairs いい天気 with よいてんき — which cannot be
+  // aligned, so the furigana smears over the whole word instead of the kanji.
+  {
+    type: "term", id: "jmdict:23", dictionary: "jmdict", headword: "良い天気",
+    expressions: [
+      { text: "良い天気", script: "mixed", common: true, tags: [] },
+      { text: "よい天気", script: "mixed", common: false, tags: [] },
+      { text: "いい天気", script: "mixed", common: false, tags: [] },
+    ],
+    readings: [
+      { text: "よいてんき", kind: "kana", appliesTo: ["良い天気", "よい天気"] },
+      { text: "いいてんき", kind: "kana", appliesTo: ["良い天気", "いい天気"] },
+    ],
+    senses: [{ glosses: { eng: ["nice weather"], spa: ["buen tiempo"] }, partsOfSpeech: ["exp"], fields: [], misc: [], dialects: [], restrictions: [] }],
+    frequencies: [{ source: "jiten-global", text: "良い天気", reading: "よいてんき", rank: 6_510 }],
+  },
   // A usually-kana (uk) expression: its only writing forms are rare kanji, and
   // the surface that appears on a page is the kana reading について. The kana is a
   // *reading*, not an expression, so the confidence gate has to accept it.
@@ -177,6 +195,11 @@ function manifest(revision: string, sha256 = checksum) {
 test("installs, deinflects, parses, and rolls back a corrupt offline pack", async (context) => {
   await removeDictionary();
 
+  // This test rewires fetch a dozen times; hand it back so the rest of the
+  // process doesn't get a stub that answers every URL with a dictionary pack.
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+
   globalThis.fetch = (async () => new Response(JSON.stringify({
     title: "Dictionary pack unavailable",
     detail: "No local dictionary pack has been built yet.",
@@ -225,6 +248,13 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.deepEqual(expressionLookup?.senses[0]?.tags, ["Yojijukugo"]);
   assert.equal((await lookupOffline("明日天気", ["eng"], "https://shirabe.test"))?.headword, "明日天気",
     "an explicit lookup must preserve an obscure exact dictionary entry");
+
+  // Each written form must answer with the reading JMdict restricts to it, or
+  // the furigana can't align and smears over the whole word.
+  assert.equal((await lookupOffline("いい天気", ["eng"], "https://shirabe.test"))?.reading, "いいてんき",
+    "a form must not borrow a reading restricted to its sibling writings");
+  assert.equal((await lookupOffline("良い天気", ["eng"], "https://shirabe.test"))?.reading, "よいてんき");
+  assert.equal((await lookupOffline("よい天気", ["eng"], "https://shirabe.test"))?.reading, "よいてんき");
   assert.deepEqual(
     (await parseOffline("明日天気になる。", ["eng"], "https://shirabe.test")).filter((token) => token.content).slice(0, 2).map((token) => token.surface),
     ["明日", "天気"],
@@ -347,8 +377,10 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   const benchmarkStartedAt = performance.now();
   for (let iteration = 0; iteration < 50; iteration += 1) await parseOffline(corpus, ["eng"], "https://shirabe.test");
   const benchmarkMs = performance.now() - benchmarkStartedAt;
+  // Diagnostic only. Wall-clock on unknown CI hardware can't be asserted without
+  // either flaking or being so loose it passes a 20x regression — which is what
+  // the old `< 10_000` bound did for a run that takes a few hundred ms.
   context.diagnostic(`dictionary-prefix benchmark: 50 representative sentences in ${benchmarkMs.toFixed(1)} ms`);
-  assert.ok(benchmarkMs < 10_000, `representative local segmentation took ${benchmarkMs.toFixed(1)} ms for 50 sentences`);
 
   let routineRequests = 0;
   globalThis.fetch = (async () => {

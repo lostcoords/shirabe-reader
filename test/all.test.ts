@@ -1,6 +1,11 @@
 import "./deinflection.test.js";
 import "./jmdict-tags.test.js";
+import "./audio.test.js";
 import "./offline-dictionary.test.js";
 import "./dom.test.js";
+import "./host-rules.test.js";
+import "./placement.test.js";
+import "./content-render.test.js";
 import "./manifest.test.js";
 import "./telemetry.test.js";
+import "./background-cache.test.js";

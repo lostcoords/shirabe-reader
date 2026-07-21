@@ -182,6 +182,12 @@ test("golden segmentation corpus", async (context) => {
     };
     context.diagnostic(`golden corpus: using real pack ${packPath} (${realSubset.length - 1} relevant entries)`);
   } else {
+    // CI demands the real run; locally the `pack: full` rows report as skipped
+    // subtests below rather than quietly counting as passes.
+    assert.ok(
+      !process.env.SHIRABE_REQUIRE_PACK,
+      "SHIRABE_REQUIRE_PACK is set but no dictionary pack is installed — build one with `npm run prepare:dev-pack`",
+    );
     context.diagnostic("golden corpus: no local dictionary pack — running fixture cases only");
   }
 
@@ -196,6 +202,9 @@ test("golden segmentation corpus", async (context) => {
   for (const entry of corpus) {
     if (entry.pack === "full" && !usingRealPack) {
       skipped.push(entry.name);
+      // A real subtest, so the runner counts it as skipped instead of leaving the
+      // parent green with a case that never ran.
+      await context.test(entry.name, { skip: "needs a real dictionary pack" }, () => {});
       continue;
     }
     const tokens = await parseOffline(entry.text, ["eng"], "https://shirabe.test");

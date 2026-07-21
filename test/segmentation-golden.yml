@@ -19,10 +19,23 @@
 
 - name: itsu-datta-not-itsudatsu
   text: いつだったか
-  expect: [いつ, だった, か]
+  merges: [いつ]
+  splits: [いつだった]
   why: >
     いつだった must not collapse into the noun/suru-verb 逸脱 via the godan past
     rule った→つ. Guarded by the part-of-speech gate on deinflected candidates.
+    Pinned as a boundary rather than a full expectation so it runs against the
+    bundled fixture too — 逸脱 and 何時 are in there precisely for this trap, and
+    the fixture has no copula or question particle to finish the sentence with.
+
+- name: itsu-datta-full-segmentation
+  text: いつだったか
+  expect: [いつ, だった, か]
+  pack: full
+  why: >
+    The whole-sentence answer for the 逸脱 trap above. Needs the real pack: the
+    fixture cannot produce だった or か at all, so on the fixture this is skipped
+    rather than quietly asserting a smaller competitive field.
 
 - name: emphasis-katakana
   text: スゴイ
@@ -52,13 +65,22 @@
 
 - name: unknown-katakana-run
   text: ミュンヘンに
-  expect: [ミュンヘン, に]
   tokens: [ミュンヘン, に]
+  merges: [ミュンヘン]
   why: >
-    A katakana run stays ONE token rather than shredding. Against the real pack
-    ミュンヘン is a JMnedict name (so it is a content word); in fixture mode it is
-    unknown and coalesces as a non-content run. Either way a lone mora must never
-    fold (ミ → み → 見る), which is what used to shred it.
+    A katakana run stays ONE token rather than shredding — a lone mora must never
+    fold (ミ → み → 見る), which is what used to shred it. Pinned as a boundary
+    because the *content-word* answer legitimately differs by pack, which the
+    full-segmentation case below asserts instead.
+
+- name: unknown-katakana-run-full
+  text: ミュンヘンに
+  expect: [ミュンヘン, に]
+  pack: full
+  why: >
+    Against the real pack ミュンヘン is a JMnedict name and therefore a content
+    word. In fixture mode it is unknown and coalesces as a non-content run, so
+    this expectation is only meaningful with the real dictionary.
 
 - name: kuru-irregular-past
   text: 来た
@@ -93,13 +115,32 @@
 
 - name: fullwidth-headword
   text: Ｔシャツを買った
+  merges: [Ｔシャツ]
+  why: >
+    NFKC-normalised full-width headwords stay reachable. Pinned as a boundary so
+    it runs against the fixture too; the rest of the sentence needs 買う, which
+    only the real pack has.
+
+- name: fullwidth-headword-full
+  text: Ｔシャツを買った
   expect: [Ｔシャツ, を, 買った=買う]
-  why: NFKC-normalised full-width headwords stay reachable.
+  pack: full
+  why: The whole-sentence answer, including the 買った→買う deinflection.
 
 - name: yoji-expression
   text: 一石二鳥は便利だ
+  merges: [一石二鳥]
+  splits: [一石]
+  why: >
+    A yoji/idiom entry merges rather than splitting into 一石 + 二鳥. Pinned as a
+    boundary so it runs against the fixture too; 便利 and the copula are real-pack
+    only.
+
+- name: yoji-expression-full
+  text: 一石二鳥は便利だ
   expect: [一石二鳥, は, 便利, だ]
-  why: A yoji/idiom entry merges rather than splitting into 一石 + 二鳥.
+  pack: full
+  why: The whole-sentence answer around the yoji entry.
 
 # --- Real dictionary only (not in the small test fixture) -------------------
 # Drawn from the YouTube captions this parser is built for.

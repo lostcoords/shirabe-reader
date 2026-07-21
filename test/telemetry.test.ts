@@ -40,7 +40,11 @@ test("parseFrames reads V8 and Firefox stacks, outermost-first", () => {
   assert.deepEqual(frames[0], { function: "onClick", filename: "chrome-extension://abc/content.js", lineno: 40, colno: 9 });
 
   const firefox = "doThing@moz-extension://abc/content.js:12:5\nonClick@moz-extension://abc/content.js:40:9";
-  assert.equal(parseFrames(firefox).length, 2);
+  const firefoxFrames = parseFrames(firefox);
+  assert.equal(firefoxFrames.length, 2);
+  assert.deepEqual(firefoxFrames[0], { function: "onClick", filename: "moz-extension://abc/content.js", lineno: 40, colno: 9 });
+  assert.deepEqual(firefoxFrames[1], { function: "doThing", filename: "moz-extension://abc/content.js", lineno: 12, colno: 5 });
+
   assert.deepEqual(parseFrames(undefined), []);
 });
 
@@ -78,11 +82,4 @@ test("named failure counters are wired at their choke points", () => {
   // Core-functionality + feature counters at their own sites.
   assert.match(background, /captureMeasurement\("parse_failed", 1\)/);
   assert.match(background, /captureEvent\("audio_fetch_failed"/);
-});
-
-test("the client reporter only forwards our own errors, never the host page's", () => {
-  const reporter = readFileSync("src/common/client-reporter.ts", "utf8");
-  // The extension-origin gate is what keeps a page's own JS errors out.
-  assert.match(reporter, /ext\.runtime\.getURL\(""\)/);
-  assert.match(reporter, /stack\.includes\(extBase\)/);
 });

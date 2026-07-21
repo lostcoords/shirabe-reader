@@ -65,7 +65,7 @@ const bump = (map: Map<string, { count: number; example: string }>, key: string,
   const kept = subset(pack, rows.map((row) => row.text));
   const payload = gzipSync(kept.join("\n") + "\n");
   const manifest = {
-    schemaVersion: 3, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: "sweep",
+    schemaVersion: 3, buildRecipeVersion: 6, minimumExtensionVersion: "0.2.1", contentRevision: "sweep",
     builtAt: "2026-07-15T00:00:00Z", artifact: "dictionary.ndjson.gz", compression: "gzip",
     mediaType: "application/x-ndjson", bytes: payload.byteLength,
     sha256: createHash("sha256").update(payload).digest("hex"),

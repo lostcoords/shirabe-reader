@@ -42,6 +42,25 @@ test("logical scanner inserts a boundary between block-level siblings", async ()
   assert.equal(mod.logicalTextAt(head, 0).context, "日本語を読む", "inline links/emphasis do not add boundaries");
 });
 
+test("a caret in a later block is offset past the newlines inserted before it", async () => {
+  // contextOffset is what the newline-boundary code actually computes: the caret's
+  // index into the joined context, not into its own text node. Get it wrong and
+  // the lookup window reads from the wrong character of the wrong block.
+  const window = installDom(`<div id="wrap"><p id="first">日本語。</p>猫が鳴く</div>`);
+  const { logicalTextAt } = await import("../src/content/dom-text.js");
+  const second = window.document.getElementById("wrap")?.lastChild as Text;
+  const logical = logicalTextAt(second, 1);
+
+  assert.equal(logical.context, "日本語。\n猫が鳴く");
+  // 4 chars of the first block + the inserted newline + 1 into the second.
+  assert.equal(logical.contextOffset, 6, "the node offset is shifted by everything joined before it");
+  assert.equal(logical.text, "が鳴く", "the read-forward window starts at contextOffset");
+
+  // A caret in the FIRST node needs no shift, so the two offsets agree.
+  const first = window.document.getElementById("first")?.firstChild as Text;
+  assert.equal(logicalTextAt(first, 2).contextOffset, 2);
+});
+
 test("scan highlight range snaps to the matched length across inline nodes", async () => {
   // 食べ<a>られた</a>: a 3-code-unit match from the caret must cover 食べ plus ら
   // (one char into the next inline node), so the highlight lands on the term.
@@ -94,6 +113,12 @@ test("a block that scrolls back mid-flight still parses once its batch settles",
     disconnect(): void {}
   }
   const frames: Array<() => void> = [];
+  // Hand every stubbed global back afterwards: a leaked requestAnimationFrame
+  // would swallow parser.ts's deferred work (enterBlock, queueStateRefresh) for
+  // every test that runs after this one in the same bundled process.
+  const scheduling = ["IntersectionObserver", "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback"];
+  const globals = globalThis as unknown as Record<string, unknown>;
+  const originalScheduling = Object.fromEntries(scheduling.map((name) => [name, globals[name]]));
   Object.assign(globalThis, {
     IntersectionObserver: FakeIO,
     requestAnimationFrame: (callback: () => void) => { frames.push(callback); return frames.length; },
@@ -147,6 +172,7 @@ test("a block that scrolls back mid-flight still parses once its batch settles",
     );
   } finally {
     ext.runtime.sendMessage = original;
+    Object.assign(globalThis, originalScheduling);
   }
 });
 
@@ -321,6 +347,83 @@ test("page metrics distinguish occurrences and unique words and apply the i+1 ca
   index.remove(words[0]);
   assert.equal(index.metrics().total, 3);
   assert.equal(index.metrics().unique, 2);
+});
+
+test("the status bar counts every i+1 block on the page, not just the changed ones", async () => {
+  const window = installDom(`
+    <li id="one-unknown"><span class="sb-word" data-lemma="猫" data-state="known"></span><span class="sb-word" data-lemma="食べる" data-state="none" data-frequency="1200"></span></li>
+    <li id="all-known"><span class="sb-word" data-lemma="猫" data-state="known"></span></li>
+    <li id="two-unknown"><span class="sb-word" data-lemma="犬" data-state="none"></span><span class="sb-word" data-lemma="鳥" data-state="none"></span></li>
+  `);
+  // Patch the resolved `ext`, not globalThis.chrome: the module binds once, to
+  // whichever stub was installed the first time any test imported it.
+  const sent: { type: string; metrics?: { iPlusOne: number } }[] = [];
+  const { ext } = await import("../src/common/browser.js");
+  const original = ext.runtime.sendMessage;
+  ext.runtime.sendMessage = async (message: unknown) => {
+    sent.push(message as { type: string });
+    return { ok: true };
+  };
+
+  const { showStatusBar, hideStatusBar } = await import("../src/content/status-bar.js");
+  // The module keeps `host`, the metric index, and its debounce timer as
+  // singletons, but `installDom` swaps the document out from under them. Reset
+  // first so this test doesn't inherit a bar built against a dead document, and
+  // tear down in `finally` so a failed assertion here can't leak into the rest
+  // of the suite.
+  hideStatusBar();
+  sent.length = 0;
+
+  try {
+    showStatusBar(() => {});
+
+    const marked = [...window.document.querySelectorAll(".sb-i-plus-one")].map((block) => block.id);
+    assert.deepEqual(marked, ["one-unknown"], "only the block with exactly one unknown word is cued");
+    assert.equal(sent.findLast((message) => message.type === "pageMetrics")?.metrics?.iPlusOne, 1);
+
+    hideStatusBar();
+    assert.equal(window.document.querySelectorAll(".sb-i-plus-one").length, 0, "hiding the bar clears the cue");
+  } finally {
+    hideStatusBar();
+    ext.runtime.sendMessage = original;
+  }
+});
+
+test("the client reporter forwards our own errors and drops the host page's", async () => {
+  // A content script shares the page's window, so a naive handler would ship the
+  // host page's JavaScript errors to our collector — noise at best, a privacy
+  // leak at worst. The extension-origin gate is the whole defence.
+  const window = installDom("");
+  const extBase = "moz-extension://shirabe-test/";
+  const { ext } = await import("../src/common/browser.js");
+  const originalGetURL = ext.runtime.getURL;
+  const originalSend = ext.runtime.sendMessage;
+  const reported: string[] = [];
+  ext.runtime.getURL = (path: string) => `${extBase}${path}`;
+  ext.runtime.sendMessage = async (message: { type: string; report?: { signals: Array<{ value: string }> } }) => {
+    if (message.type === "telemetry") reported.push(...message.report?.signals.map((signal) => signal.value) ?? []);
+    return { ok: true };
+  };
+
+  try {
+    const { installClientReporter } = await import("../src/common/client-reporter.js");
+    installClientReporter("content");
+
+    const raise = (message: string, origin: string): void => {
+      const error = new Error(message);
+      error.stack = `Error: ${message}\n    at handler (${origin}app.js:12:5)`;
+      window.dispatchEvent(new window.ErrorEvent("error", { error, message, filename: `${origin}app.js` }));
+    };
+
+    raise("host page analytics blew up", "https://reader.test/");
+    raise("our content script blew up", extBase);
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+    assert.deepEqual(reported, ["our content script blew up"], "only the extension-origin error is forwarded");
+  } finally {
+    ext.runtime.getURL = originalGetURL;
+    ext.runtime.sendMessage = originalSend;
+  }
 });
 
 test("the release host matrix resolves to maintained parsing paths", async () => {
