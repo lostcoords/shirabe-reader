@@ -352,6 +352,19 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     assert.equal((await lookupOffline(form, ["eng"], "https://shirabe.test"))?.headword, "来る", `${form} deinflects to 来る (vk not rejected)`);
   }
 
+  // Prohibitive 〜な and negative-te 〜ないで have no dedicated Yomitan deinflection
+  // rule, yet the reader still resolves them: prefix-longest-first finds the 食べる
+  // writing under 食べるな, and deinflects the 食べない / 食べます prefix under 食べないで /
+  // 食べませんでしたり. Guards that span-shrinking keeps covering them.
+  for (const [form, base] of [["食べるな", "食べる"], ["見るな", "見る"], ["食べないで", "食べる"], ["読まないで", "読む"], ["食べませんでしたり", "食べる"]]) {
+    assert.equal((await lookupOffline(form, ["eng"], "https://shirabe.test"))?.headword, base, `${form} resolves to ${base} via span-shrinking`);
+  }
+  // Polite requests 〜てください / 〜ないでください: the reader deinflects the longest
+  // prefix (食べて / 食べないで → the verb) and leaves ください as its own word.
+  for (const [form, base] of [["食べてください", "食べる"], ["食べないでください", "食べる"], ["来ないでください", "来る"]]) {
+    assert.equal((await lookupOffline(form, ["eng"], "https://shirabe.test"))?.headword, base, `${form} resolves to ${base} (ください is a separate word)`);
+  }
+
   // Text-processor variants (Yomitan-style): emphasis katakana folds to hiragana
   // and stretched kana collapses, so caption/subtitle spellings reach the entry —
   // while the on-page surface is preserved and a lone mora (ミ) is never folded.

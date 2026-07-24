@@ -3822,6 +3822,19 @@
         }
       ]
     },
+    "-ないで": {
+      "name": "-ないで",
+      "description": "Negative te-form: で attached to the plain negative (〜ない) of a verb, for a negative request or manner (食べないで, 行かないで). Yomitan has no rule for this; daidai adds it. Deinflects 〜ないで to the negative 〜ない, which the `negative` transform then resolves to the dictionary form.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["-て"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "ないで",
+          "deinflected": "ない"
+        }
+      ]
+    },
     "-さ": {
       "name": "-さ",
       "description": "Nominalizing suffix of i-adjectives indicating nature, state, mind or degree.\nUsage: Attach さ to the stem of i-adjectives.",

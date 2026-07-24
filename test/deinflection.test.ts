@@ -25,10 +25,22 @@ test("deinflects progressive, potential, passive, and polite-negative godan form
   assert.ok(forms("読みませんでした").includes("読む"));
 });
 
+test("deinflects ら抜き potential forms to their dictionary form", () => {
+  assert.ok(forms("食べれる").includes("食べる")); // ichidan ら抜き
+  assert.ok(forms("見れる").includes("見る"));
+  assert.ok(forms("来れる").includes("来る")); // kuru ら抜き
+});
+
 test("deinflects suru and kuru irregular forms", () => {
   assert.ok(forms("勉強していた").includes("勉強する"));
   assert.ok(forms("勉強できる").includes("勉強する"));
   assert.ok(forms("持ってきました").includes("持ってくる"));
+});
+
+test("deinflects the negative te-form 〜ないで (daidai extension beyond Yomitan)", () => {
+  assert.ok(forms("食べないで").includes("食べる")); // ichidan
+  assert.ok(forms("行かないで").includes("行く")); // godan
+  assert.ok(forms("読まないで").includes("読む"));
 });
 
 // Chains and their names must match daidai's, because the website renders those

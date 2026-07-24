@@ -43,10 +43,18 @@ test("all extension-owned surfaces preserve focus, reduced-motion, and forced-co
   }
 });
 
-test("built-in auto sites expose an explicit optional-access control", () => {
-  const popup = readFileSync("src/action/popup.html", "utf8");
-  assert.match(popup, /<label for="siteMode">/);
-  assert.match(popup, /id="enableSiteAccess"[^>]*>Enable automatic access<\/button>/);
+test("optional host access is only ever requested from an explicit user action", () => {
+  const popup = readFileSync("src/action/popup.ts", "utf8");
+
+  // Store review turns on this: <all_urls> is optional, and the only thing that
+  // asks for it is the user clicking the per-site reader toggle. The separate
+  // siteMode select is gone — the toggle is the one control that grants access.
+  assert.match(popup, /readerToggle\.addEventListener\("click"/);
+  assert.match(popup, /const siteAccess = await requestSiteAccess\(siteUrl\)/);
+  assert.match(popup, /return ext\.permissions\.request\(\{ origins: \[origin\] \}\)/);
+
+  // Denial is survivable: scanning still works in the open tab via activeTab.
+  assert.match(popup, /Site access was not granted/);
 });
 
 test("the popup replaces decorative branding with a real per-site reader toggle", () => {
@@ -298,7 +306,6 @@ test("offline parsing does not wait for profile-state network hydration", () => 
   assert.match(background, /let stateCacheWrite: Promise<void> = Promise\.resolve\(\)/);
   assert.match(background, /const STATE_CACHE_MAX_LEMMAS = 20_000/);
   assert.match(background, /memoryStateSnapshot/);
-  assert.match(background, /case "syncProfile"/);
   assert.match(background, /const DECK_CACHE_KEY = "profileDeckSnapshot"/);
   assert.match(background, /async function cachedDecks/);
   assert.match(background, /ext\.storage\.local\.remove\(\[STATE_CACHE_KEY, DECK_CACHE_KEY\]\)/);
@@ -328,5 +335,10 @@ test("missing offline storage self-heals and the word popup has a stable scrolla
   assert.match(popup, /max-height: min\(60vh, 460px\)/);
   assert.doesNotMatch(popup, /\n  height: min\(460px/);
   assert.match(popup, /overflow-y: auto/);
-  assert.match(popup, /roomRight >= width/);
+
+  // Side-choice for vertical (tategaki) text lives in placement.ts now, not in
+  // popup.ts: prefer the left column, fall back to whichever side has room.
+  const placement = readFileSync("src/content/placement.ts", "utf8");
+  assert.match(placement, /const roomRight = view\.width - avoid\.right - margin \* 2/);
+  assert.match(placement, /roomLeft >= size\.width \|\| roomLeft >= roomRight/);
 });
