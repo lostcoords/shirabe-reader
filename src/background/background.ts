@@ -4,15 +4,17 @@ import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveCo
 import { isR2AudioUrl } from "../common/audio.js";
 import { normalizePattern, refreshRemoteHostRules } from "../common/host-rules.js";
 import { cancelDictionaryInstall, checkDictionaryUpdate, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary, resumeInterruptedDictionaryInstall } from "../common/offline-dictionary.js";
-import type { Deck, LookupHistoryItem, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
+import type { Deck, Failure, LookupHistoryItem, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
 import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers } from "./telemetry.js";
+import { installDevReload } from "./dev-reload.js";
 
 // Single API client + our own copy of the config (the client hides it). Both
 // stay in sync with stored settings.
 let config: Config = DEFAULTS;
 let api: ShirabeApi;
 installBackgroundErrorHandlers();
+installDevReload();
 const ready = initializeBackground();
 
 async function initializeBackground(): Promise<void> {
@@ -231,13 +233,29 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
     }
     case "save": {
       const { type: _type, ...options } = request;
-      // Content scripts capture with chrome hidden; fall back to a direct tab
-      // grab so saves always attach an image when the tab is capturable.
-      const imageDataUrl = options.imageDataUrl
-        || await ext.tabs.captureVisibleTab(senderWindowId, { format: "jpeg", quality: 82 }).catch(() => undefined);
-      const result = await api.save({ ...options, ...(imageDataUrl ? { imageDataUrl } : {}) });
+      // No fallback capture here. The content script is the only side that knows
+      // to hide our popup first and to prefer the video frame, so a grab from
+      // here is a screenshot of the popup covering the scene — worse than the no
+      // image it replaces.
+      const result = await api.save(options);
       await cacheStates({ [request.lemma]: result.state }, { [request.lemma]: result });
       return { ok: true, type: "save", result };
+    }
+    case "grade": {
+      const result = await api.grade({ lemma: request.lemma, reading: request.reading, rating: request.rating });
+      // Refresh the cached details too, not just the top-level state: the popup
+      // prefers `details.state` on reopen, so caching state-only would let a stale
+      // detail snap a just-graded word back to "due". Carry the cached decks +
+      // cardId forward (grading changes neither) and overwrite state + intervals.
+      const previous = (await cachedStateSnapshot()).details[request.lemma];
+      const details: StudyDetails = {
+        state: result.state,
+        decks: previous?.decks ?? [],
+        intervals: result.intervals,
+        ...(result.cardId != null ? { cardId: result.cardId } : previous?.cardId != null ? { cardId: previous.cardId } : {}),
+      };
+      await cacheStates({ [request.lemma]: result.state }, { [request.lemma]: details });
+      return { ok: true, type: "grade", result };
     }
     case "decks":
       return { ok: true, type: "decks", decks: await cachedDecks() };
@@ -266,9 +284,9 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       return { ok: true, type: "activePageMetrics", metrics: (tab?.id != null && tabMetrics.get(tab.id)) || null };
     }
     case "setState": {
-      const state = await api.setState(request.lemma, request.state);
-      await cacheStates({ [request.lemma]: state });
-      return { ok: true, type: "setState", state };
+      const details = await api.setState(request.lemma, request.state);
+      await cacheStates({ [request.lemma]: details.state });
+      return { ok: true, type: "setState", state: details.state, details };
     }
     case "connect":
       await connect();
@@ -496,8 +514,17 @@ function pickStates(states: Record<string, WordState>, lemmas: string[]): Record
   return Object.fromEntries(lemmas.filter((lemma) => states[lemma]).map((lemma) => [lemma, states[lemma]]));
 }
 
+// storage.local outlives any single build, so a snapshot written by an older one
+// still deserializes — a field short of the type it claims to be. `decks` was
+// `memberships` on the wire not long ago, and the reader dereferences it
+// directly to label a saved word. Normalize on the way out, so no consumer has
+// to defend itself against a cache older than it is.
 function pickDetails(details: Record<string, StudyDetails>, lemmas: string[]): Record<string, StudyDetails> {
-  return Object.fromEntries(lemmas.filter((lemma) => details[lemma]).map((lemma) => [lemma, details[lemma]]));
+  return Object.fromEntries(
+    lemmas
+      .filter((lemma) => details[lemma])
+      .map((lemma) => [ lemma, { ...details[lemma], decks: details[lemma].decks ?? [] } ]),
+  );
 }
 
 // ── Redirect login (OAuth 2.0 authorization code + PKCE) ─────────────────────
@@ -606,18 +633,39 @@ function clientLabel(): string {
   return `Shirabe Reader (${browser})`;
 }
 
-function errorResponse(err: unknown, requestType = "unknown"): { ok: false; error: string } {
-  const error = formatBackgroundError(err);
-  console.error("[Shirabe background] request failed", { requestType, error: err, formatted: error });
+function errorResponse(err: unknown, requestType = "unknown"): Failure {
+  const detail = formatBackgroundError(err);
+  console.error("[Shirabe background] request failed", { requestType, error: err, formatted: detail });
+  const api = err instanceof ApiError ? err : null;
+  // An answer the server gave on purpose (not connected, no scope, needs Pro) is
+  // a state, not a fault: reporting it as an exception buries the real ones and
+  // tells us nothing we didn't design. 5xx and everything unexpected still ship.
+  const expected = api != null && api.status >= 400 && api.status < 500;
   // A telemetry request that fails must not report itself and loop.
-  if (requestType !== "telemetry") {
+  if (requestType !== "telemetry" && !expected) {
     captureException(err, "background", { request: requestType });
     // Named failure counters for the shapes worth alerting on, distinct from the
     // raw exception: onboarding (dictionary install) and backend health (5xx).
     if (requestType === "installDictionary") captureEvent("dictionary_install_failed", { request: requestType });
-    if (err instanceof ApiError && err.status >= 500) captureEvent("api_error", { status: String(err.status), request: requestType });
+    if (api && api.status >= 500) captureEvent("api_error", { status: String(api.status), request: requestType });
   }
-  return { ok: false, error: `request: ${requestType}\n${error}` };
+  return {
+    ok: false,
+    // What a person reads. The dump rides along as `detail` for the options
+    // page's diagnostics and the console — never straight into the popup.
+    error: humanMessage(err),
+    detail: `request: ${requestType}\n${detail}`,
+    ...(api ? { status: api.status, ...(api.code ? { code: api.code } : {}) } : {}),
+  };
+}
+
+// One sentence, no stack, no "exception:" preamble. An ApiError already carries
+// the server's own wording ("Writing to the SRS requires Pro."); anything else
+// gets its message, and a thrown non-Error gets a plain apology.
+function humanMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  const message = err instanceof Error ? err.message.trim() : "";
+  return message || "That didn't go through. Try again.";
 }
 
 function formatBackgroundError(error: unknown, depth = 0): string {
@@ -724,7 +772,9 @@ async function fetchAudioDataUrl(url: string): Promise<string> {
   const response = await fetch(url);
   if (!response.ok) {
     captureEvent("audio_fetch_failed", { status: String(response.status) });
-    throw new Error(`Audio fetch failed (${response.status}).`);
+    // ApiError, so the caller can branch on 404 ("no clip for this word yet")
+    // instead of pattern-matching the sentence.
+    throw new ApiError(`Audio fetch failed (${response.status}).`, response.status);
   }
   const buffer = new Uint8Array(await response.arrayBuffer());
   const mediaType = response.headers.get("content-type") || "audio/mp4";

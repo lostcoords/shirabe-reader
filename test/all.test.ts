@@ -8,4 +8,5 @@ import "./placement.test.js";
 import "./content-render.test.js";
 import "./manifest.test.js";
 import "./telemetry.test.js";
+import "./pro-gate.test.js";
 import "./background-cache.test.js";

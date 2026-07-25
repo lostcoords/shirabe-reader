@@ -15,8 +15,21 @@ export type StudyDetails = {
   intervals?: IntervalPreviews;
   /** Shirabe card id — open `/study/cards?card_id=` to view card + mined context. */
   cardId?: number;
+  /**
+   * How many cards this word holds. A word can carry one per meaning, so `> 1`
+   * means `cardId` reaches only one of them and the word deserves the card
+   * browser filtered by lemma instead of a deep link.
+   */
+  cardCount?: number;
+  /** 0-based sense positions this word already has cards for. */
+  savedSensePositions?: number[];
+  /** A card covers the whole word, so every meaning is already taken. */
+  savedWholeWord?: boolean;
 };
 export type SaveResult = StudyDetails & { created: boolean };
+// Grading returns the card's new state + next-grade previews, but not deck
+// membership (grading a card never changes which decks hold it).
+export type GradeResult = { state: WordState; intervals: IntervalPreviews; cardId?: number };
 export type SentenceCapture = {
   text: string;
   translation?: string;
@@ -25,6 +38,8 @@ export type SentenceCapture = {
   capturedAt: string;
   integration?: string;
   mediaTimestampMs?: number;
+  /** End of the mined line, so the card holds a range and not just a cue-in. */
+  mediaEndMs?: number;
   targetStart?: number;
   targetEnd?: number;
 };
@@ -67,9 +82,13 @@ export type Request =
   | { type: "removeDictionary" }
   | { type: "cancelDictionaryInstall" }
   | {
-      type: "save"; lemma: string; surface?: string; reading?: string; deckId?: number; sentence?: SentenceCapture; rating?: Rating;
+      type: "save"; lemma: string; surface?: string; reading?: string; deckId?: number; sentence?: SentenceCapture;
+      // 0-based sense positions to scope the card to (empty/omitted = whole word).
+      sensePositions?: number[];
       imageDataUrl?: string; audioDataUrl?: string;
     }
+  // Grade a due card on the 1–4 FSRS scale, by lemma (+reading). POST /v1/srs/reviews.
+  | { type: "grade"; lemma: string; reading?: string; rating: Rating }
   | { type: "decks" }
   | { type: "states"; lemmas: string[] }
   | { type: "lookupHistory" }
@@ -102,13 +121,14 @@ export type Response =
   | { ok: true; type: "removeDictionary" }
   | { ok: true; type: "cancelDictionaryInstall" }
   | { ok: true; type: "save"; result: SaveResult }
+  | { ok: true; type: "grade"; result: GradeResult }
   | { ok: true; type: "decks"; decks: Deck[] }
   | { ok: true; type: "states"; states: Record<string, WordState>; details: Record<string, StudyDetails> }
   | { ok: true; type: "lookupHistory"; history: LookupHistoryItem[] }
   | { ok: true; type: "clearLookupHistory" }
   | { ok: true; type: "pageMetrics" }
   | { ok: true; type: "activePageMetrics"; metrics: PageMetrics | null }
-  | { ok: true; type: "setState"; state: WordState }
+  | { ok: true; type: "setState"; state: WordState; details: StudyDetails }
   | { ok: true; type: "connect" }
   | { ok: true; type: "disconnect" }
   | { ok: true; type: "updateLanguages"; languages: GlossLanguage[] }
@@ -116,11 +136,24 @@ export type Response =
   | { ok: true; type: "captureTab"; imageDataUrl: string }
   | { ok: true; type: "telemetry" }
   | { ok: true; type: "status"; status: Status }
-  | { ok: false; error: string };
+  | Failure;
+
+// A failed request. `error` is the sentence a *person* reads — it goes straight
+// into the popup — while `detail` carries the exception dump for the options
+// page and the console. They were one field, which is how a stack trace ended
+// up rendered under a Save button. `status`/`code` come from the API response
+// so callers can branch on the answer instead of pattern-matching prose.
+export type Failure = { ok: false; error: string; detail?: string; status?: number; code?: string };
 
 // Narrow the reply to the request that produced it, so `res.tokens` is only
 // reachable after a "parse" request, etc.
-type ResponseFor<T extends Request["type"]> = Extract<Response, { ok: true; type: T }> | { ok: false; error: string };
+type ResponseFor<T extends Request["type"]> = Extract<Response, { ok: true; type: T }> | Failure;
+
+// "You need Pro to do that" is the one failure that isn't a failure: the request
+// was understood and refused, and the honest UI is an upgrade offer. Saving,
+// grading and marking known all answer this way for a free account
+// (docs/specs/api.md §2 · specs/browser-extension.md §1).
+export const isProRequired = (res: Failure): boolean => res.code === "PRO_REQUIRED" || res.status === 402;
 
 export async function send<R extends Request>(request: R): Promise<ResponseFor<R["type"]>> {
   try {
@@ -129,7 +162,8 @@ export async function send<R extends Request>(request: R): Promise<ResponseFor<R
     const detail = error instanceof Error ? error.message : String(error);
     return {
       ok: false,
-      error: detail || "The extension background stopped. Reopen Shirabe and try again.",
+      error: "The extension background stopped. Reopen Shirabe and try again.",
+      ...(detail ? { detail } : {}),
     } as ResponseFor<R["type"]>;
   }
 }

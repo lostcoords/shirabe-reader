@@ -77,8 +77,12 @@ test("named failure counters are wired at their choke points", () => {
   const background = readFileSync("src/background/background.ts", "utf8");
   // Onboarding + backend-health counters ride the central errorResponse hook.
   assert.match(background, /captureEvent\("dictionary_install_failed"/);
-  assert.match(background, /err instanceof ApiError && err\.status >= 500/);
+  assert.match(background, /status >= 500/);
   assert.match(background, /captureEvent\("api_error"/);
+  // A 4xx the server returned on purpose (needs Pro, missing scope, not
+  // connected) is a state, not a fault — reporting it as an exception buries
+  // the real ones and tells us nothing we didn't design.
+  assert.match(background, /status >= 400 && api\.status < 500/);
   // Core-functionality + feature counters at their own sites.
   assert.match(background, /captureMeasurement\("parse_failed", 1\)/);
   assert.match(background, /captureEvent\("audio_fetch_failed"/);

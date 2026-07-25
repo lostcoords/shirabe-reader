@@ -14,9 +14,11 @@ declare const __DEFAULT_API_BASE__: string;
 // Ctrl / Shift / Meta so casual reading isn't interrupted.
 export type ScanModifier = "none" | "alt" | "ctrl" | "shift" | "meta";
 export type FuriganaMode = "all" | "unknown" | "hover" | "off";
-export type StatePreset = "standard" | "colorVision" | "minimal";
-
-
+// How (and whether) a word's part of speech is coloured, using the site's own
+// groups and hues. "text" tints the word itself, which leaves the state underline
+// free to keep saying how well you know it; "underline" gives the underline to the
+// part of speech instead, so it replaces the state cue rather than fighting it.
+export type PosColoring = "off" | "text" | "underline";
 
 // User settings, persisted in extension-local storage. The API key is the only
 // secret; everything else is a preference. Read/written from the background
@@ -39,9 +41,12 @@ export type Config = {
   enabledHosts: string[]; // sites granted persistent reader access
   disabledHosts: string[]; // domains/patterns where the reader is turned off entirely
   preferredDeckId: number | null; // connected mining target; null uses the server default
-  statePreset: StatePreset;
+  posColoring: PosColoring;
   iPlusOneIncludesLearning: boolean;
   iPlusOneFrequencyMax: number;
+  // Record the spoken line when mining a subtitle. It replays the cue to do it
+  // (see content/sentence-audio.ts), so it's worth being able to turn off.
+  mineSentenceAudio: boolean;
 };
 
 export const DEFAULTS: Config = {
@@ -58,9 +63,10 @@ export const DEFAULTS: Config = {
   enabledHosts: [],
   disabledHosts: [],
   preferredDeckId: null,
-  statePreset: "standard",
+  posColoring: "underline",
   iPlusOneIncludesLearning: true,
-  iPlusOneFrequencyMax: 20_000,
+  iPlusOneFrequencyMax: 10_000,
+  mineSentenceAudio: true,
 };
 
 const KEY = "config";
@@ -89,6 +95,19 @@ export async function loadConfig(): Promise<Config> {
 
   return config;
 }
+
+// Where every "get Pro" click goes, tagged with the surface it came from — the
+// same convention the web app follows with `pricing_path(source: …)`. One helper
+// because three hand-built copies of this URL is how attribution quietly rots:
+// an untagged /pricing is indistinguishable from someone arriving on their own.
+export const pricingUrl = (apiBase: string, source: string): string =>
+  `${apiBase.replace(/\/$/, "")}/pricing?source=${encodeURIComponent(source)}`;
+
+// Where every source behind the dictionary is credited in full. Off the API base
+// like the links above, so a dev build points at the local server, and with no
+// locale segment — the site redirects to the reader's own language.
+export const creditsUrl = (apiBase: string): string =>
+  `${apiBase.replace(/\/$/, "")}/credits`;
 
 // Signed in iff we hold a key. Mining (save/grade/known) needs WRITE_SRS *and*
 // SRS entitlement (Pro or school) — matching require_srs_pro! on the API. A

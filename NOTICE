@@ -43,7 +43,9 @@ Dictionary data
 The offline dictionary pack is not part of this program: it is downloaded
 separately and carries its own licenses (JMdict/JMnedict/KANJIDIC2 under
 CC BY-SA 4.0 from the EDRDG, plus Shirabe's Spanish adaptations). See the pack's
-manifest and the extension's in-product license notices for full attribution.
+manifest and https://shirabe.org/credits for full attribution — that page is
+kept current as the data changes, which is why the extension links to it rather
+than shipping a copy that drifts.
 
 -------------------------------------------------------------------------------
 Third-party libraries

@@ -1,4 +1,5 @@
 import { parse } from "../parser.js";
+import { noteCue } from "../cues.js";
 
 export type DynamicIntegration = "netflix" | "ttsu" | "mokuro";
 type ParseTarget = (root: HTMLElement, showFurigana: boolean) => Promise<number>;
@@ -49,7 +50,10 @@ export async function parseDynamicTargets(
     if (!target.textContent?.trim()) continue;
     target.dataset.integration = LABELS[integration];
     const video = document.querySelector("video");
-    if (video && integration === "netflix") target.dataset.mediaTimestamp = String(Math.round(video.currentTime * 1000));
+    if (video && integration === "netflix") {
+      target.dataset.mediaTimestamp = String(Math.round(video.currentTime * 1000));
+      noteCue(target, video);
+    }
     parsed += await parseTarget(target, showFurigana);
   }
   return parsed;

@@ -1,53 +1,50 @@
-import { revertParsedPage, setParsingPaused } from "./parser.js";
 import { send } from "../common/messages.js";
-import { EMPTY_METRICS, isIPlusOne, PageMetricIndex, type IPlusOneOptions } from "./page-metrics.js";
+import { EMPTY_METRICS, iPlusOneTargets, PageMetricIndex, type IPlusOneOptions } from "./page-metrics.js";
 
-let host: HTMLElement | null = null;
-let paused = false;
+// How much of the open page the reader can already read. Nothing here draws:
+// the numbers go to the background, which puts the coverage percentage on the
+// toolbar badge and hands the detail to the action popup. What this module does
+// paint is the i+1 cue — the sentences one new word away from being readable.
+//
+// There used to be an on-page bar showing the same counts inline (and Pause /
+// Reparse / Revert buttons beside them). It's parked, not deleted — see
+// docs/specs/browser-extension.md § Post-MVP.
+let running = false;
 let timer: number | undefined;
-let options: IPlusOneOptions = { includesLearning: true, frequencyMax: 20_000 };
+let options: IPlusOneOptions = { includesLearning: true, frequencyMax: 10_000 };
 let metricIndex = new PageMetricIndex();
 let metricObserver: MutationObserver | null = null;
 const dirtyBlocks = new Set<HTMLElement>();
 
-// The bar owns the pause state; a config change must not silently resume behind
-// the user's back and leave the button reading "Resume" while parsing runs.
-export const statusPaused = (): boolean => paused;
-
-export function setStatusOptions(next: IPlusOneOptions): void {
+export function setMetricsOptions(next: IPlusOneOptions): void {
   options = next;
   dirtyBlocks.clear();
-  refreshStatusBar();
+  refreshMetrics();
 }
 
-export function showStatusBar(onReparse: () => void): void {
-  if (!host) host = build(onReparse);
+export function startMetrics(): void {
+  running = true;
   startMetricIndex();
   refresh();
 }
 
-export function refreshStatusBar(): void {
+export function refreshMetrics(): void {
   window.clearTimeout(timer);
   timer = window.setTimeout(refresh, 80);
 }
 
-export function hideStatusBar(): void {
+export function stopMetrics(): void {
   window.clearTimeout(timer);
   clearIPlusOne();
-  host?.remove();
-  host = null;
-  paused = false;
+  running = false;
   stopMetricIndex();
   void send({ type: "pageMetrics", metrics: EMPTY_METRICS }).catch(() => undefined);
 }
 
 function refresh(): void {
-  if (!host) return;
+  if (!running) return;
   const startedAt = performance.now();
   const metrics = { ...metricIndex.metrics(), iPlusOne: markIPlusOne() };
-  const counts = metrics.occurrences;
-  const summary = host.querySelector<HTMLElement>("[data-summary]");
-  if (summary) summary.textContent = `${metrics.occurrenceCoverage}% occurrence / ${metrics.uniqueCoverage}% unique · ${counts.known} known · ${counts.learning} learning · ${counts.unknown} unknown${counts.due ? ` · ${counts.due} due` : ""}${metrics.iPlusOne ? ` · ${metrics.iPlusOne} i+1` : ""}`;
   void send({ type: "pageMetrics", metrics }).catch(() => undefined);
   const durationMs = performance.now() - startedAt;
   if (durationMs >= 16) {
@@ -67,6 +64,7 @@ const WORD_SELECTOR = ".sb-word:not([data-continuation])";
 
 function clearIPlusOne(): void {
   for (const block of document.querySelectorAll(".sb-i-plus-one")) block.classList.remove("sb-i-plus-one");
+  for (const word of document.querySelectorAll(".sb-i-plus-one-word")) word.classList.remove("sb-i-plus-one-word");
 }
 
 // Toggles the cue on changed blocks, then counts every marked block on the page
@@ -80,16 +78,22 @@ function markIPlusOne(): number {
     if (!block.isConnected) continue;
     // Only the words this block owns. `querySelectorAll` is a deep query, so a
     // `<blockquote><p>` pair would otherwise both see the same sentence — two
-    // badges and a doubled count — and `markDirty` only ever reaches the inner
-    // one, so the outer badge would never be cleared again. Matching on the
+    // cues and a doubled count — and `markDirty` only ever reaches the inner
+    // one, so the outer cue would never be cleared again. Matching on the
     // word's own closest block also keeps a blockquote that mixes direct text
     // with a nested paragraph counting its own half.
-    const words = [...block.querySelectorAll<HTMLElement>(WORD_SELECTOR)].filter((word) => word.closest(BLOCK_SELECTOR) === block);
+    const owned = [...block.querySelectorAll<HTMLElement>(".sb-word")].filter((word) => word.closest(BLOCK_SELECTOR) === block);
+    const words = owned.filter((word) => !word.dataset.continuation);
     if (!words.length) {
       block.classList.remove("sb-i-plus-one");
       continue;
     }
-    block.classList.toggle("sb-i-plus-one", isIPlusOne(words, options));
+    const targets = iPlusOneTargets(words, options);
+    block.classList.toggle("sb-i-plus-one", targets.length > 0);
+    // A word split across inline markup renders as several spans, and only the
+    // head is a target — cue by lemma so the highlight covers the whole word.
+    const lemma = targets[0]?.dataset.lemma;
+    for (const word of owned) word.classList.toggle("sb-i-plus-one-word", lemma != null && word.dataset.lemma === lemma);
   }
   return document.querySelectorAll(".sb-i-plus-one").length;
 }
@@ -100,7 +104,7 @@ function startMetricIndex(): void {
   for (const word of document.querySelectorAll<HTMLElement>(WORD_SELECTOR)) metricIndex.update(word);
   metricObserver = new MutationObserver((records) => {
     for (const record of records) {
-      if (record.target instanceof Element && record.target.closest(".sb-status-bar, .sb-popup, .sb-host")) continue;
+      if (record.target instanceof Element && record.target.closest(".sb-popup, .sb-host")) continue;
       if (record.type === "attributes" && record.target instanceof HTMLElement) {
         // Only our own words. Plenty of component libraries drive their widgets
         // with `data-state="open"`, and the removal path below is `.sb-word`-only,
@@ -115,7 +119,7 @@ function startMetricIndex(): void {
       for (const node of record.removedNodes) visitWords(node, (word) => metricIndex.remove(word));
       if (record.target instanceof HTMLElement) markDirty(record.target);
     }
-    refreshStatusBar();
+    refreshMetrics();
   });
   metricObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state"] });
 }
@@ -136,36 +140,4 @@ function visitWords(node: Node, visit: (word: HTMLElement) => void): void {
 function markDirty(element: HTMLElement): void {
   const block = element.closest<HTMLElement>(BLOCK_SELECTOR);
   if (block) dirtyBlocks.add(block);
-}
-
-function build(onReparse: () => void): HTMLElement {
-  const element = document.createElement("div");
-  element.className = "sb-status-bar";
-  const summary = document.createElement("span");
-  summary.dataset.summary = "";
-  const pause = document.createElement("button");
-  pause.textContent = "Pause";
-  pause.addEventListener("click", () => {
-    paused = !paused;
-    setParsingPaused(paused);
-    pause.textContent = paused ? "Resume" : "Pause";
-    if (!paused) onReparse();
-  });
-  const reparse = document.createElement("button");
-  reparse.textContent = "Reparse";
-  reparse.addEventListener("click", onReparse);
-  const revert = document.createElement("button");
-  revert.textContent = "Revert";
-  revert.addEventListener("click", () => {
-    revertParsedPage();
-    void send({ type: "pageMetrics", metrics: EMPTY_METRICS }).catch(() => undefined);
-    stopMetricIndex();
-    clearIPlusOne(); // the tint and the "i+1" badge outlive the words otherwise
-    element.remove();
-    host = null;
-    paused = false;
-  });
-  element.append(summary, pause, reparse, revert);
-  document.documentElement.append(element);
-  return element;
 }

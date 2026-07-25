@@ -418,7 +418,7 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
     }
     tokens.push({
       start: position, length: surface.length, surface, reading: definition.reading,
-      lemma: definition.headword, pos: definition.senses[0]?.partsOfSpeech[0] ?? "",
+      lemma: definition.headword, pos: firstPartOfSpeech(definition),
       content: true, state: "none", frequency: definition.frequency,
     });
     position += surface.length;
@@ -454,6 +454,22 @@ function collapseEmphatic(text: string): string {
 // or 0 when the surface does not start with a number. Kanji numerals and digits
 // both count; 十/百/千 appear inside larger numbers (三十本) so they are included.
 const COUNTER_NUMERAL = /^[0-9０-９一二三四五六七八九十百千万億兆]+/;
+// A token's part of speech is the raw JMdict code — `v5b`, `adj-i`, `prt` — not
+// the label the popup prints. Everything that consumes it matches on codes:
+// the underline hues (content.css), the i+1 function-word test, counters. A
+// definition is built for display, so its `partsOfSpeech` are already labels
+// ("Godan verb"), which match none of them and colour nothing.
+//
+// JMdict also marks a part of speech on the sense that introduces it and lets
+// later senses inherit, so reading only sense[0] leaves some words unlabelled.
+function firstPartOfSpeech(definition: Definition): string {
+  for (const sense of definition.senses) {
+    const code = sense.posCodes?.[0];
+    if (code) return code;
+  }
+  return "";
+}
+
 function counterNumeralLength(surface: string): number {
   const match = surface.match(COUNTER_NUMERAL);
   if (!match) return 0;
@@ -1258,10 +1274,14 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
       const glosses = [language, ...fallbacks].map((code) => sense.glosses[code]).find((list) => list?.length);
       if (!glosses) return [];
       return [{
+        // Sense's 0-based position in the entry (display-only offline: saving is
+        // gated on a connected Pro account, so the picker never appears here).
+        position: term.senses.indexOf(sense),
         source: `${GLOSS_LABELS[language]} · ${dictionaryName(term.dictionary)}`,
         // Pack stores raw JMdict codes (v5r, vi, uk…); resolve to the same
         // short labels the site chips show so offline popups match the web.
         partsOfSpeech: posLabels(sense.partsOfSpeech),
+        posCodes: sense.partsOfSpeech,
         tags: tagLabels([...sense.fields, ...sense.misc, ...sense.dialects]),
         glosses,
       }];
@@ -1310,7 +1330,7 @@ function kanjiDefinition(kanji: Stored<OfflineKanji>, languages: readonly GlossL
     jlpt: kanji.jlpt ? `N${kanji.jlpt}` : null,
     frequency: kanji.frequency ?? null,
     pitch: [],
-    senses: [{ source: `${GLOSS_LABELS[language]} · KANJIDIC2`, partsOfSpeech: [], tags: [], glosses }],
+    senses: [{ position: 0, source: `${GLOSS_LABELS[language]} · KANJIDIC2`, partsOfSpeech: [], tags: [], glosses }],
     examples: [],
     offline: true,
   };

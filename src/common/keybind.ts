@@ -14,7 +14,11 @@ export type Keybind = {
 // selection if any); the rest act on the word currently under the pointer.
 export type KeybindAction = "parse" | "again" | "hard" | "good" | "easy" | "save" | "known";
 
-export const KEYBIND_ACTIONS: KeybindAction[] = ["parse", "again", "hard", "good", "easy", "save", "known"];
+// What the settings page lets you rebind. The grade actions keep their type,
+// their labels and their defaults — they are simply not offered while the reader
+// has no grade row to fire them (see REVIEW_IN_READER in content/actions.ts), so
+// nobody binds a key to a button that isn't there.
+export const KEYBIND_ACTIONS: KeybindAction[] = ["parse", "save", "known"];
 
 // Human labels for the settings UI, in display order.
 export const KEYBIND_LABELS: Record<KeybindAction, string> = {

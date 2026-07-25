@@ -15,6 +15,14 @@ test("the lookup cache is keyed by connection state, so signing in can't replay 
   assert.match(background, /const scope = isConnected\(config\) \? "online" : "offline"/);
 });
 
+test("a cached word state from an older build still renders, deck list or not", () => {
+  const background = readFileSync("src/background/background.ts", "utf8");
+  const pick = background.slice(background.indexOf("function pickDetails"), background.indexOf("// ── Redirect login"));
+  // `decks` shipped as `memberships`; a snapshot from then has no `decks` at
+  // all, and the reader calls `.map` on it the moment a popup opens.
+  assert.match(pick, /decks: details\[lemma\]\.decks \?\? \[\]/);
+});
+
 test("a dictionary install reports its own failure, not just the ones the caller waits for", () => {
   const background = readFileSync("src/background/background.ts", "utf8");
   const install = background.slice(background.indexOf('case "installDictionary"'), background.indexOf('case "removeDictionary"'));

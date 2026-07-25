@@ -3,13 +3,16 @@ import { canWriteSrs, isConnected, loadConfig, onConfigChanged, type Config, typ
 import { loadHostRules, resolveHostMode, type HostRule } from "../common/host-rules.js";
 import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
 import { send } from "../common/messages.js";
-import { grade, markKnown, save, type Outcome } from "./actions.js";
+import { grade, markKnown, REVIEW_IN_READER, save, type Outcome } from "./actions.js";
 import { observeLazy, parse, setParsingPaused } from "./parser.js";
-import { hideStatusBar, refreshStatusBar, setStatusOptions, showStatusBar, statusPaused } from "./status-bar.js";
+import { refreshMetrics, setMetricsOptions, startMetrics, stopMetrics } from "./metrics-reporter.js";
+import { setSentenceAudioEnabled } from "./sentence-audio.js";
+import { forgetOpenCue, setCueSource } from "./cues.js";
+import { youTubeCueSource } from "./cues/youtube-cues.js";
 import { startAsbplayer } from "./parsers/asbplayer.js";
 import { startYouTubeCaptions } from "./parsers/youtube.js";
 import { startDynamicReader } from "./parsers/dynamic-reader.js";
-import { dismissPopup, scheduleHide, scheduleShow, scheduleTextLookup, setCanWrite, showNow } from "./popup.js";
+import { dismissPopup, picksForWord, scheduleHide, scheduleShow, scheduleTextLookup, setWriteState, showNow } from "./popup.js";
 import { logicalTextAt } from "./dom-text.js";
 import { toast } from "./toast.js";
 import { ensureFurigana } from "./word.js";
@@ -18,11 +21,14 @@ import { installClientReporter } from "../common/client-reporter.js";
 // One frame can run this content script twice: the manifest injects it on
 // <all_urls> and the background *also* registers/executes it for user-enabled
 // hosts (and `web-ext` re-injects it on a dev reload). Each copy is its own
-// module instance that builds its own popup/status-bar/toast host and its own
+// module instance that builds its own popup/toast host and its own
 // document listeners, so a second one stacks an orphaned popup the first can
 // never collapse — the "popup won't collapse" bug. Content scripts from the
 // same extension share one isolated-world window per frame, so a flag on it
 // lets a duplicate injection bail before wiring anything up.
+declare const __EXTENSION_VERSION__: string;
+declare const __BUILD_ID__: string;
+
 declare global {
   interface Window {
     __shirabeContentBooted?: boolean;
@@ -35,6 +41,17 @@ if (window.__shirabeContentBooted) {
   window.__shirabeContentBooted = true;
   boot();
 }
+
+// The host a toast can name out loud ("See shirabe.org/pricing"). A toast can't
+// hold a link, and hard-coding the production host would send a dev build's
+// readers to the wrong place.
+const pricingHost = (apiBase: string): string => {
+  try {
+    return new URL(apiBase).host;
+  } catch {
+    return "shirabe.org";
+  }
+};
 
 function boot(): void {
   installClientReporter("content");
@@ -58,13 +75,15 @@ function boot(): void {
     document.documentElement.classList.toggle("sb-furigana-hover", config.furiganaMode === "hover");
     document.documentElement.classList.toggle("sb-furigana-off", config.furiganaMode === "off");
     if (showFurigana) ensureFurigana();
-    document.documentElement.dataset.sbStatePreset = config.statePreset;
-    setStatusOptions({ includesLearning: config.iPlusOneIncludesLearning, frequencyMax: config.iPlusOneFrequencyMax });
-    setCanWrite(canWriteSrs(config));
+    document.documentElement.dataset.sbPosColoring = config.posColoring;
+    setMetricsOptions({ includesLearning: config.iPlusOneIncludesLearning, frequencyMax: config.iPlusOneFrequencyMax });
+    setSentenceAudioEnabled(config.mineSentenceAudio);
+    setWriteState({ canWrite: canWriteSrs(config), connected: isConnected(config) });
 
     const resolution = resolveHostMode(location.href, {
       disabledHosts: config.disabledHosts,
       rules,
+      apiBase: config.apiBase,
     });
     mode = resolution.mode;
     rule = resolution.rule;
@@ -75,10 +94,12 @@ function boot(): void {
       pendingPointer = null;
       dismissPopup();
       setParsingPaused(true);
-      hideStatusBar();
+      stopMetrics();
+      forgetOpenCue();
+      setCueSource(null);
     } else {
-      setParsingPaused(statusPaused()); // a settings change must not undo the bar's Pause
-      if (parsed && isTopFrame) showStatusBar(parsePage);
+      setParsingPaused(false);
+      if (parsed && isTopFrame) startMetrics();
     }
 
     // asbplayer injects subtitle text into arbitrary video hosts (and iframes).
@@ -105,7 +126,12 @@ function boot(): void {
   function startCustomParser(custom: NonNullable<HostRule["custom"]>): void {
     setParsingPaused(false);
     parsed = true;
-    if (custom === "youtube") startYouTubeCaptions(showFurigana);
+    if (custom === "youtube") {
+      // Exact cue timings beat watching the overlay; the source falls back to
+      // observation on its own if the track can't be read.
+      setCueSource(youTubeCueSource());
+      startYouTubeCaptions(showFurigana);
+    }
     else startDynamicReader(custom, showFurigana);
   }
 
@@ -122,6 +148,10 @@ function boot(): void {
     const res = await send({ type: "dictionaryStatus" });
     localDictionaryReady = res.ok && res.dictionary.installed;
     console.info("[Shirabe scanner] ready", {
+      // build identifies the loaded bundle, not the release: during development
+      // the version never moves, so this is the only way to tell a reloaded
+      // extension from the copy the browser kept.
+      build: `${__EXTENSION_VERSION__}+${__BUILD_ID__}`,
       page: location.href,
       dictionaryInstalled: localDictionaryReady,
       response: res.ok ? undefined : res.error,
@@ -267,10 +297,16 @@ function boot(): void {
     hard: (w) => grade(w, 2),
     good: (w) => grade(w, 3),
     easy: (w) => grade(w, 4),
-    save,
+    // Honour the popup's sense picker when the shortcut fires on the popup's own
+    // word; whole-word save otherwise (picksForWord guards the word identity).
+    save: (w) => save(w, picksForWord(w)),
     known: markKnown,
   };
-  const WORD_ACTION_KEYS = Object.keys(WORD_ACTIONS) as Array<Exclude<KeybindAction, "parse">>;
+  // A shortcut for a button that isn't there grades a card by accident — the keys
+  // leave with the row they belong to (see REVIEW_IN_READER).
+  const GRADE_ACTIONS: KeybindAction[] = ["again", "hard", "good", "easy"];
+  const WORD_ACTION_KEYS = (Object.keys(WORD_ACTIONS) as Array<Exclude<KeybindAction, "parse">>)
+    .filter((action) => REVIEW_IN_READER || !GRADE_ACTIONS.includes(action));
 
   window.addEventListener("keydown", (e) => {
     if (isTyping(e.target)) return;
@@ -290,7 +326,13 @@ function boot(): void {
       if (matchesKeybind(e, keybinds[action])) {
         if (!hovered) return;
         e.preventDefault();
-        WORD_ACTIONS[action](hovered).then(({ ok, message }) => toast(message, ok));
+        // A needs-Pro refusal rides the neutral toast, not the red one: there's
+        // no popup open to hold a link, so the message names the page instead —
+        // the configured host, so a dev build doesn't point at production.
+        const host = pricingHost(current.apiBase);
+        WORD_ACTIONS[action](hovered).then(({ ok, message, proRequired }) => {
+          toast(proRequired ? `${message} See ${host}/pricing` : message, ok || !!proRequired);
+        });
         return;
       }
     }
@@ -315,7 +357,7 @@ function boot(): void {
     const root = rule?.parse ? (document.querySelector(rule.parse) ?? document.body) : document.body;
     observeLazy(root, showFurigana, ruleOptions());
     observeMutations();
-    showStatusBar(parsePage);
+    startMetrics();
   }
 
   function ruleOptions() {
@@ -381,7 +423,7 @@ function boot(): void {
       for (const el of batch) {
         observeLazy(el, showFurigana, ruleOptions()); // lazy: parse fresh blocks as they're seen
       }
-      refreshStatusBar();
+      refreshMetrics();
     }, 350);
   }
 }

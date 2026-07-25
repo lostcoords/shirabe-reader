@@ -30,14 +30,17 @@ test("Firefox watch builds isolate development storage from the release add-on",
 });
 
 test("all extension-owned surfaces preserve focus, reduced-motion, and forced-color behavior", () => {
-  const surfaces = [
+  // content.css decorates the host page's own text — it owns no control of ours
+  // to focus (the popup's live in its shadow root, styled from popup.ts), so it
+  // answers for motion and forced colours only.
+  const withControls = [
     readFileSync("src/action/popup.css", "utf8"),
-    readFileSync("src/content/content.css", "utf8"),
     readFileSync("src/content/popup.ts", "utf8"),
     readFileSync("src/options/options.css", "utf8"),
   ];
-  for (const css of surfaces) {
-    assert.match(css, /focus-visible/);
+  for (const css of withControls) assert.match(css, /focus-visible/);
+
+  for (const css of [...withControls, readFileSync("src/content/content.css", "utf8")]) {
     assert.match(css, /prefers-reduced-motion/);
     assert.match(css, /forced-colors/);
   }
@@ -72,7 +75,7 @@ test("the popup replaces decorative branding with a real per-site reader toggle"
   assert.match(content, /if \(showFurigana\) ensureFurigana\(\)/);
   assert.match(content, /classList\.toggle\("sb-reader-off", mode === "off"\)/);
   assert.match(content, /setParsingPaused\(true\)/);
-  assert.match(content, /hideStatusBar\(\)/);
+  assert.match(content, /stopMetrics\(\)/);
   assert.doesNotMatch(content, /mode === "off"[\s\S]{0,300}revertParsedPage\(\)/);
 });
 
@@ -239,7 +242,7 @@ test("anonymous dictionary use is the default and OAuth is an explicit account a
   assert.match(popup, /Not connected/);
   assert.match(popup, /Connect account/);
   assert.doesNotMatch(api, /const OAUTH_SCOPES = \[[^\]]*READ_DICTIONARY/);
-  assert.match(api, /const OAUTH_SCOPES = \["READ_ACCOUNT", "READ_PREFERENCES", "WRITE_PREFERENCES", "READ_SRS", "WRITE_SRS"\]/);
+  assert.match(api, /const OAUTH_SCOPES = \["READ_ACCOUNT", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"\]/);
   assert.match(api, /"\/v1\/preferences"/);
   assert.match(popupLogic, /send\(\{ type: "updateLanguages", languages \}\)/);
   assert.match(popupLogic, /\$<HTMLButtonElement>\("connect"\)\.addEventListener\("click"/);
@@ -280,9 +283,16 @@ test("pronunciation audio only plays processed R2 clips and never browser speech
   assert.doesNotMatch(webAudio, /speechSynthesis|SpeechSynthesisUtterance/);
 });
 
-test("reader grading is due-only and locks after the first click", () => {
+test("reader grading is off, and returns due-only and click-locked when it is not", () => {
   const popup = readFileSync("src/content/popup.ts", "utf8");
-  assert.match(popup, /if \(word\.dataset\.state === "due"\)/);
+  const actions = readFileSync("src/content/actions.ts", "utf8");
+  const keybind = readFileSync("src/common/keybind.ts", "utf8");
+  // Reviewing lives on the site: the row is still wired, just not rendered, and
+  // no shortcut may fire an action the card doesn't show.
+  assert.match(actions, /export const REVIEW_IN_READER = false/);
+  assert.match(keybind, /KEYBIND_ACTIONS: KeybindAction\[\] = \["parse", "save", "known"\]/);
+  // The guarantees that must survive turning it back on.
+  assert.match(popup, /if \(REVIEW_IN_READER && word\.dataset\.state === "due"\)/);
   assert.match(popup, /wrap\.dataset\.running === "true"/);
   assert.match(popup, /control\.disabled = true/);
 });

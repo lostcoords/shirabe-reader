@@ -25,6 +25,19 @@ function realPackPath(): string {
   return packs[0];
 }
 
+// A full pack gunzips past Node's maximum string length, so it has to be decoded
+// a line at a time (same as the golden and cross-engine corpora).
+function* packLines(path: string): Generator<string> {
+  const raw = gunzipSync(readFileSync(path));
+  let start = 0;
+  for (let at = 0; at < raw.length; at += 1) {
+    if (raw[at] !== 0x0a) continue;
+    if (at > start) yield raw.toString("utf8", start, at);
+    start = at + 1;
+  }
+  if (start < raw.length) yield raw.toString("utf8", start);
+}
+
 // A sweep is broad, so subset the pack to what these sentences can reach —
 // substrings, their deinflections, and their text-processor variants. Missing any
 // of those starves the parser and manufactures divergences that do not exist.
@@ -42,7 +55,7 @@ function subset(path: string, sentences: string[]): string[] {
     }
   }
   const kept: string[] = [];
-  for (const line of gunzipSync(readFileSync(path)).toString("utf8").split("\n")) {
+  for (const line of packLines(path)) {
     if (!line) continue;
     if (line.startsWith('{"type":"header"')) { kept.push(line); continue; }
     const record = JSON.parse(line) as { type: string; headword?: string; expressions?: Array<{ text: string }>; readings?: Array<{ text: string }> };

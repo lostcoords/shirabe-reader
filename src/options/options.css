@@ -148,11 +148,9 @@ input[type="checkbox"] { width: 17px; height: 17px; margin: 1px 0 0; accent-colo
 .button-row > * { flex: 1 1 auto; min-width: 0; }
 .deck-row { display: grid; gap: 5px; max-width: 360px; }
 progress { width: 100%; max-width: 420px; height: 8px; border: 0; border-radius: 999px; overflow: hidden; accent-color: var(--primary); background: var(--surface-muted); }
-.credits { margin: 0; }
-.credits summary { cursor: pointer; color: var(--ink-muted); font-size: 12px; font-weight: 650; list-style: none; }
-.credits summary::-webkit-details-marker { display: none; }
-.credits ul { margin: 8px 0 0; padding-left: 18px; }
-.credits li { font-size: 12px; }
+/* Attribution lives on the site's credits page, which is the copy that stays
+   current; the extension keeps only the two links to it. */
+.credits { margin: 0; color: var(--ink-subtle); font-size: 12px; }
 .diagnostics {
   margin: 0;
   overflow-wrap: anywhere;

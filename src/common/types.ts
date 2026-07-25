@@ -26,8 +26,14 @@ export type PitchPattern = { downstep: number; audioUrl: string | null };
 // One dictionary sense, mirroring how shirabe.org renders a meaning: a source
 // label ("Español · JMdict"), POS chips, misc/field/dialect tags, and glosses.
 export type Sense = {
+  /** 0-based sense position in the entry — sent back as `sensePositions` to scope a save. */
+  position: number;
   source: string;
+  /** Learner-facing labels ("Godan verb") — what the popup prints. */
   partsOfSpeech: string[];
+  /** Raw JMdict codes (v5b, adj-i, prt) — what styling and metrics match on.
+      Offline packs carry them; the API path returns entity strings only. */
+  posCodes?: string[];
   tags: string[];
   glosses: string[];
 };

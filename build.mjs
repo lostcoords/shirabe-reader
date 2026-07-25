@@ -9,12 +9,18 @@
 // source (TS, CSS, HTML, icons, or the manifest) hot-reload the extension in
 // place, and a persistent dev profile keeps you logged in across restarts.
 //
+// A plain `--watch` (no --serve) hot-reloads in YOUR OWN Firefox instead: load
+// dist/firefox once via about:debugging and the reload server below tells the
+// extension to reload itself after every build. See "Develop in your own
+// Firefox" in the README.
+//
 // Both targets share every source file. The ONLY per-browser difference is the
 // generated manifest: Chrome MV3 wants a `service_worker`, Firefox MV3 wants a
 // background `scripts` array plus a `browser_specific_settings.gecko` block.
 import * as esbuild from "esbuild";
 import { spawn } from "node:child_process";
 import { rmSync, watch as watchFiles } from "node:fs";
+import { createServer } from "node:http";
 import { copyFile, cp, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +58,14 @@ const outdir = outputArg
 const profileDir = join(root, ".web-ext-profile", target);
 const watchLock = join(root, ".web-ext-profile", `${target}.watch.lock`);
 
+// Self-reload for a watcher without --serve: the extension subscribes to this
+// local event stream and reloads itself after every build, so you can develop a
+// temporary add-on in your everyday Firefox. Firefox only — Chrome's MV3
+// background is a service worker, which has no EventSource.
+const RELOAD_PORT = 8473;
+const devReload = watch && !serve && target === "firefox";
+const reloadUrl = `http://127.0.0.1:${RELOAD_PORT}/reload`;
+
 // Each entry becomes a standalone classic (IIFE) bundle. Content scripts and
 // MV3 background workers can't be ES modules across both browsers, so we let
 // esbuild inline every import into one self-contained file per entry point.
@@ -79,12 +93,27 @@ const buildOptions = {
     // Release list only, so production zips never embed a localhost host pattern.
     __SHIRABE_OFF_HOSTS__: JSON.stringify(watch ? DEV_OFF_HOSTS : RELEASE_OFF_HOSTS),
     __EXTENSION_VERSION__: JSON.stringify(baseManifest.version),
+    // Which build is actually loaded. The version alone can't answer that during
+    // development — it doesn't move between rebuilds, so a stale copy of the
+    // extension looks identical to a fresh one in the console.
+    __BUILD_ID__: JSON.stringify(new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)),
     // Telemetry ships to the same self-hosted Grafana Faro receiver as the web
     // app's RUM; watch builds report tagged "development" so dev noise stays
     // filterable, exactly like the web's DEPLOYMENT_ENV-tagged environment.
     __FARO_URL__: JSON.stringify("https://o.shirabe.org/collect"),
     __TELEMETRY_ENV__: JSON.stringify(watch ? "development" : "production"),
+    // Empty everywhere else, so the self-reload client compiles down to nothing.
+    __DEV_RELOAD_URL__: JSON.stringify(devReload ? reloadUrl : ""),
   },
+  // Rebuild finished and clean → tell any listening extension to reload itself.
+  plugins: devReload
+    ? [{
+      name: "dev-reload",
+      setup: (build) => build.onEnd((result) => {
+        if (!result.errors.length) announceRebuild();
+      }),
+    }]
+    : [],
 };
 
 async function manifest() {
@@ -93,6 +122,9 @@ async function manifest() {
   // Store packages must never request a development origin. Watch builds add
   // the local Rails host because their baked-in API default points there.
   if (watch) base.host_permissions.push("https://shirabe.localhost/*");
+  // Reaching the local reload stream is a fetch to another origin, so the watch
+  // manifest has to ask for it. Never in a packaged build.
+  if (devReload) base.host_permissions.push(`http://127.0.0.1:${RELOAD_PORT}/*`);
 
   if (target === "firefox") {
     base.background = { scripts: ["background.js"] };
@@ -128,10 +160,13 @@ async function copyStatic() {
   await copyFile(join(root, "src/action/popup.css"), join(outdir, "action/popup.css"));
   await copyFile(join(root, "src/options/options.html"), join(outdir, "options/options.html"));
   await copyFile(join(root, "src/options/options.css"), join(outdir, "options/options.css"));
-  await copyFile(join(root, "src/licenses.html"), join(outdir, "licenses.html"));
   await copyFile(join(root, "node_modules/@noble/hashes/LICENSE"), join(outdir, "licenses/noble-hashes-MIT.txt"));
   // The extension is GPL-3.0 (Yomitan-derived deinflection); ship its terms and
-  // attribution with the package rather than only in the repository.
+  // attribution with the package rather than only in the repository. These files
+  // ARE the compliance — GPL-3.0 §4 wants a copy of the licence conveyed with the
+  // program, and MIT wants its notice kept in copies. There is no in-product page
+  // rendering them: shirabe.org/credits is the readable home, and the packaged
+  // text is what has to travel.
   await copyFile(join(root, "LICENSE"), join(outdir, "licenses/gpl-3.0.txt"));
   await copyFile(join(root, "NOTICE"), join(outdir, "licenses/NOTICE.txt"));
   await cp(join(root, "src/icons"), join(outdir, "icons"), { recursive: true });
@@ -139,7 +174,13 @@ async function copyStatic() {
 
 async function buildAll() {
   if (watch) await acquireWatchLock();
-  await rm(outdir, { recursive: true, force: true });
+  // A temporary add-on loaded from about:debugging keeps reading THIS directory,
+  // so deleting it pulls the extension out from under a browser that already has
+  // it loaded — restarting the watcher would leave a dead add-on and a blank
+  // popup. Watch builds overwrite in place instead (as copyStatic already does,
+  // for the same reason); one-shot builds still start from a clean directory so
+  // a package can never inherit a stale file.
+  if (!watch) await rm(outdir, { recursive: true, force: true });
   await mkdir(join(outdir, "action"), { recursive: true });
   await mkdir(join(outdir, "options"), { recursive: true });
   await mkdir(join(outdir, "licenses"), { recursive: true });
@@ -154,7 +195,53 @@ async function buildAll() {
   await manifest();
   await copyStatic();
   if (watch) watchStatic();
+  if (devReload) startReloadServer();
   console.log(`✓ ${target} build → ${outdir}${watch ? " (watching)" : ""}`);
+}
+
+// A one-route event stream the extension subscribes to. Every connected client
+// is a Firefox that loaded `outdir` as a temporary add-on; a rebuild pushes one
+// event and each of them calls runtime.reload() on itself.
+const reloadClients = new Set();
+
+function startReloadServer() {
+  const server = createServer((request, response) => {
+    if (request.url !== "/reload") {
+      response.writeHead(404).end();
+      return;
+    }
+    response.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-store",
+      // The subscriber is a moz-extension: page, so this is a cross-origin read.
+      "access-control-allow-origin": "*",
+    });
+    // Reconnect fast after the watcher restarts, rather than EventSource's
+    // browser default of a few seconds.
+    response.write("retry: 1000\n\n");
+    reloadClients.add(response);
+    request.on("close", () => reloadClients.delete(response));
+  });
+  server.on("error", (error) => {
+    console.error(`✗ self-reload disabled — port ${RELOAD_PORT}: ${error.code ?? error.message}`);
+  });
+  // Never a reason to keep the watcher alive by itself.
+  server.unref();
+  server.listen(RELOAD_PORT, "127.0.0.1", () => {
+    console.log(`↻ self-reload stream on ${reloadUrl} (load dist/${target} via about:debugging)`);
+  });
+}
+
+let announceTimer;
+
+// TS rebuilds and the static resync below can both land for a single save, so
+// coalesce them into one reload.
+function announceRebuild() {
+  if (!devReload) return;
+  clearTimeout(announceTimer);
+  announceTimer = setTimeout(() => {
+    for (const client of reloadClients) client.write("event: rebuilt\ndata: {}\n\n");
+  }, 150);
 }
 
 async function acquireWatchLock() {
@@ -202,6 +289,7 @@ function watchStatic() {
       sync = sync.catch(() => undefined).then(async () => {
         await manifest();
         await copyStatic();
+        announceRebuild();
         console.log("↻ synced static assets + manifest");
       }).catch((error) => {
         console.error("✗ static asset sync failed", error);

@@ -27,10 +27,12 @@ html:not(.sb-reader-off) .player-timedtext-text-container {
   background-color: rgba(14, 165, 233, 0.28);
 }
 
-/* Caption pills (YouTube / Netflix / asbplayer): room for furigana above the
-   line, state cues as text-decoration, white furigana. The host keeps its own
-   pill (background/color/font) — we only wrap the segment that owns those
-   styles, so we do not re-paint the whole cue. */
+/* Caption pills (YouTube / Netflix / asbplayer). Word cues are NOT redefined
+   here: a caption shows exactly what a paragraph shows, drawn by the same rules
+   below. What is genuinely different is legibility over moving picture — room for
+   furigana, an outline on it, and a hover wash that reads on a dark pill. The
+   host keeps its own pill (background/color/font); we only wrap the segment that
+   owns those styles, so we never re-paint the whole cue. */
 html:not(.sb-reader-off) :is(
   .ytp-caption-segment,
   .player-timedtext-text-container > span,
@@ -54,28 +56,10 @@ html:not(.sb-reader-off) :is(
   .asb-subtitles,
   .asbplayer-offscreen
 ) {
-  .sb-word {
-    --sb-caption-line: transparent;
-    --sb-caption-style: solid;
-    /* Inherit YT's caption ink (usually white) instead of page body color. */
-    color: inherit;
-    border-bottom: 0 !important;
-    text-decoration-line: underline;
-    text-decoration-style: var(--sb-caption-style);
-    text-decoration-color: var(--sb-caption-line);
-    text-underline-offset: 0.1em;
-    text-decoration-thickness: 0.11em;
-    text-decoration-skip-ink: none;
-  }
   .sb-word:hover {
-    /* Light wash on dark pill — page indigo tint is muddy over video. */
+    /* Light wash on dark pill — the page's tint is muddy over video. */
     background-color: rgba(255, 255, 255, 0.14);
   }
-  .sb-new { --sb-caption-line: #7dd3fc; }
-  .sb-learning { --sb-caption-line: #fbbf24; }
-  .sb-due { --sb-caption-line: #f87171; }
-  .sb-none { --sb-caption-line: rgba(255, 255, 255, 0.55); --sb-caption-style: dotted; }
-  .sb-known { text-decoration-line: none; }
 
   /* Caption furigana matches the cue ink + a light outline. It stays in flow
      over the kanji; the reserved line-height above keeps it from growing (or
@@ -95,24 +79,6 @@ html:not(.sb-reader-off) :is(
   }
 }
 
-html:not(.sb-reader-off)[data-sb-state-preset="colorVision"] :is(
-  .ytp-caption-segment, .player-timedtext-text-container,
-  .asbplayer-subtitles, .asb-subtitles, .asbplayer-offscreen
-) {
-  .sb-new { --sb-caption-line: #7ec8e3; --sb-caption-style: double; text-decoration-thickness: 0.14em; }
-  .sb-learning { --sb-caption-line: #f0c14a; --sb-caption-style: dashed; }
-  .sb-due { --sb-caption-line: #e8a0c0; --sb-caption-style: dotted; }
-}
-html:not(.sb-reader-off)[data-sb-state-preset="minimal"] :is(
-  .ytp-caption-segment, .player-timedtext-text-container,
-  .asbplayer-subtitles, .asb-subtitles, .asbplayer-offscreen
-) {
-  .sb-new { --sb-caption-line: #fff; --sb-caption-style: double; }
-  .sb-learning { --sb-caption-line: #fff; --sb-caption-style: dashed; }
-  .sb-due { --sb-caption-line: #fff; --sb-caption-style: dotted; }
-  .sb-none { --sb-caption-line: rgba(255, 255, 255, 0.65); --sb-caption-style: dotted; }
-}
-
 .sb-word {
   border-radius: 3px;
   transition: background-color 0.12s ease;
@@ -121,10 +87,14 @@ html:not(.sb-reader-off)[data-sb-state-preset="minimal"] :is(
   background-color: rgba(3, 105, 161, 0.14);
 }
 
-/* Furigana shouldn't blow up line height when readings are shown. */
+/* Furigana shouldn't blow up line height when readings are shown. It takes the
+   colour of the text it annotates — like print furigana, and like the caption
+   rule above — so it stays legible on any page instead of holding one fixed blue
+   that a dark theme, a coloured heading, or a link would fight. Declared rather
+   than left to inheritance so a host page's own `rt` colour can't claim it. */
 .sb-word ruby rt {
   font-size: 0.55em;
-  color: #0369a1;
+  color: inherit;
   user-select: none;
 }
 /* Reserve the furigana row even when a reading is hidden, so revealing one on
@@ -140,104 +110,134 @@ html:not(.sb-reader-off)[data-sb-state-preset="minimal"] :is(
 
 /* Off is a visual suspension, not a destructive revert. Keep the parsed DOM
    cached so re-enabling is instant, while making the page look and behave as
-   though Shirabe had not decorated it. Caption cues use text-decoration, so
-   clear that too — border-bottom alone is not enough. */
+   though Shirabe had not decorated it. */
 .sb-reader-off .sb-word,
 .sb-reader-off .sb-word:hover {
   cursor: inherit;
-  border-bottom: 0 !important;
   background-color: transparent !important;
   text-decoration: none !important;
   text-decoration-line: none !important;
-  color: inherit;
+  /* !important because part-of-speech tinting below is more specific than this
+     rule, and "off" has to beat every cue, not most of them. */
+  color: inherit !important;
 }
 .sb-reader-off .sb-word ruby rt { display: none !important; }
-.sb-reader-off .sb-i-plus-one { background: none !important; }
-.sb-reader-off .sb-i-plus-one::after { content: none !important; }
+.sb-reader-off .sb-i-plus-one { background: none !important; box-shadow: none !important; }
 
-/* State coloring — a left-to-right cue from "learn this" to "got it". Bottom
-   border keeps host text legible where a full highlight would be noisy. */
-.sb-new {
-  border-bottom: 2px solid #0369a1;
+/* One cue for every word, everywhere — a paragraph, a subtitle, an OCR box. Drawn
+   with text-decoration rather than a border because a caption can't afford a box
+   that changes size, and because a decoration follows the text through line wraps
+   and inline markup instead of boxing each fragment. Colour and line style come
+   from two variables, so state and part of speech can each claim the cue without
+   either knowing the other exists. */
+.sb-word {
+  --sb-cue: transparent;
+  --sb-cue-style: solid;
+  text-decoration-line: underline;
+  text-decoration-style: var(--sb-cue-style);
+  text-decoration-color: var(--sb-cue);
+  text-underline-offset: 0.16em;
+  text-decoration-thickness: 0.1em;
+  /* Japanese descends into the underline; skipping ink would break the line under
+     half the glyphs on the page. */
+  text-decoration-skip-ink: none;
 }
-.sb-learning {
-  border-bottom: 2px solid #f59e0b;
-}
-.sb-due {
-  border-bottom: 2px solid #ef4444;
-}
-.sb-known {
-  border-bottom: 2px solid transparent;
-}
+
+/* State coloring — a left-to-right cue from "learn this" to "got it". */
+.sb-new { --sb-cue: #0369a1; }
+.sb-learning { --sb-cue: #f59e0b; }
+.sb-due { --sb-cue: #ef4444; }
+.sb-known { --sb-cue: transparent; }
 /* Not yet tracked — a faint dotted hint that it's interactive. */
-.sb-none {
-  border-bottom: 1px dotted rgba(3, 105, 161, 0.5);
+.sb-none { --sb-cue: rgba(3, 105, 161, 0.5); --sb-cue-style: dotted; }
+
+/* Part-of-speech colouring — the same groups and hues as the site's phrase
+   breakdown (TokensHelper::POS_COLORS), so a word reads the same here as it does
+   in a search result: nouns blue, verbs green, adjectives orange, adverbs and
+   expressions purple, particles pink, copula and auxiliaries cyan. Grammatical
+   glue keeps its own hue; anything unclassified keeps the page's ink.
+
+   Each code resolves to `--sb-pos` once, and a mode then spends it on either the
+   text or the underline — one grouping to maintain instead of two. Following the
+   OS theme (not the page's) matches how the rest of the extension's chrome picks
+   its colours; a page that opposes the OS still reads, because these sit on the
+   word itself rather than on a surface of ours. */
+.sb-word {
+  --sb-pos-noun: #0369a1;
+  --sb-pos-verb: #16a34a;
+  --sb-pos-adj: #ea580c;
+  --sb-pos-adverb: #7b61ff;
+  --sb-pos-particle: #e11d78;
+  --sb-pos-aux: #0891b2;
+}
+@media (prefers-color-scheme: dark) {
+  .sb-word {
+    --sb-pos-noun: oklch(72% 0.15 245);
+    --sb-pos-verb: oklch(70% 0.19 155);
+    --sb-pos-adj: oklch(72% 0.19 55);
+    --sb-pos-adverb: oklch(72% 0.18 292);
+    --sb-pos-particle: oklch(70% 0.19 15);
+    --sb-pos-aux: oklch(70% 0.14 210);
+  }
 }
 
-/* The color-vision preset pairs hue with a distinct line shape; the minimal
-   preset removes semantic color entirely while keeping state discernible. */
-[data-sb-state-preset="colorVision"] .sb-new { border-bottom: 3px double #0072b2; }
-[data-sb-state-preset="colorVision"] .sb-learning { border-bottom: 3px dashed #e69f00; }
-[data-sb-state-preset="colorVision"] .sb-due { border-bottom: 3px dotted #cc79a7; }
-[data-sb-state-preset="colorVision"] .sb-known { border-bottom: 2px solid transparent; }
-[data-sb-state-preset="minimal"] .sb-new { border-bottom: 3px double currentColor; }
-[data-sb-state-preset="minimal"] .sb-learning { border-bottom: 2px dashed currentColor; }
-[data-sb-state-preset="minimal"] .sb-due { border-bottom: 2px dotted currentColor; }
-[data-sb-state-preset="minimal"] .sb-known { border-bottom: 1px solid transparent; }
-[data-sb-state-preset="minimal"] .sb-none { border-bottom: 1px dotted currentColor; }
+.sb-word[data-pos="n"], .sb-word[data-pos^="n-"],
+.sb-word[data-pos="pn"], .sb-word[data-pos="num"], .sb-word[data-pos="ctr"] { --sb-pos: var(--sb-pos-noun); }
+.sb-word[data-pos^="v"] { --sb-pos: var(--sb-pos-verb); }
+.sb-word[data-pos^="adj"] { --sb-pos: var(--sb-pos-adj); }
+.sb-word[data-pos^="adv"], .sb-word[data-pos="exp"], .sb-word[data-pos="int"] { --sb-pos: var(--sb-pos-adverb); }
+.sb-word[data-pos="prt"] { --sb-pos: var(--sb-pos-particle); }
+.sb-word[data-pos="cop"], .sb-word[data-pos^="aux"], .sb-word[data-pos="conj"] { --sb-pos: var(--sb-pos-aux); }
 
-/* Status bar is extension chrome (not page content) — track the OS theme so it
-   stays readable over dark host pages without forcing the page itself dark. */
-.sb-status-bar {
-  --sb-bar-surface: light-dark(#ffffff, #1a1a1e);
-  --sb-bar-muted: light-dark(#f9fafb, oklch(25% 0.016 285.7));
-  --sb-bar-hover: light-dark(#e2f1fa, oklch(28% 0.06 245));
-  --sb-bar-ink: light-dark(#374151, #e8e6e3);
-  --sb-bar-outline: light-dark(#d1d5db, oklch(92% 0.02 285.7 / 0.18));
-  --sb-bar-accent: light-dark(#0369a1, oklch(72% 0.15 245));
-  --sb-bar-shadow: 0 4px 18px light-dark(rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.5));
-  color-scheme: light dark;
-  position: fixed; z-index: 2147483645; left: 12px; bottom: 12px;
-  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-  border: 1px solid var(--sb-bar-outline); border-radius: 10px;
-  background: var(--sb-bar-surface); color: var(--sb-bar-ink);
-  box-shadow: var(--sb-bar-shadow); font: 12px/1.4 system-ui, sans-serif;
+/* Tinting the word leaves the cue free, so a page says what a word IS and how well
+   you know it at the same time. */
+[data-sb-pos-coloring="text"] .sb-word[data-pos] { color: var(--sb-pos, inherit); }
+/* Giving the cue to the part of speech takes it from the study state — two
+   meanings can't share one line, and this is the mode that says so. Solid, so a
+   `.sb-none` word doesn't keep the dotted "untracked" line while showing a part
+   of speech. */
+[data-sb-pos-coloring="underline"] .sb-word[data-pos] {
+  --sb-cue: var(--sb-pos, transparent);
+  --sb-cue-style: solid;
 }
-.sb-status-bar button {
-  cursor: pointer; border: 1px solid var(--sb-bar-outline); border-radius: 6px;
-  background: var(--sb-bar-muted); color: inherit; padding: 3px 7px;
-}
-.sb-status-bar button:hover { background: var(--sb-bar-hover); }
-.sb-status-bar button:focus-visible { outline: 3px solid var(--sb-bar-accent); outline-offset: 2px; }
+
+/* Every piece of our own chrome, hidden for the split second a mined card's
+   screenshot is taken (see capturePageScreenshot). It has to be `!important`:
+   the popup writes `host.style.visibility` itself while measuring a placement,
+   and a plain inline value there would otherwise reveal the card mid-capture. */
+.sb-capturing { visibility: hidden !important; }
+
 /* i+1 — a block you can read except for one word, the sentences worth studying.
-   A tint and a badge, not an outline: background takes no layout space, so
-   adjacent blocks can't merge into one stray rectangle the way offset outlines
-   did. The badge says what the marking means. */
+   Marked with paint alone: a tint plus an inset bar, so a cued block occupies
+   exactly the same box as an uncued one. Every alternative moved the page — an
+   offset outline let adjacent blocks merge into one stray rectangle, and a
+   `::after` badge became a flex/grid *item* on any block that lays its children
+   out (a `<li class="grid">` gained a whole implicit row for it). The status bar
+   reports the count, so the cue itself doesn't have to spell out "i+1". */
 .sb-i-plus-one {
   background: rgba(3, 105, 161, 0.08);
+  box-shadow: inset 3px 0 0 rgba(3, 105, 161, 0.85);
 }
-.sb-i-plus-one::after {
-  content: "i+1";
-  margin-inline-start: 6px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  background: rgba(3, 105, 161, 0.85);
-  color: #fff;
-  font: 600 10px/1.5 system-ui, sans-serif;
-  vertical-align: 1px;
-  white-space: nowrap;
-}
+/* The one word that block would teach — gold, so it's findable at a glance
+   without reading the sentence. Paint only, like the block cue, and specific
+   enough to outrank `.sb-word:hover` so it doesn't blink out under the pointer. */
+.sb-word.sb-i-plus-one-word { background-color: rgba(217, 119, 6, 0.32); }
+.sb-word.sb-i-plus-one-word:hover { background-color: rgba(217, 119, 6, 0.48); }
 
 @media (prefers-reduced-motion: reduce) {
   .sb-word { transition: none; }
 }
 @media (forced-colors: active) {
   .sb-word { forced-color-adjust: auto; }
-  .sb-new { border-bottom: 3px double LinkText; }
-  .sb-learning { border-bottom: 2px dashed LinkText; }
-  .sb-due { border-bottom: 2px dotted LinkText; }
-  .sb-status-bar { border: 1px solid CanvasText; }
+  /* Forced colors replaces our hues with system ones, so state and part of speech
+     both collapse to LinkText — the line STYLE is what still separates them. */
+  .sb-new { --sb-cue: LinkText; --sb-cue-style: double; }
+  .sb-learning { --sb-cue: LinkText; --sb-cue-style: dashed; }
+  .sb-due { --sb-cue: LinkText; --sb-cue-style: dotted; }
+  [data-sb-pos-coloring="underline"] .sb-word[data-pos] { --sb-cue: LinkText; --sb-cue-style: solid; }
   /* Forced colors drops background and box-shadow, so the i+1 block cue would
-     vanish — the badge carries it instead. */
-  .sb-i-plus-one::after { background: Canvas; color: LinkText; border: 1px solid LinkText; }
+     vanish. An inset outline survives it and still costs no layout — drawn
+     inside the border box, it can't merge with the block above either. */
+  .sb-i-plus-one { outline: 2px solid LinkText; outline-offset: -2px; }
+  .sb-word.sb-i-plus-one-word { outline: 2px solid Highlight; outline-offset: -1px; }
 }

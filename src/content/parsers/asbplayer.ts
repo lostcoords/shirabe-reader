@@ -1,4 +1,5 @@
 import { mediaTimestamp, parseCaptionElement } from "../parser.js";
+import { noteCue, noteCueParsed, noteCuesCleared, stampCueStart } from "../cues.js";
 type ParseTarget = (root: HTMLElement, showFurigana: boolean) => Promise<number>;
 
 // asbplayer subtitle parser. asbplayer injects an offscreen DOM cache of
@@ -82,13 +83,20 @@ export async function parseAsbplayerLines(root: Document | Element, showFurigana
 
   let parsed = 0;
   const timestamp = mediaTimestamp();
+  // No lines on screen is the subtitle ending — the only chance to record when.
+  if (![...nodes].some((node) => node.textContent?.trim())) {
+    noteCuesCleared(document.querySelector("video"));
+    return 0;
+  }
   for (const context of nodes) {
     // Skip empty / non-Japanese shells the cache may hold briefly. Do not skip
     // just because a prior wrap exists — progressive lines can grow in place.
     if (!context.textContent?.trim()) continue;
     context.dataset.integration = "asbplayer";
-    if (timestamp != null) context.dataset.mediaTimestamp = timestamp;
+    stampCueStart(context, timestamp);
+    noteCue(context, document.querySelector("video"));
     parsed += await parseTarget(context, showFurigana);
+    noteCueParsed(context); // the trailing part of speech only exists now
   }
   return parsed;
 }

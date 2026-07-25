@@ -145,11 +145,24 @@ function lookupKeysForCorpus(cases: GoldenCase[]): Set<string> {
   return keys;
 }
 
+// A full pack gunzips to more than Node's maximum string length, so decoding the
+// whole thing at once throws ERR_STRING_TOO_LONG — exactly on the real dictionary
+// the `pack: full` cases need. Walk the buffer and decode a line at a time.
+function* packLines(path: string): Generator<string> {
+  const raw = gunzipSync(readFileSync(path));
+  let start = 0;
+  for (let at = 0; at < raw.length; at += 1) {
+    if (raw[at] !== 0x0a) continue;
+    if (at > start) yield raw.toString("utf8", start, at);
+    start = at + 1;
+  }
+  if (start < raw.length) yield raw.toString("utf8", start);
+}
+
 function subsetFromRealPack(path: string, cases: GoldenCase[]): string[] {
   const keys = lookupKeysForCorpus(cases);
-  const lines = gunzipSync(readFileSync(path)).toString("utf8").split("\n");
   const kept: string[] = [];
-  for (const line of lines) {
+  for (const line of packLines(path)) {
     if (!line) continue;
     if (line.startsWith('{"type":"header"')) { kept.push(line); continue; }
     const record = JSON.parse(line) as { type: string; headword?: string; expressions?: Array<{ text: string }>; readings?: Array<{ text: string }> };

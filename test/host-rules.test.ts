@@ -55,6 +55,21 @@ test("a bare domain typed by the user becomes a host-anchored pattern", async ()
   assert.equal(normalizePattern(""), "");
 });
 
+test("the Shirabe the reader is connected to is never parsed, whatever it is", async () => {
+  const { BUILTIN_RULES, resolveHostMode } = await load();
+  // A release build only knows the public hosts, so the connected instance —
+  // a dev server, a self-hosted one — has to be recognised at runtime. Without
+  // this the reader parses the web app's own Japanese and rewrites its DOM.
+  const mode = (url: string, apiBase: string) =>
+    resolveHostMode(url, { disabledHosts: [], rules: BUILTIN_RULES, apiBase }).mode;
+
+  assert.equal(mode("https://shirabe.localhost/en/study/cards", "https://shirabe.localhost"), "off");
+  assert.equal(mode("https://shirabe.example/en/words/猫", "https://shirabe.example"), "off");
+  // Someone else's page that merely names it stays a reading surface.
+  assert.equal(mode("https://blog.test/post?src=https://shirabe.localhost/", "https://shirabe.localhost"), "auto");
+  assert.equal(mode("https://ja.wikipedia.org/wiki/日本語", "https://shirabe.localhost"), "auto");
+});
+
 test("turning the reader off for one site does not disable it on unrelated pages", async () => {
   const { BUILTIN_RULES, resolveHostMode } = await load();
   const disabledHosts = ["example.com"];

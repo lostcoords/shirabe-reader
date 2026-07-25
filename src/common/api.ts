@@ -2,12 +2,17 @@ import type { Config } from "./config.js";
 import { posLabel, tagLabel } from "./jmdict-tags.js";
 import { glossLanguagesFrom, uiLanguagesFrom, type GlossLanguage } from "./languages.js";
 import type { Definition, Example, Sense, WordState } from "./types.js";
-import type { Deck, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
+import type { Deck, GradeResult, IntervalPreviews, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
 
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    // The server's problem+json `code` (PRO_REQUIRED, INSUFFICIENT_SCOPE, …).
+    // Kept because some codes are *states*, not faults: PRO_REQUIRED is the
+    // answer to "can this account save?", and the UI offers plans rather than
+    // reporting a failure. Matching on a code beats matching on prose.
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -18,7 +23,7 @@ export class ApiError extends Error {
 // Dictionary lookup is public and local, so connecting must never ask for it.
 // OAuth exists only for the personal online layer: identify the account, read
 // its study state, and save/grade through the SRS.
-const OAUTH_SCOPES = ["READ_ACCOUNT", "READ_PREFERENCES", "WRITE_PREFERENCES", "READ_SRS", "WRITE_SRS"];
+const OAUTH_SCOPES = ["READ_ACCOUNT", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"];
 
 // /v1/search: the server already returns a full word card — headword, reading,
 // pitch (with audio), common/JLPT/frequency, and nested entries → senses →
@@ -28,7 +33,7 @@ type RawDefinition = { lang: string; text: string; kind?: string };
 type RawTag = { category: string; code: string; label: string };
 type RawEntry = {
   dictionary: string; // slug: jmdict / jmnedict / wikipedia / a user upload
-  senses: Array<{ definitions: RawDefinition[]; tags: RawTag[] }>;
+  senses: Array<{ position: number; definitions: RawDefinition[]; tags: RawTag[] }>;
 };
 type RawPitch = { downstep: number; pattern: string; audioUrl: string | null };
 type RawSentenceToken = { surface: string; lemma: string; content: boolean; matched: boolean };
@@ -44,6 +49,30 @@ type RawResult = {
   sentences?: RawSentence[]; // only with include=sentences
 };
 type RawSearch = { results: RawResult[] };
+
+// One word, as every word-level endpoint reports it (/v1 `WordStateEntry`): the
+// batch lookup, setting a state, and saving all answer in this shape, so the
+// reader reads a word the same way whatever changed it.
+type WordStateEntry = {
+  lemma: string;
+  state: WordState;
+  decks: Array<{ id: number; name: string }>;
+  cardId?: number;
+  cardCount?: number;
+  savedSensePositions?: number[];
+  savedWholeWord?: boolean;
+  intervals?: IntervalPreviews;
+};
+
+const studyDetails = (word: WordStateEntry): StudyDetails => ({
+  state: word.state,
+  decks: word.decks,
+  ...(word.cardId != null ? { cardId: word.cardId } : {}),
+  ...(word.cardCount != null ? { cardCount: word.cardCount } : {}),
+  ...(word.savedSensePositions ? { savedSensePositions: word.savedSensePositions } : {}),
+  ...(word.savedWholeWord ? { savedWholeWord: word.savedWholeWord } : {}),
+  ...(word.intervals ? { intervals: word.intervals } : {}),
+});
 
 // Gloss language + dictionary display names for a sense's source label, echoing
 // the web ("Español · JMdict"). Unknown codes/slugs fall back to a title-cased
@@ -88,6 +117,7 @@ export class ShirabeApi {
         const glosses = sense.definitions.filter((d) => d.kind !== "abstract").map((d) => d.text).filter(Boolean);
         if (!glosses.length) continue; // Wikipedia abstracts etc. live on the full page
         senses.push({
+          position: sense.position,
           source: sourceLabel(sense.definitions[0]?.lang, entry.dictionary),
           // Prefer the stable code through posLabel so chips match the site
           // ("Godan verb") rather than the verbose JMdict entity string.
@@ -153,18 +183,28 @@ export class ShirabeApi {
   }
 
   // ── SRS write-back (/v1/srs/*, requires a WRITE_SRS key) ────────────────────
-  // Save a word as a review card. A rating is accepted only when that existing
-  // card is currently due, so lookup cannot create early or duplicate reviews.
-  async save(options: { lemma: string; surface?: string; reading?: string; deckId?: number; sentence?: SentenceCapture; rating?: 1 | 2 | 3 | 4; imageDataUrl?: string; audioDataUrl?: string }): Promise<SaveResult> {
-    const response = await this.post<{
-      card: { id: number; state: WordState }; created: boolean; memberships: Array<{ id: number; name: string }>;
-      intervals: { again: string; hard: string; good: string; easy: string };
-    }>("/v1/srs/saves", options);
+  // Save (or mine) a word as a review card. `sensePositions` scopes the card to a
+  // subset of the word's senses (empty/omitted = the whole word). Grading is a
+  // separate call — see `grade`.
+  async save(options: { lemma: string; surface?: string; reading?: string; deckId?: number; sentence?: SentenceCapture; sensePositions?: number[]; imageDataUrl?: string; audioDataUrl?: string }): Promise<SaveResult> {
+    const response = await this.post<{ card: { id: number }; created: boolean; word: WordStateEntry }>("/v1/srs/saves", options);
+    // The card that was written identifies itself; everything else about the word
+    // — its state, decks, how many cards it now holds — comes from `word`, the
+    // same block a lookup returns.
+    return {
+      ...studyDetails(response.word),
+      created: response.created,
+      ...(response.card?.id != null ? { cardId: response.card.id } : {}),
+    };
+  }
+
+  // Grade a due card by lemma (+reading). POST /v1/srs/reviews rejects a word
+  // that isn't currently due, so this can't create early or duplicate reviews.
+  async grade(options: { lemma: string; reading?: string; rating: 1 | 2 | 3 | 4 }): Promise<GradeResult> {
+    const response = await this.post<{ card: { id: number; state: WordState }; intervals: IntervalPreviews }>("/v1/srs/reviews", options);
     const cardId = response.card?.id;
     return {
       state: response.card.state,
-      created: response.created,
-      decks: response.memberships,
       intervals: response.intervals,
       ...(cardId != null ? { cardId } : {}),
     };
@@ -176,23 +216,19 @@ export class ShirabeApi {
   }
 
   async states(lemmas: string[]): Promise<{ states: Record<string, WordState>; details: Record<string, StudyDetails> }> {
-    const { states } = await this.post<{ states: Array<{ lemma: string; state: WordState; decks: Array<{ id: number; name: string }>; cardId?: number; intervals?: StudyDetails["intervals"] }> }>("/v1/srs/states/lookup", { words: lemmas });
+    const { states } = await this.post<{ states: WordStateEntry[] }>("/v1/srs/states/lookup", { words: lemmas });
     return {
       states: Object.fromEntries(states.map((item) => [item.lemma, item.state])),
-      details: Object.fromEntries(states.map((item) => [item.lemma, {
-        state: item.state,
-        decks: item.decks,
-        ...(item.cardId != null ? { cardId: item.cardId } : {}),
-        ...(item.intervals ? { intervals: item.intervals } : {}),
-      }])),
+      details: Object.fromEntries(states.map((item) => [item.lemma, studyDetails(item)])),
     };
   }
 
-  // Set a word's state directly: "known" parks it as learned, "reviewing"
-  // brings it into rotation.
-  async setState(lemma: string, state: "known" | "reviewing"): Promise<WordState> {
-    const { card } = await this.post<{ card: { state: WordState } }>("/v1/srs/states", { lemma, state });
-    return card.state;
+  // Set a word's state directly: "known" parks it as learned, "reviewing" brings
+  // it into rotation. A state is word-level — it lands on every card the word
+  // holds — so the answer is the whole word, not one card.
+  async setState(lemma: string, state: "known" | "reviewing"): Promise<StudyDetails> {
+    const { word } = await this.post<{ word: WordStateEntry }>("/v1/srs/states", { lemma, state });
+    return studyDetails(word);
   }
 
   // Connected account's display name + SRS entitlement, for the settings UI.
@@ -260,7 +296,7 @@ export class ShirabeApi {
     if (!res.ok) {
       const detail = await res.json().catch(() => null);
       const message = detail?.detail || detail?.title || `Request failed (${res.status})`;
-      throw new ApiError(message, res.status);
+      throw new ApiError(message, res.status, typeof detail?.code === "string" ? detail.code : undefined);
     }
     return (await res.json()) as T;
   }

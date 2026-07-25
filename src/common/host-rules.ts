@@ -43,6 +43,12 @@ export const BUILTIN_RULES: HostRule[] = [
   // ── Common Japanese sites ──
   { host: ["*://ja.wikipedia.org/*", "*://ja.m.wikipedia.org/*"], parse: "#mw-content-text", filter: ".navbox, .reference, .mw-editsection" },
   { host: "*://www3.nhk.or.jp/news/easy/*" }, // NHK News Web Easy
+  // jisho.org writes furigana as positioned spans rather than native `ruby`, so
+  // a tree walker reads every kana of the reading as ordinary page text: the zen
+  // bar came out tokenized twice over (きのう beside 昨日), and the kana jisho
+  // keeps only as invisible spacers — hidden with `color: white`, not removed —
+  // reappeared wearing our own token colour and part-of-speech underline.
+  { host: ["*://jisho.org/*", "*://*.jisho.org/*"], filter: ".furigana, .japanese_word__furigana_wrapper" },
   // ── Video captions (dedicated parser) ──
   { host: ["*://www.youtube.com/*", "*://m.youtube.com/*"], custom: "youtube" }, // on-screen JP subtitles
   { host: ["*://www.netflix.com/watch/*", "*://www.netflix.com/browse*"], custom: "netflix" }, // native timed-text captions
@@ -122,8 +128,15 @@ export function parseHostList(text: string): string[] {
 // selectors/integration behavior, while bare pages use the generic parser.
 export function resolveHostMode(
   url: string,
-  opts: { disabledHosts: string[]; rules: HostRule[] },
+  opts: { disabledHosts: string[]; rules: HostRule[]; apiBase?: string },
 ): HostResolution {
+  // The Shirabe this reader is connected to is never a reading surface. The
+  // built-in off rule covers the public hosts it was built with, but the API
+  // base is overridable at runtime (a dev server, a self-hosted instance) — and
+  // a release build has never heard of those, so it would happily parse the web
+  // app's own Japanese and rewrite the DOM under it.
+  if (opts.apiBase && sameOrigin(url, opts.apiBase)) return { mode: "off" };
+
   if (opts.disabledHosts.some((p) => matchUrl(normalizePattern(p), url))) return { mode: "off" };
 
   const offRule = opts.rules.find((r) => r.mode === "off" && ruleMatches(r, url));
@@ -133,6 +146,14 @@ export function resolveHostMode(
   if (autoRule) return { mode: "auto", rule: autoRule };
 
   return { mode: "auto" };
+}
+
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
 }
 
 // The domain we'd add to the auto/off list for a "do this on this whole site"

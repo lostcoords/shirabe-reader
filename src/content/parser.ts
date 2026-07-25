@@ -1,11 +1,19 @@
 import { send } from "../common/messages.js";
 import type { ParsedToken } from "../common/types.js";
-import { applyStateEverywhere, forgetRenderedWords, renderToken } from "./word.js";
+import { applyStateEverywhere, renderToken } from "./word.js";
 
 // Keep in sync with offline-dictionary's Japanese character set so caption
 // text that uses full-width alphanumerics (ＣＤ, Ｔシャツ) is still collected.
 const JAPANESE = /[々〇〻\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}０-９Ａ-Ｚａ-ｚｦ-ﾟ]/u;
-const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "CODE", "PRE", "RUBY", "RT", "RP"]);
+const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "CODE", "PRE"]);
+// A reading the page already supplies is an annotation, not text to tokenize —
+// so `ruby` is skipped whole, base and annotation together (a base we rewrote
+// would lose the <rt> aligned over it). Matched by ancestor rather than parent
+// tag: <rt><span>かんじ</span></rt> is ordinary markup, and a parent-tag test
+// let that reading through as if it were source. Sites that build furigana out
+// of positioned spans instead of `ruby` (jisho.org) are excluded by their host
+// rule's `filter`, since no element tells us it is an annotation there.
+const ANNOTATION_SELECTOR = "ruby";
 const PARSED_FLAG = "sbParsed"; // dataset key on the wrapper we insert
 let paused = false;
 
@@ -41,7 +49,7 @@ function parseableTextNode(node: Node, filter?: string): number {
   if (!text || !JAPANESE.test(text)) return NodeFilter.FILTER_REJECT;
   const parent = node.parentElement;
   if (!parent || SKIP_TAGS.has(parent.tagName) || parent.isContentEditable) return NodeFilter.FILTER_REJECT;
-  if (parent.closest("[data-sb-parsed], .sb-word, .sb-popup")) return NodeFilter.FILTER_REJECT;
+  if (parent.closest(`${ANNOTATION_SELECTOR}, [data-sb-parsed], .sb-word, .sb-popup`)) return NodeFilter.FILTER_REJECT;
   if (filter && parent.closest(filter)) return NodeFilter.FILTER_REJECT;
   return NodeFilter.FILTER_ACCEPT;
 }
@@ -414,20 +422,6 @@ export function setParsingPaused(value: boolean): void {
   blockFlushFrame = 0;
 }
 
-export function revertParsedPage(): void {
-  renderGeneration += 1;
-  setParsingPaused(true);
-  io?.disconnect();
-  io = null;
-  visibleBlocks.clear();
-  queuedBlocks.clear();
-  for (const wrapper of document.querySelectorAll<HTMLElement>("[data-sb-parsed]")) {
-    wrapper.replaceWith(document.createTextNode(sourceText(wrapper)));
-  }
-  for (const block of document.querySelectorAll<HTMLElement>("[data-sb-block]")) delete block.dataset[LAZY_BLOCK_FLAG];
-  forgetRenderedWords();
-}
-
 // The element's text as it reads on the page — our injected `<rt>` furigana
 // readings stripped out, so re-parsing never mistakes a reading for source.
 function sourceText(element: HTMLElement): string {
@@ -582,7 +576,7 @@ function collectFragmentTextNodes(root: Node, filter?: string): Text[] {
     acceptNode(node) {
       if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
       const parent = node.parentElement;
-      if (!parent || SKIP_TAGS.has(parent.tagName) || parent.closest("ruby") || parent.isContentEditable) return NodeFilter.FILTER_REJECT;
+      if (!parent || SKIP_TAGS.has(parent.tagName) || parent.closest(ANNOTATION_SELECTOR) || parent.isContentEditable) return NodeFilter.FILTER_REJECT;
       if (parent.closest("[data-sb-parsed], .sb-word, .sb-popup")) return NodeFilter.FILTER_REJECT;
       if (filter && parent.closest(filter)) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;

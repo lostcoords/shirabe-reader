@@ -44,15 +44,38 @@ test("nested blocks cue i+1 once, and a mixed block still counts its own words",
   const unknown = `<span class="sb-word" data-lemma="犬" data-state="none" data-frequency="1200"></span>`;
   window.document.body.innerHTML = `<blockquote id="outer">${known}<p id="inner">${known}${unknown}</p></blockquote>`;
 
-  const { showStatusBar, hideStatusBar } = await import("../src/content/status-bar.js");
-  hideStatusBar(); // the module's host/index/timer are singletons — start clean
+  const { startMetrics, stopMetrics } = await import("../src/content/metrics-reporter.js");
+  stopMetrics(); // the module's index/timer are singletons — start clean
   try {
-    showStatusBar(() => {});
+    startMetrics();
     const marked = [...window.document.querySelectorAll(".sb-i-plus-one")].map((block) => block.id);
     // The blockquote's deep query sees the paragraph's words too; only the block
     // that actually owns the one unknown word may be cued.
     assert.deepEqual(marked, ["inner"], "a wrapping block must not double-cue its child's sentence");
   } finally {
-    hideStatusBar();
+    stopMetrics();
   }
+});
+
+test("a rendered word carries its part of speech, so the page can colour by it", async () => {
+  const { Window } = await import("happy-dom");
+  const window = new Window({ url: "https://reader.test/page" });
+  Object.assign(globalThis, { window, document: window.document, Node: window.Node, HTMLElement: window.HTMLElement });
+  const { renderToken } = await import("../src/content/word.js");
+
+  // Part-of-speech colouring is pure CSS keyed on this attribute (content.css),
+  // so a token that renders without it silently loses its hue on the page.
+  const word = renderToken(
+    { start: 0, length: 1, surface: "猫", reading: "ねこ", lemma: "猫", pos: "n", content: true, state: "none" },
+    false,
+  ) as HTMLElement;
+  assert.equal(word.dataset.pos, "n");
+
+  // An unlabelled token must not claim a group: no attribute at all, so the
+  // `[data-pos]` rules skip it and the page's own ink shows through.
+  const unlabelled = renderToken(
+    { start: 0, length: 1, surface: "猫", reading: null, lemma: "猫", pos: "", content: true, state: "none" },
+    false,
+  ) as HTMLElement;
+  assert.equal(unlabelled.dataset.pos, undefined);
 });

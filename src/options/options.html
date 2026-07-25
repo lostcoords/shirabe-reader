@@ -30,10 +30,11 @@
             <label>Open popup on hover<select id="scanModifier"><option value="none">Always</option><option value="alt">Hold Alt / Option</option><option value="ctrl">Hold Ctrl</option><option value="shift">Hold Shift</option><option value="meta">Hold ⌘ Cmd</option></select></label>
             <label>Definition language<select id="languages"><option value="eng">English</option><option value="spa">Español</option><option value="spa,eng">Español, then English</option><option value="eng,spa">English, then Español</option></select></label>
             <label>Furigana<select id="furiganaMode"><option value="all">All words</option><option value="unknown">Unknown words</option><option value="hover">On hover</option><option value="off">Off</option></select></label>
-            <label>Word-state colors<select id="statePreset"><option value="standard">Standard</option><option value="colorVision">Color-vision safe</option><option value="minimal">Minimal underlines</option></select></label>
+            <label>Part-of-speech colors<select id="posColoring"><option value="off">Off</option><option value="text">Color the word</option><option value="underline">Color the underline</option></select></label>
             <label class="frequency-field">i+1 maximum frequency rank<input id="iPlusOneFrequencyMax" type="number" min="1" max="1000000" step="1000" /></label>
             <div class="check-stack">
               <label class="check-row"><input id="iPlusOneIncludesLearning" type="checkbox" /><span>Count learning words as known for i+1</span></label>
+              <label class="check-row"><input id="mineSentenceAudio" type="checkbox" /><span>Record the spoken line when mining a subtitle (replays it)</span></label>
             </div>
           </form>
         </section>
@@ -59,11 +60,9 @@
             <div data-dictionary-state="installed" hidden>
               <p class="status-line">Ready</p>
               <p id="dictionaryVersion" class="muted"></p>
-              <details class="credits">
-                <summary>Dictionary credits</summary>
-                <ul id="dictionaryCredits"></ul>
-                <p><a id="dictionaryLicensesLink" href="#" target="_blank" rel="noopener">Offline license notices</a></p>
-              </details>
+              <p class="credits">
+                <a id="creditsLink" href="#" target="_blank" rel="noopener">Dictionary credits</a>
+              </p>
               <div class="button-row">
                 <button id="updateDictionary" class="ghost" type="button">Check for update</button>
                 <button id="removeDictionary" class="ghost danger" type="button">Remove</button>
@@ -88,7 +87,7 @@
             <div data-state="connected" hidden>
               <p class="status-line">Connected<span id="accountName"></span></p>
               <label id="deckRow" class="deck-row">Save mined words to
-                <select id="preferredDeck"><option value="">Default deck</option></select>
+                <select id="preferredDeck"><option value="">Saved words (default)</option></select>
               </label>
               <button class="disconnect ghost" type="button">Disconnect</button>
             </div>
@@ -123,8 +122,7 @@
         <p class="muted footer-note">
           Dictionary lookup and parsing stay on this device. Page context is sent only when you save it.
           <a id="privacyLink" href="#" target="_blank" rel="noopener">Privacy</a> ·
-          <a id="settingsLink" href="#" target="_blank" rel="noopener">Shirabe settings</a> ·
-          <a id="licensesLink" href="#" target="_blank" rel="noopener">Offline license notices</a>
+          <a id="settingsLink" href="#" target="_blank" rel="noopener">Shirabe settings</a>
         </p>
       </article>
     </main>

@@ -236,3 +236,17 @@
     the auxiliary whole wins. The Rails tokenizer merges the whole predicate into
     one chip (授けていただく) — recorded as a divergence in
     test/tokenizer_eval/cross_engine.yml; both agree the verb is 授ける.
+
+- name: de-particle-eaten-by-dearu
+  text: お風呂であったまる
+  expect: [お風呂, であった=である, まる]
+  todo: [お風呂, で, あったまる=あったまる]
+  pack: full
+  why: >
+    The frequency-weighted path scoring gap, in one line. Greedy longest-match at
+    the で takes であった (である + past, 4 chars) over で + あったまる, so the verb the
+    reader wanted is shredded — the same shape as はと(鳩)+ても eating とても. The web
+    reads で + あったまる (Sudachi scores a whole path, we score one position), and
+    the neighbouring 部屋があったまらない case parses correctly here, so this is
+    strictly the path problem, not the あったまる entry.
+    See docs/plans/offline-parsing-improvements.md → ▶ NEXT.

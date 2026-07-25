@@ -16,6 +16,140 @@ function installDom(html: string): Window {
   return window;
 }
 
+test("a caption that grows word by word keeps the moment it first appeared", async () => {
+  // Auto-generated captions roll a line in one word at a time, and every added
+  // word is another parse. Re-stamping each time walks the line's start forward
+  // until it points at the end of it — and the audio mined from that cue then
+  // replays whatever came next instead of the sentence on screen.
+  const window = installDom("<div id='cue'></div>");
+  const { stampCueStart } = await import("../src/content/cues.js");
+  const cue = window.document.getElementById("cue") as unknown as HTMLElement;
+
+  cue.textContent = "これは";
+  stampCueStart(cue, "1000");
+  cue.textContent = "これは新しい";
+  stampCueStart(cue, "1600");
+  cue.textContent = "これは新しい車です";
+  stampCueStart(cue, "2300");
+  assert.equal(cue.dataset.mediaTimestamp, "1000", "a growing line keeps its first stamp");
+
+  // Different text is a different cue, and takes the moment it arrived.
+  cue.textContent = "全然違う話";
+  stampCueStart(cue, "4000");
+  assert.equal(cue.dataset.mediaTimestamp, "4000", "a replaced line is a new cue");
+});
+
+test("a caption rebuilt mid-line keeps the moment the line began", async () => {
+  // YouTube replaces its caption nodes while a line is still being spoken: the
+  // words are the same, the element is new, and it carries none of our stamps.
+  // Stamping "now" put the line's start two thirds of the way through the
+  // sentence, so the clip opened at 高齢者 instead of 転んだ.
+  const window = installDom("<div id='first'></div><div id='second'></div>");
+  const { stampCueStart, noteCue, forgetOpenCue } = await import("../src/content/cues.js");
+  const first = window.document.getElementById("first") as unknown as HTMLElement;
+  const second = window.document.getElementById("second") as unknown as HTMLElement;
+  const video = { currentTime: 0, addEventListener() {}, removeEventListener() {} } as unknown as HTMLVideoElement;
+
+  forgetOpenCue();
+  first.textContent = "転んだときだけ柔らかくなる床材が";
+  stampCueStart(first, "10000");
+  noteCue(first, video);
+
+  // Same line, rebuilt node, three seconds later.
+  second.textContent = "転んだときだけ柔らかくなる床材が高齢者を骨折から守る";
+  stampCueStart(second, "13000");
+  assert.equal(second.dataset.mediaTimestamp, "10000", "the line began at 10s, whatever node holds it now");
+
+  // A line that really is new still takes the moment it arrived.
+  const third = window.document.createElement("div");
+  third.textContent = "まったく別の話です";
+  noteCue(second, video);
+  stampCueStart(third as unknown as HTMLElement, "20000");
+  assert.equal(third.dataset.mediaTimestamp, "20000");
+  forgetOpenCue();
+});
+
+test("the clip covers exactly the sentence the card will carry", async () => {
+  // The card's sentence was chosen when the word was wrapped. Matching the audio
+  // to that text is the whole rule — no reasoning about punctuation, particles
+  // or pauses, and no way for the two to disagree.
+  installDom("<div></div>");
+  const { spanCovering } = await import("../src/content/cues.js");
+  const track = [
+    { startMs: 0, endMs: 2_000, text: "前の話です。", exact: true },
+    { startMs: 2_200, endMs: 4_000, text: "昨日 友達と", exact: true },
+    { startMs: 4_100, endMs: 6_000, text: "新しい店に行ったよ。", exact: true },
+    { startMs: 6_500, endMs: 8_000, text: "それから", exact: true },
+  ];
+
+  // Split across two lines: reach back for the half that is missing, no further.
+  const split = spanCovering(track, track[2], "昨日友達と新しい店に行ったよ。");
+  assert.equal(split.startMs, 2_200);
+  assert.equal(split.endMs, 6_000);
+  assert.equal(split.roomBeforeMs, 200, "silence available before the span");
+
+  // Whole sentence on one line: that line, and nothing either side of it — the
+  // case a rule about missing 。 used to get wrong.
+  const alone = spanCovering(track, track[2], "新しい店に行ったよ。");
+  assert.equal(alone.startMs, 4_100);
+  assert.equal(alone.endMs, 6_000);
+
+  // Whitespace differs between caption and card; it means nothing in Japanese.
+  assert.equal(spanCovering(track, track[1], "昨日友達と").startMs, 2_200);
+
+  // A sentence that runs *forwards* from the mined line is only found after
+  // reaching backwards past lines it never included — so the span has to shrink
+  // again, or the clip carries a line the card doesn't.
+  const forward = spanCovering(track, track[1], "昨日友達と新しい店に行ったよ。");
+  assert.equal(forward.startMs, 2_200, "no earlier line comes along for the ride");
+  assert.equal(forward.endMs, 6_000);
+
+  // A sentence the cues no longer hold (the caption moved on) keeps the line the
+  // word was on rather than reaching for something that isn't there.
+  const stale = spanCovering(track, track[2], "まったく別の文です。");
+  assert.equal(stale.startMs, track[2].startMs);
+  assert.equal(stale.endMs, track[2].endMs);
+});
+
+test("a cue's text ignores the furigana we drew over it", async () => {
+  // textContent splices every reading into the line, which breaks matching the
+  // caption against a player's cue list.
+  const window = installDom("<div id='cue'><ruby>新<rt>あたら</rt></ruby>しい車です</div>");
+  const { cueText } = await import("../src/content/cues.js");
+  const cue = window.document.getElementById("cue") as unknown as HTMLElement;
+  assert.equal(cueText(cue), "新しい車です");
+});
+
+test("a surface with real cue times overrides what watching the overlay guessed", async () => {
+  const window = installDom("<div id='cue'>新しい車です</div>");
+  const { stampCueStart, cueFor, setCueSource } = await import("../src/content/cues.js");
+  const cue = window.document.getElementById("cue") as unknown as HTMLElement;
+  const video = { currentTime: 15.9 } as HTMLVideoElement;
+
+  // Observation: stamped late (the caption is drawn after the words) and ended
+  // wherever the playhead happens to be.
+  stampCueStart(cue, "12900");
+  const observed = cueFor(cue, video);
+  assert.equal(observed?.exact, false);
+  assert.equal(observed?.startMs, 12900);
+
+  // The player's own track knows the line actually runs 12.480 → 15.100.
+  setCueSource({
+    refine: () => ({ startMs: 12480, endMs: 15100, text: "新しい車です", exact: true }),
+    stop: () => undefined,
+  });
+  const refined = cueFor(cue, video);
+  assert.equal(refined?.startMs, 12480, "the exact start replaces the observed one");
+  assert.equal(refined?.endMs, 15100);
+  assert.equal(refined?.exact, true);
+
+  // A source that can't place a line leaves the observation in charge, so a
+  // broken track never costs more than the precision it was adding.
+  setCueSource({ refine: () => null, stop: () => undefined });
+  assert.equal(cueFor(cue, video)?.startMs, 12900, "an unanswerable refinement falls back");
+  setCueSource(null);
+});
+
 test("logical scanner crosses inline links and ignores native ruby readings", async () => {
   const window = installDom("<p id='line'>食<ruby>漢<rt>しょく</rt></ruby><a>べる</a></p>");
   const { logicalTextAt } = await import("../src/content/dom-text.js");
@@ -349,6 +483,21 @@ test("page metrics distinguish occurrences and unique words and apply the i+1 ca
   assert.equal(index.metrics().unique, 2);
 });
 
+test("a new word needs something to be read against before the block counts as i+1", async () => {
+  const window = installDom(`
+    <p id="bare"><span class="sb-word" data-lemma="紫陽花" data-state="none"></span><span class="sb-word" data-lemma="です" data-pos="cop" data-state="known"></span><span class="sb-word" data-lemma="ね" data-pos="prt" data-state="known"></span></p>
+    <p id="context"><span class="sb-word" data-lemma="紫陽花" data-state="none"></span><span class="sb-word" data-lemma="咲く" data-pos="v5k" data-state="known"></span></p>
+  `);
+  const { isIPlusOne } = await import("../src/content/page-metrics.js");
+  const options = { includesLearning: true, frequencyMax: 20_000 };
+  const words = (id: string) => [...window.document.querySelectorAll<HTMLElement>(`#${id} .sb-word`)];
+
+  // 「紫陽花ですね」 is one unknown word and pure grammar around it — nothing the
+  // reader can lean on. A verb beside it makes the same word worth studying.
+  assert.equal(isIPlusOne(words("bare"), options), false);
+  assert.equal(isIPlusOne(words("context"), options), true);
+});
+
 test("the status bar counts every i+1 block on the page, not just the changed ones", async () => {
   const window = installDom(`
     <li id="one-unknown"><span class="sb-word" data-lemma="猫" data-state="known"></span><span class="sb-word" data-lemma="食べる" data-state="none" data-frequency="1200"></span></li>
@@ -365,26 +514,28 @@ test("the status bar counts every i+1 block on the page, not just the changed on
     return { ok: true };
   };
 
-  const { showStatusBar, hideStatusBar } = await import("../src/content/status-bar.js");
-  // The module keeps `host`, the metric index, and its debounce timer as
-  // singletons, but `installDom` swaps the document out from under them. Reset
-  // first so this test doesn't inherit a bar built against a dead document, and
-  // tear down in `finally` so a failed assertion here can't leak into the rest
-  // of the suite.
-  hideStatusBar();
+  const { startMetrics, stopMetrics } = await import("../src/content/metrics-reporter.js");
+  // The module keeps the metric index and its debounce timer as singletons, but
+  // `installDom` swaps the document out from under them. Reset first so this test
+  // doesn't inherit an index built against a dead document, and tear down in
+  // `finally` so a failed assertion here can't leak into the rest of the suite.
+  stopMetrics();
   sent.length = 0;
 
   try {
-    showStatusBar(() => {});
+    startMetrics();
 
     const marked = [...window.document.querySelectorAll(".sb-i-plus-one")].map((block) => block.id);
     assert.deepEqual(marked, ["one-unknown"], "only the block with exactly one unknown word is cued");
+    // The cue also points at the word itself, so a marked block says which one.
+    const targets = [...window.document.querySelectorAll<HTMLElement>(".sb-i-plus-one-word")].map((word) => word.dataset.lemma);
+    assert.deepEqual(targets, ["食べる"], "the block's unknown word is cued, the known one is not");
     assert.equal(sent.findLast((message) => message.type === "pageMetrics")?.metrics?.iPlusOne, 1);
 
-    hideStatusBar();
-    assert.equal(window.document.querySelectorAll(".sb-i-plus-one").length, 0, "hiding the bar clears the cue");
+    stopMetrics();
+    assert.equal(window.document.querySelectorAll(".sb-i-plus-one").length, 0, "stopping the report clears the cue");
   } finally {
-    hideStatusBar();
+    stopMetrics();
     ext.runtime.sendMessage = original;
   }
 });
@@ -435,6 +586,7 @@ test("the release host matrix resolves to maintained parsing paths", async () =>
   assert.equal(resolve("https://www.netflix.com/watch/1").rule?.custom, "netflix");
   assert.equal(resolve("https://reader.ttsu.app/b?id=1").rule?.custom, "ttsu");
   assert.equal(resolve("https://reader.mokuro.app/reader/1").rule?.custom, "mokuro");
+  assert.equal(resolve("https://jisho.org/search/日本語").rule?.filter, ".furigana, .japanese_word__furigana_wrapper");
   assert.equal(resolve("https://news.example.jp/story").mode, "auto");
   // Shirabe's own site is never parsed — it is the dictionary, not a reading surface.
   assert.equal(resolve("https://shirabe.org/en/word/日本語").mode, "off");
@@ -454,6 +606,51 @@ test("Japanese Wikipedia fixture scopes logical text to article content", async 
   const { logicalTextAt } = await import("../src/content/dom-text.js");
   assert.equal(logicalTextAt(first, 0).context, "日本語を勉強する。");
   assert.ok(!root.textContent?.includes("辞書ではないナビ"));
+});
+
+test("a reading the page already supplies is never parsed as text", async () => {
+  // jisho.org's zen bar (the real markup, classes and all): furigana is a row of
+  // positioned spans, and the kana it merely needs for spacing are hidden with
+  // `color: white` rather than dropped. Parsed as text, きのう became a word of
+  // its own beside 昨日 and every invisible spacer came back in our own ink.
+  const window = installDom(`
+    <section id="zen_bar">
+      <li class="japanese_word">
+        <span class="japanese_word__furigana_wrapper"><span class="japanese_word__furigana" data-text="昨日">きのう</span></span>
+        <span class="japanese_word__text_wrapper"><a><span class="japanese_word__text_with_furigana">昨日</span></a></span>
+      </li>
+      <li class="japanese_word">
+        <span class="japanese_word__furigana_wrapper"><span class="japanese_word__furigana japanese_word__furigana-invisible">すき</span><span class="japanese_word__furigana" data-text="焼">や</span><span class="japanese_word__furigana japanese_word__furigana-invisible">き</span></span>
+        <span class="japanese_word__text_wrapper"><a><span class="japanese_word__text_without_furigana">すき</span><span class="japanese_word__text_with_furigana">焼</span><span class="japanese_word__text_without_furigana">き</span></a></span>
+      </li>
+    </section>
+    <div class="concept_light-representation"><span class="furigana"><span class="kanji">た</span></span><span class="text">食べました</span></div>
+    <p id="native">これは<ruby>漢字<rt><span>かんじ</span></rt></ruby>です</p>
+  `);
+  const { BUILTIN_RULES, resolveHostMode } = await import("../src/common/host-rules.js");
+  const rule = resolveHostMode("https://jisho.org/search/昨日すき焼きを食べました", { disabledHosts: [], rules: BUILTIN_RULES }).rule;
+
+  const { ext } = await import("../src/common/browser.js");
+  const original = ext.runtime.sendMessage;
+  const seen: string[] = [];
+  ext.runtime.sendMessage = async (message: { type: string; texts?: string[] }) => {
+    if (message.type !== "parseBatch") return { ok: true, states: {} };
+    seen.push(...(message.texts ?? []).map((text) => text.trim()));
+    return { ok: true, tokens: (message.texts ?? []).map(() => []) };
+  };
+
+  try {
+    const { parse, setParsingPaused } = await import("../src/content/parser.js");
+    setParsingPaused(false);
+    await parse(window.document.body, false, { filter: rule?.filter });
+  } finally {
+    ext.runtime.sendMessage = original;
+  }
+
+  // Only the words themselves reach the parser. Native ruby is skipped whole —
+  // base and annotation — and the <rt> reading stays out even when it is wrapped
+  // in markup of its own, which a parent-tag test used to let through.
+  assert.deepEqual(seen.filter(Boolean), ["昨日", "すき", "焼", "き", "食べました", "これは", "です"]);
 });
 
 test("Netflix, Ttsu, and Mokuro fixtures expose text and integration context", async () => {
@@ -540,4 +737,43 @@ test("YouTube parses the styled segment, not the parent visual line", async () =
   await parseYouTubeSegments(root, true, fakeParse);
   assert.deepEqual(seen, ["ytp-caption-segment"]);
   assert.ok(window.document.querySelector(".ytp-caption-segment"), "styled segment stays in the tree");
+});
+
+test("Manage opens the card itself, or the browser when a word has one per meaning", async () => {
+  const window = installDom("<p><span class='sb-word' id='w' data-lemma='今日'>今日</span></p>");
+  const { applyStudyDetails, studyUrlForWord } = await import("../src/content/actions.js");
+  const word = window.document.getElementById("w") as unknown as HTMLElement;
+  const decks = [ { id: 1, name: "Saved words" } ];
+
+  applyStudyDetails(word, { state: "new", decks, cardId: 15, cardCount: 1 });
+  assert.match(await studyUrlForWord(word), /\/study\/cards\?card_id=15$/, "one card: open it, with its mined context");
+
+  // A second meaning saved. `cardId` still names one of the two, so deep-linking
+  // it would leave the other unreachable from the reader.
+  applyStudyDetails(word, { state: "new", decks, cardId: 16, cardCount: 2 });
+  const url = await studyUrlForWord(word);
+  assert.match(url, /\/study\/cards\?q=/, "several cards: the browser, filtered by the word");
+  assert.match(url, new RegExp(encodeURIComponent("今日")));
+  assert.doesNotMatch(url, /card_id/, "a stale deep link must not survive the second save");
+});
+
+test("a meaning that already has a card is marked saved, not offered again", async () => {
+  const window = installDom("<p><span class='sb-word' id='w' data-lemma='今日'>今日</span></p>");
+  const { applyStudyDetails } = await import("../src/content/actions.js");
+  const word = window.document.getElementById("w") as unknown as HTMLElement;
+
+  applyStudyDetails(word, {
+    state: "new", decks: [ { id: 1, name: "Saved words" } ], cardId: 15, cardCount: 1,
+    savedSensePositions: [ 0 ],
+  });
+  assert.equal(word.dataset.savedSenses, "0");
+
+  // A whole-word card covers every meaning at once.
+  applyStudyDetails(word, { state: "new", decks: [], savedWholeWord: true });
+  assert.equal(word.dataset.savedSenses, "all");
+
+  // Nothing covered must clear it — a stale list would grey out a meaning that
+  // is still saveable.
+  applyStudyDetails(word, { state: "none", decks: [] });
+  assert.equal(word.dataset.savedSenses, undefined);
 });

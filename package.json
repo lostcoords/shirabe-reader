@@ -13,6 +13,7 @@
     "prepare:dev-pack": "cd .. && bin/rails dictionary_packs:ensure",
     "rebuild:dev-pack": "cd .. && bin/rails dictionary_packs:build",
     "dev": "npm run prepare:dev-pack && node build.mjs firefox --watch --serve",
+    "dev:attach": "npm run prepare:dev-pack && node build.mjs firefox --watch",
     "dev:chrome": "npm run prepare:dev-pack && node build.mjs chrome --watch --serve",
     "check": "tsc --noEmit",
     "test": "node test/run.mjs",

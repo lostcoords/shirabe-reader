@@ -1,4 +1,5 @@
 import { mediaTimestamp, parseCaptionElement } from "../parser.js";
+import { noteCue, noteCueParsed, noteCuesCleared, stampCueStart } from "../cues.js";
 type ParseTarget = (root: HTMLElement, showFurigana: boolean) => Promise<number>;
 
 // YouTube captions parser. The generic page parser can't handle YouTube: the
@@ -66,11 +67,22 @@ export function captionTargets(container: Element): HTMLElement[] {
 export async function parseYouTubeSegments(container: Element, showFurigana: boolean, parseTarget: ParseTarget = parseCaptionElement): Promise<number> {
   let parsed = 0;
   const timestamp = mediaTimestamp();
-  for (const context of captionTargets(container)) {
+  const targets = captionTargets(container);
+  // An empty caption window is the line ending, and the only chance to record
+  // when it did.
+  if (!targets.length) {
+    noteCuesCleared(document.querySelector("video"));
+    return 0;
+  }
+  for (const context of targets) {
     if (!context.textContent?.trim()) continue;
     context.dataset.integration = "youtube_captions";
-    if (timestamp != null) context.dataset.mediaTimestamp = timestamp;
+    stampCueStart(context, timestamp);
+    // A caption never says how long it lasts; the next one appearing is the only
+    // signal. Hand each cue over as it arrives so its audio can be bounded.
+    noteCue(context, document.querySelector("video"));
     parsed += await parseTarget(context, showFurigana);
+    noteCueParsed(context); // the trailing part of speech only exists now
   }
   return parsed;
 }

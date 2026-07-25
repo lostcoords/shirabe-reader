@@ -1,9 +1,9 @@
 import { ext, type RuntimePort } from "./browser.js";
-import type { Request, Response } from "./messages.js";
+import type { Failure, Request, Response } from "./messages.js";
 
 type DictionaryRequest = Extract<Request, { type: "dictionaryStatus" | "installDictionary" | "removeDictionary" | "cancelDictionaryInstall" }>;
-type DictionaryReply = Extract<Response, { type: DictionaryRequest["type"] }> | { ok: false; error: string };
-type DictionaryReplyFor<R extends DictionaryRequest> = Extract<Response, { type: R["type"] }> | { ok: false; error: string };
+type DictionaryReply = Extract<Response, { type: DictionaryRequest["type"] }> | Failure;
+type DictionaryReplyFor<R extends DictionaryRequest> = Extract<Response, { type: R["type"] }> | Failure;
 
 let port: RuntimePort | null = null;
 let messageId = 0;

@@ -1,5 +1,4 @@
-import { ext } from "../common/browser.js";
-import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type ScanModifier, type StatePreset } from "../common/config.js";
+import { creditsUrl, DEFAULTS, loadConfig, onConfigChanged, pricingUrl, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type PosColoring, type ScanModifier } from "../common/config.js";
 import { sendDictionary } from "../common/dictionary-port.js";
 import { formatKeybind, KEYBIND_ACTIONS, KEYBIND_LABELS, keybindFromEvent, type Keybind, type KeybindAction } from "../common/keybind.js";
 import { send } from "../common/messages.js";
@@ -28,7 +27,8 @@ const prefs = {
   furiganaMode: $<HTMLSelectElement>("furiganaMode"),
   scanModifier: $<HTMLSelectElement>("scanModifier"),
   languages: $<HTMLSelectElement>("languages"),
-  statePreset: $<HTMLSelectElement>("statePreset"),
+  posColoring: $<HTMLSelectElement>("posColoring"),
+  mineSentenceAudio: $<HTMLInputElement>("mineSentenceAudio"),
   iPlusOneIncludesLearning: $<HTMLInputElement>("iPlusOneIncludesLearning"),
   iPlusOneFrequencyMax: $<HTMLInputElement>("iPlusOneFrequencyMax"),
 };
@@ -40,14 +40,14 @@ loadConfig().then((loaded) => {
   prefs.furiganaMode.value = config.furiganaMode;
   prefs.scanModifier.value = config.scanModifier;
   prefs.languages.value = config.languages.join(",");
-  prefs.statePreset.value = config.statePreset;
+  prefs.posColoring.value = config.posColoring;
+  prefs.mineSentenceAudio.checked = config.mineSentenceAudio;
   prefs.iPlusOneIncludesLearning.checked = config.iPlusOneIncludesLearning;
   prefs.iPlusOneFrequencyMax.value = String(config.iPlusOneFrequencyMax);
   const base = config.apiBase.replace(/\/$/, "");
   $<HTMLAnchorElement>("settingsLink").href = `${base}/settings`;
   $<HTMLAnchorElement>("privacyLink").href = `${base}/privacy`;
-  $<HTMLAnchorElement>("licensesLink").href = ext.runtime.getURL("licenses.html");
-  $<HTMLAnchorElement>("dictionaryLicensesLink").href = ext.runtime.getURL("licenses.html");
+  $<HTMLAnchorElement>("creditsLink").href = creditsUrl(config.apiBase);
   renderKeybinds();
   void refreshDictionary();
   void refreshAccount();
@@ -77,7 +77,8 @@ $<HTMLFormElement>("prefs").addEventListener("change", async (event) => {
     furiganaMode: prefs.furiganaMode.value as FuriganaMode,
     scanModifier: prefs.scanModifier.value as ScanModifier,
     languages,
-    statePreset: prefs.statePreset.value as StatePreset,
+    posColoring: prefs.posColoring.value as PosColoring,
+    mineSentenceAudio: prefs.mineSentenceAudio.checked,
     iPlusOneIncludesLearning: prefs.iPlusOneIncludesLearning.checked,
     iPlusOneFrequencyMax: Math.max(1, Number(prefs.iPlusOneFrequencyMax.value) || DEFAULTS.iPlusOneFrequencyMax),
   });
@@ -105,7 +106,7 @@ async function refreshAccount(): Promise<void> {
   } else if (connected) {
     showAccountPane("unentitled");
     $<HTMLElement>("unentitledName").textContent = named;
-    $<HTMLAnchorElement>("upgradeLink").href = apiBase.replace(/\/$/, "") + "/pricing";
+    $<HTMLAnchorElement>("upgradeLink").href = pricingUrl(apiBase, "extension_settings");
   } else if (connecting) {
     showAccountPane("connecting");
   } else {
@@ -121,7 +122,7 @@ async function refreshDecks(): Promise<void> {
     return;
   }
   $<HTMLElement>("deckRow").hidden = false;
-  select.replaceChildren(new Option("Default deck", ""));
+  select.replaceChildren(new Option("Saved words (default)", ""));
   for (const deck of res.decks) select.add(new Option(deck.name, String(deck.id)));
   select.value = config.preferredDeckId == null ? "" : String(config.preferredDeckId);
   if (select.value === "" && config.preferredDeckId != null) await patch({ preferredDeckId: null });
@@ -130,7 +131,7 @@ async function refreshDecks(): Promise<void> {
 $<HTMLSelectElement>("preferredDeck").addEventListener("change", (event) => {
   const value = (event.currentTarget as HTMLSelectElement).value;
   void patch({ preferredDeckId: value ? Number(value) : null });
-  status("Default deck saved");
+  status("Deck saved");
 });
 
 $<HTMLButtonElement>("connect").addEventListener("click", async () => {
@@ -166,7 +167,7 @@ async function refreshDictionary(): Promise<void> {
   if (!res.ok) {
     showDictionaryPane("error");
     $<HTMLElement>("dictionaryError").textContent = res.error;
-    await diagnoseDictionary(res.error);
+    await diagnoseDictionary(res.detail ?? res.error);
     return;
   }
   const dict = res.dictionary;
@@ -186,17 +187,6 @@ async function refreshDictionary(): Promise<void> {
     showDictionaryPane("installed");
     const size = dict.bytes ? `${(dict.bytes / 1024 / 1024).toFixed(1)} MB download` : "installed";
     $<HTMLElement>("dictionaryVersion").textContent = `${dict.terms.toLocaleString()} terms · ${dict.kanji.toLocaleString()} kanji · ${size} · ${dict.revision ?? "unknown version"}`;
-    const credits = $<HTMLUListElement>("dictionaryCredits");
-    credits.replaceChildren(...dict.sources.map((source) => {
-      const item = document.createElement("li");
-      const link = document.createElement("a");
-      link.href = source.licenseUrl || source.url;
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.textContent = `${source.name} — ${source.license}`;
-      item.append(link);
-      return item;
-    }));
   } else {
     showDictionaryPane("missing");
   }
@@ -224,7 +214,7 @@ async function install({ update = false } = {}): Promise<void> {
         showDictionaryPane("error");
         $<HTMLElement>("dictionaryError").textContent = res.error;
       }
-      await diagnoseDictionary(res.error);
+      await diagnoseDictionary(res.detail ?? res.error);
     } else {
       await refreshDictionary();
     }
@@ -288,7 +278,7 @@ async function diagnoseDictionary(transportError: string): Promise<void> {
   const background = await sendDictionary({ type: "dictionaryStatus" });
   const backgroundLine = background.ok
     ? `background: reachable (${background.dictionary.stage ?? background.dictionary.error ?? "idle"})`
-    : `background: ${background.error}`;
+    : `background: ${background.detail ?? background.error}`;
   $<HTMLElement>("dictionaryDiagnostics").textContent = [
     preflight.diagnostics,
     backgroundLine,

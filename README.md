@@ -57,17 +57,22 @@ What works in the current build:
 - **Per-user word-state colouring** — new / learning / due / known, stamped by
   `POST /v1/parse` and recoloured across the whole page after every review.
 - **Furigana** on kanji words (toggleable).
+- **Part-of-speech colouring** — the site's own groups and hues (nouns blue, verbs
+  green, adjectives orange, …) on the word or on its underline. One cue system
+  covers every surface: a subtitle shows exactly what a paragraph shows.
 - **Hover popup** with headword, reading, and definitions in your chosen
   language from IndexedDB, isolated in a shadow root so it renders the same
   on every site. Show it on plain hover, or only on **Alt/Option + hover**.
-- **Mine & review inline** — **＋ Save** creates a card without grading it;
-  **Again / Hard / Good / Easy** appear only when that card is due. **✓ Known**
-  parks it. Keyboard shortcuts `1`–`4` are likewise due-only.
+- **Mine inline** — **＋ Save** creates a card, **✓ Known** parks it, and a word
+  you already study offers **Manage**, the same control its dictionary result
+  carries on the site. Grading is deliberately not here: reviewing wants the
+  history and interval previews around it, so it stays where they are. The row is
+  wired but not rendered — see `REVIEW_IN_READER` in `src/content/actions.ts`.
 - **Automatic local parsing** whenever the reader is on. The right-click menu
   can reparse a page or parse a selection explicitly.
 - **Page awareness** — coverage and known/learning/unknown/due counts, i+1
   paragraph highlighting, occurrence/unique coverage, a toolbar badge,
-  accessible state presets, and Pause/Reparse/Revert controls.
+  and Pause/Reparse/Revert controls.
 - **asbplayer subtitles** — when [asbplayer](https://github.com/asbplayer/asbplayer)
   is injecting JP subs (streaming or `app.asbplayer.dev`), lines are tokenized
   for hover/save the same way as page text. No Anki required for lookups; clip
@@ -131,6 +136,39 @@ the `rb-portless` dev CA from your OS keychain (Chrome uses the keychain already
 To point at a different server, override it under **Settings → Advanced**.
 
 [`web-ext`]: https://github.com/mozilla/web-ext
+
+## Develop in your own Firefox
+
+`npm run dev` launches its own browser profile. To work in the Firefox you
+already use — your tabs, logins, and other add-ons — attach a temporary add-on
+to it instead and let it reload itself:
+
+```bash
+npm run dev:attach     # same watcher, no browser launch
+```
+
+One-time setup in that Firefox:
+
+1. `about:config` → set `security.enterprise_roots.enabled` to `true`, so
+   Firefox trusts the `rb-portless` dev CA and `https://shirabe.localhost` works.
+2. `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** →
+   select `extension/dist/firefox/manifest.json`.
+
+From then on every save rebuilds, and the add-on console logs `rebuilt` — hit
+**Reload** on the add-on's card in `about:debugging` to pick it up. The watcher
+runs a small event stream on `http://127.0.0.1:8473/reload` that watch builds
+subscribe to (`src/background/dev-reload.ts`); it announces the rebuild but does
+not reload the extension for you. `runtime.reload()` is the only lever a page
+has, and it is not established that it reloads a _temporary_ add-on rather than
+removing it — and nothing outside can do it either, since `web-ext` only attaches
+to a Firefox it launched itself. As with `npm run dev`, refresh the tab to
+re-inject content-script changes.
+
+Two things to know: a temporary add-on is gone after you quit Firefox, so step 2
+repeats each session, and the watch build carries the `reader-dev@shirabe.org`
+add-on ID, so it lives alongside a store-installed Shirabe Reader instead of
+replacing it. Chrome has no equivalent — its MV3 service worker can't hold the
+event-stream connection, so `dev:chrome` stays on web-ext.
 
 ## Load it (Firefox)
 

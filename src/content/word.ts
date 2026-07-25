@@ -90,6 +90,7 @@ export function renderToken(token: ParsedToken, showFurigana: boolean): Node {
   word.dataset.lemma = token.lemma;
   word.dataset.surface = token.surface;
   word.dataset.state = token.state; // popup reads this to gate the review buttons
+  if (token.pos) word.dataset.pos = token.pos; // i+1 reads this to tell context words from copulas
   if (token.frequency != null) word.dataset.frequency = String(token.frequency);
   if (token.reading) word.dataset.reading = token.reading;
 
@@ -176,14 +177,6 @@ function register(lemma: string, word: HTMLElement): void {
   let set = byLemma.get(lemma);
   if (!set) byLemma.set(lemma, (set = new Set()));
   set.add(word);
-}
-
-// Reverting unwraps every span at once. Pruning is otherwise lazy — it only
-// happens for a lemma that gets refreshed — and revert also pauses parsing, so
-// nothing would ever refresh again and the whole page's spans would be retained
-// for the life of the tab.
-export function forgetRenderedWords(): void {
-  byLemma.clear();
 }
 
 // Reflect a freshly-set learning state on one already-rendered word.

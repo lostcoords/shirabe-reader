@@ -1,8 +1,9 @@
 import { send, type Rating } from "../common/messages.js";
+import { loadConfig, pricingUrl } from "../common/config.js";
 import { sendDictionary } from "../common/dictionary-port.js";
 import type { Definition, Example, Sense, SentenceToken } from "../common/types.js";
-import { applyStudyDetails, cardUrlFor, grade, GRADES, markKnown, save, setScanOrigin, studyUrlForWord, type Outcome } from "./actions.js";
-import { refreshStatusBar } from "./status-bar.js";
+import { applyStudyDetails, grade, GRADES, markKnown, REVIEW_IN_READER, save, setScanOrigin, studyUrlForWord, type Outcome } from "./actions.js";
+import { refreshMetrics } from "./metrics-reporter.js";
 import { rangeFromCaret } from "./dom-text.js";
 import { placeCard } from "./placement.js";
 import { appendFurigana, hasKanji } from "./word.js";
@@ -23,14 +24,43 @@ let showTimer: number | undefined;
 let hideTimer: number | undefined;
 let token = 0; // guards against a slow lookup landing after we've moved on
 let canWrite = false; // WRITE_SRS + entitled → render mining controls
+let connected = false; // signed in at all — decides what the no-controls row offers
+// The current popup's sense-picker checkboxes (empty unless the word has 2–8
+// senses and the user can save). Read at save time to scope the card; ticking
+// every box (the default) saves the whole word. `sensePickWord` is the element
+// the checkboxes were built for, so a keyboard save against a *different* hovered
+// word (nested lookup, scan span) doesn't misapply this popup's picks.
+let sensePicks: HTMLInputElement[] = [];
+let sensePickWord: HTMLElement | null = null;
 const lookupHistory: PopupTarget[] = [];
 let historyIndex = -1;
 let navigatingHistory = false;
+// Built once with the rest of the shell chrome, so they outlive content swaps
+// and `refreshHistoryNav` is what keeps them in step with the history.
+let historyBack: HTMLButtonElement | null = null;
+let historyForward: HTMLButtonElement | null = null;
 let currentDepth = 0;
 let dictionaryInstallPromise: Promise<void> | null = null;
 
-export function setCanWrite(value: boolean): void {
-  canWrite = value;
+export function setWriteState(state: { canWrite: boolean; connected: boolean }): void {
+  canWrite = state.canWrite;
+  connected = state.connected;
+}
+
+// The ticked sense positions to save, or undefined for the whole word (no
+// picker, or every sense left ticked). Only a genuine subset scopes the card.
+function pickedPositions(): number[] | undefined {
+  if (!sensePicks.length) return undefined;
+  const ticked = sensePicks.filter((box) => box.checked).map((box) => Number(box.dataset.position));
+  if (ticked.length === 0 || ticked.length === sensePicks.length) return undefined;
+  return ticked;
+}
+
+// The picks for `word`, but only when it's the word this popup's picker was built
+// for — so the keyboard "save" shortcut honours the checkboxes without ever
+// applying them to a different hovered word. Whole word otherwise.
+export function picksForWord(word: HTMLElement): number[] | undefined {
+  return word === sensePickWord ? pickedPositions() : undefined;
 }
 
 function element(): HTMLElement {
@@ -45,11 +75,24 @@ function element(): HTMLElement {
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-label", "Shirabe dictionary");
 
-  // Permanent chrome — survives content swaps so every state (loading, error,
-  // definition) has an explicit close, not only hover-away / click-outside.
+  // Permanent chrome — one top-right row of back, forward, close. It survives
+  // content swaps, so every state (loading, error, definition) keeps an explicit
+  // close (not only hover-away / click-outside) and the history arrows never
+  // move as the content under them changes.
+  const chrome = document.createElement("div");
+  chrome.className = "sb-chrome";
+
+  historyBack = button("←", "sb-chrome-button", "", () => navigateHistory(-1));
+  historyBack.title = "Previous lookup (Alt+←)";
+  historyBack.setAttribute("aria-label", "Previous lookup");
+  historyForward = button("→", "sb-chrome-button", "", () => navigateHistory(1));
+  historyForward.title = "Next lookup (Alt+→)";
+  historyForward.setAttribute("aria-label", "Next lookup");
+  refreshHistoryNav();
+
   const close = document.createElement("button");
   close.type = "button";
-  close.className = "sb-btn sb-close";
+  close.className = "sb-btn sb-chrome-button sb-close";
   close.textContent = "×";
   close.title = "Close";
   close.setAttribute("aria-label", "Close");
@@ -57,10 +100,11 @@ function element(): HTMLElement {
     event.stopPropagation();
     dismiss();
   });
+  chrome.append(historyBack, historyForward, close);
 
   content = document.createElement("div");
   content.className = "sb-popup-content";
-  box.append(close, content);
+  box.append(chrome, content);
   root.append(style, box);
   content.addEventListener("dblclick", (event) => {
     // Firefox exposes a selection inside an open shadow root on the root itself,
@@ -255,6 +299,7 @@ async function showTarget(target: PopupTarget): Promise<void> {
   currentDepth = target.depth;
   if (!navigatingHistory) recordHistory(target);
   navigatingHistory = false;
+  refreshHistoryNav();
   const mine = ++token;
   highlightScan(null); // drop any previous scan highlight until this match resolves
 
@@ -298,7 +343,9 @@ async function showTarget(target: PopupTarget): Promise<void> {
         const details = states.details[res.definition.headword];
         if (details) {
           applyStudyDetails(target.word, details);
-          if (details.cardId != null) target.word.dataset.cardUrl = await cardUrlFor(details.cardId);
+          // One resolver for the destination, so a word with a card per meaning
+          // can't get a deep link here and the card browser everywhere else.
+          if (details.cardId != null) target.word.dataset.cardUrl = await studyUrlForWord(target.word);
         } else {
           target.word.dataset.state = states.states[res.definition.headword] ?? "none";
         }
@@ -431,6 +478,8 @@ function messageRow(text: string): Node {
 }
 
 function definitionRows(def: Definition | null, lemma: string, word: HTMLElement): Node[] {
+  sensePicks = []; // rebuilt by sensesList for this render
+  sensePickWord = null;
   if (!def) {
     const body = document.createElement("div");
     body.className = "sb-body";
@@ -447,7 +496,11 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
   const badges = badgeRow(def);
   if (badges) body.append(badges);
   if (def.pitch.length && def.reading) body.append(pitchRows(def.pitch, def.reading));
-  body.append(sensesList(def.senses));
+  // A picker only when the user can save and every sense is shown (2–8) — so
+  // "all ticked" unambiguously means the whole word.
+  const pickable = canWrite && def.senses.length > 1 && def.senses.length <= 8;
+  if (pickable) sensePickWord = word;
+  body.append(sensesList(def.senses, pickable, coveredSenses(word)));
   const kanji = kanjiStrip(def.headword, def.url);
   if (kanji) body.append(kanji);
   const examples = examplesBlock(def.examples);
@@ -482,15 +535,25 @@ function kanjiStrip(headword: string, wordUrl: string): HTMLElement | null {
   return strip;
 }
 
-function studyUnavailable(): HTMLElement {
+// What sits where the Save/Known controls would be. Signed in without Pro is
+// the case worth getting right: the reader isn't missing a connection, they're
+// missing the subscription, and telling them to "connect" an account they're
+// already signed into is both wrong and a dead end. Say what's missing, link it.
+// Exported for the test that renders it — it's the whole free-reader experience
+// of this card, and asserting on the source text instead was never proof.
+export function studyUnavailable(): HTMLElement {
   const row = document.createElement("div");
   row.className = "sb-study-unavailable";
-  row.textContent = "Offline lookup · Connect a Pro account to save and review";
+  if (connected) {
+    row.append("Saving to your reviews is part of Pro. ", plansLink());
+  } else {
+    row.textContent = "Offline lookup · Connect a Pro account to save and review";
+  }
   return row;
 }
 
-// Headword (links to its shirabe.org page) + reading + history. Audio sits next
-// to pitch; the shell owns the close button in the top-right corner.
+// Headword (links to its shirabe.org page) + reading. Audio sits next to pitch;
+// the shell owns the history arrows and close button in the top-right corner.
 function headRow(def: Definition): Node {
   const head = document.createElement("div");
   head.className = "sb-popup-head";
@@ -522,19 +585,14 @@ function headRow(def: Definition): Node {
     }
   }
 
-  const navigation = document.createElement("span");
-  navigation.className = "sb-history-nav";
-  const back = button("←", "sb-history-button", "", () => navigateHistory(-1));
-  back.title = "Previous lookup";
-  back.setAttribute("aria-label", "Previous lookup");
-  back.toggleAttribute("disabled", historyIndex <= 0);
-  const forward = button("→", "sb-history-button", "", () => navigateHistory(1));
-  forward.title = "Next lookup";
-  forward.setAttribute("aria-label", "Next lookup");
-  forward.toggleAttribute("disabled", historyIndex >= lookupHistory.length - 1);
-  navigation.append(back, forward);
-  head.append(navigation);
   return head;
+}
+
+// The arrows sit in the shell's chrome row rather than in this row, so nothing
+// rebuilds them — every move through the history re-checks which ends are live.
+function refreshHistoryNav(): void {
+  historyBack?.toggleAttribute("disabled", historyIndex <= 0);
+  historyForward?.toggleAttribute("disabled", historyIndex >= lookupHistory.length - 1);
 }
 
 function recordHistory(target: PopupTarget): void {
@@ -595,29 +653,44 @@ function badgeRow(def: Definition): Node | null {
   return row;
 }
 
-// One NHK-style pitch graph + [downstep] per accent pattern. Audio (when the
-// pack has an R2 clip) sits left of the graphs so pronunciation and pitch read
-// as one unit.
+// Patterns sit in a row that wraps, like the site's — two short accents fit on
+// one line, where a stack spent a graph's height on each. Past this many, the
+// rest wait behind a "+N": a word with four accents is rare enough that it must
+// not cost every other word the senses being pushed out of the card.
+const VISIBLE_PITCH_PATTERNS = 2;
+
 function pitchRows(pitch: Definition["pitch"], reading: string): Node {
   const wrap = document.createElement("div");
   wrap.className = "sb-pitch";
-  const audioUrl = pitch.map((entry) => entry.audioUrl).find(isR2AudioUrl);
-  if (audioUrl) {
-    const audio = button("🔊", "sb-audio", "", () => void playAudio(audioUrl));
+  const patterns = pitch.map((entry) => pitchPattern(entry, reading));
+  const rest = patterns.slice(VISIBLE_PITCH_PATTERNS);
+  wrap.append(...patterns.slice(0, VISIBLE_PITCH_PATTERNS));
+  if (rest.length) {
+    const more = button(`+${rest.length}`, "sb-pitch-more", "", () => {
+      more.replaceWith(...rest);
+    });
+    more.title = `Show ${rest.length} more accent pattern${rest.length > 1 ? "s" : ""}`;
+    more.setAttribute("aria-label", more.title);
+    wrap.append(more);
+  }
+  return wrap;
+}
+
+// One NHK-style graph + [downstep], with its own play button: each clip speaks
+// that exact accent, so a word read two ways (箸 / 橋) lets you hear both rather
+// than whichever pattern happened to come first.
+function pitchPattern(entry: Definition["pitch"][number], reading: string): HTMLElement {
+  const item = document.createElement("div");
+  item.className = "sb-pitch-item";
+  if (isR2AudioUrl(entry.audioUrl)) {
+    const url = entry.audioUrl;
+    const audio = button("🔊", "sb-audio", "", () => void playAudio(url));
     audio.title = "Play pronunciation";
     audio.setAttribute("aria-label", "Play pronunciation");
-    wrap.append(audio);
+    item.append(audio);
   }
-  const patterns = document.createElement("div");
-  patterns.className = "sb-pitch-patterns";
-  for (const p of pitch) {
-    const row = document.createElement("div");
-    row.className = "sb-pitch-item";
-    row.append(pitchGraph(reading, p.downstep), chip("sb-pitch-num", `[${p.downstep}]`));
-    patterns.append(row);
-  }
-  wrap.append(patterns);
-  return wrap;
+  item.append(pitchGraph(reading, entry.downstep), chip("sb-pitch-num", `[${entry.downstep}]`));
+  return item;
 }
 
 // The mora overline diagram (heiban L H H…; atamadaka H L L…; else H to the
@@ -632,11 +705,19 @@ function pitchGraph(reading: string, downstep: number): SVGSVGElement {
   }
   const n = morae.length;
   const high = (i: number) => (downstep === 0 ? i > 0 : downstep === 1 ? i === 0 : i > 0 && i < downstep);
-  const step = 22;
+  // A column per mora, widened for the multi-character ones — きゃ and しょ collide
+  // under a fixed step. Same rule as the site's component.
+  const centers: number[] = [];
+  let edge = 8;
+  for (const mora of morae) {
+    const step = Math.max(22, mora.length * 12);
+    centers.push(edge + step / 2);
+    edge += step;
+  }
   const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${n * step + 16} 46`);
+  svg.setAttribute("viewBox", `0 0 ${edge + 8} 46`);
   svg.setAttribute("class", "sb-pitch-svg");
-  const x = (i: number) => 8 + i * step + step / 2;
+  const x = (i: number) => centers[i];
   const y = (i: number) => (high(i) ? 10 : 30);
   for (let i = 0; i < n; i++) {
     if (i < n - 1) {
@@ -664,20 +745,53 @@ function pitchGraph(reading: string, downstep: number): SVGSVGElement {
 
 // Numbered senses: source label (lang · dict), POS chips, misc/field/dialect
 // tags, then glosses — the same anatomy as a web meaning.
-function sensesList(senses: Sense[]): Node {
+// Which meanings this word already has a card for — "all" when a whole-word card
+// covers every one of them. Stamped by applyStudyDetails from the word's state.
+function coveredSenses(word: HTMLElement): Set<number> | "all" {
+  const raw = word.dataset.savedSenses;
+  if (raw === "all") return "all";
+  return new Set((raw ?? "").split(",").filter(Boolean).map(Number));
+}
+
+function sensesList(senses: Sense[], pickable = false, covered: Set<number> | "all" = new Set()): Node {
   const list = document.createElement("ol");
-  list.className = "sb-senses";
+  list.className = pickable ? "sb-senses sb-senses-pick" : "sb-senses";
   for (const sense of senses.slice(0, 8)) {
     const li = document.createElement("li");
-    if (sense.source) li.append(block("sb-source", sense.source));
-    if (sense.partsOfSpeech.length) li.append(block("sb-pos", sense.partsOfSpeech.join(", ")));
+    // With a picker, the checkbox is the row's first flex child and the sense
+    // body is wrapped so it stays one column; without it, content sits directly
+    // on the <li> (the numbered list marker).
+    const body = pickable ? document.createElement("div") : li;
+    // A meaning you already have a card for is not on offer: saving it again
+    // would land on the card that exists, so the row says so instead of inviting
+    // a second click. `pickedPositions` reads only the boxes that are left, so an
+    // all-covered word simply has no picker to disagree with.
+    const saved = covered === "all" || covered.has(sense.position);
+    if (saved) li.classList.add("sb-sense-saved");
+    if (pickable && !saved) {
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = true;
+      box.className = "sb-sense-pick";
+      box.dataset.position = String(sense.position);
+      // Reference the gloss, not a sense number — the picker hides the list's
+      // ordinals, so a number here would have no visible counterpart.
+      box.setAttribute("aria-label", `Include "${sense.glosses.join("; ")}" when saving`);
+      sensePicks.push(box);
+      li.append(box);
+    } else if (pickable) {
+      li.append(chip("sb-sense-saved-mark", "Saved"));
+    }
+    if (sense.source) body.append(block("sb-source", sense.source));
+    if (sense.partsOfSpeech.length) body.append(block("sb-pos", sense.partsOfSpeech.join(", ")));
     if (sense.tags.length) {
       const tags = document.createElement("i");
       tags.className = "sb-tags";
       tags.textContent = `${sense.tags.join(", ")} `;
-      li.append(tags);
+      body.append(tags);
     }
-    li.append(sense.glosses.join("; "));
+    body.append(sense.glosses.join("; "));
+    if (pickable) li.append(body);
     list.append(li);
   }
   return list;
@@ -731,7 +845,7 @@ async function playAudio(url: string): Promise<void> {
     // A 404 means this word has no processed clip yet (or the installed pack is
     // stale); anything else is a real fetch failure. Surface it instead of
     // failing silently, so a dead speaker button always explains itself.
-    const missing = /\((404|403)\)/.test(res.error);
+    const missing = res.status === 404 || res.status === 403;
     toast(missing ? "No pronunciation audio for this word yet." : "Couldn't load pronunciation audio.", false);
     return;
   }
@@ -742,9 +856,10 @@ async function playAudio(url: string): Promise<void> {
   }
 }
 
-// Mining + review controls, gated by whether the word is already a card. An
-// untracked word (state "none") offers Save + Known; once it's a card the grade
-// row reviews it. Each action recolours every occurrence and surfaces any error
+// Mining controls, gated by whether the word is already a card. An untracked word
+// (state "none") offers Save + Known; a saved one offers Manage, the same control
+// the site's dictionary results carry. Reviewing is not here — see
+// REVIEW_IN_READER. Each action recolours every occurrence and surfaces any error
 // (e.g. the Pro card cap) inline rather than pretend.
 function actions(word: HTMLElement): HTMLElement {
   const wrap = document.createElement("div");
@@ -764,7 +879,7 @@ function renderActions(word: HTMLElement, wrap: HTMLElement): void {
     wrap.append(membership);
   }
 
-  if (word.dataset.state === "due") {
+  if (REVIEW_IN_READER && word.dataset.state === "due") {
     const grades = document.createElement("div");
     grades.className = "sb-grades";
     const intervals = intervalPreviews(word);
@@ -780,7 +895,7 @@ function renderActions(word: HTMLElement, wrap: HTMLElement): void {
   // Open card sits beside Known once the word is saved (exact card when we
   // know cardId, otherwise the card browser search for the lemma).
   if (saved) extra.append(cardLink(word));
-  if (!saved) extra.append(button("＋ Save", "sb-btn-save", "S", () => run(word, wrap, () => save(word))));
+  if (!saved) extra.append(button("＋ Save", "sb-btn-save", "S", () => run(word, wrap, () => save(word, pickedPositions()))));
   extra.append(button("✓ Known", "sb-btn-known", "K", () => run(word, wrap, () => markKnown(word))));
   wrap.append(extra);
 
@@ -799,11 +914,13 @@ function intervalPreviews(word: HTMLElement): { again: string; hard: string; goo
 
 function cardLink(word: HTMLElement): HTMLAnchorElement {
   const link = document.createElement("a");
-  // Same row / weight as Known — solid accent (site primary).
+  // Same row / weight as Known — solid accent (site primary). "Manage" rather
+  // than "Open card" to match the site's dictionary result: one door to the card,
+  // its deck, and dropping it, instead of a menu rebuilt inside a hover popup.
   link.className = "sb-btn sb-btn-open";
   link.target = "_blank";
   link.rel = "noopener noreferrer";
-  link.textContent = "Open card";
+  link.textContent = "Manage";
   // Synchronous placeholder so the control is always clickable immediately;
   // then upgrade to the real host (and card_id when known).
   link.href = word.dataset.cardUrl || "#";
@@ -819,9 +936,9 @@ function cardLink(word: HTMLElement): HTMLAnchorElement {
       const details = res.details[word.dataset.lemma!];
       if (!details?.cardId) return;
       applyStudyDetails(word, details);
-      const url = await cardUrlFor(details.cardId);
-      word.dataset.cardUrl = url;
-      link.href = url;
+      // Through studyUrlForWord, not cardUrlFor: the details just told us how
+      // many cards this word has, and a multi-card word wants the browser.
+      link.href = await studyUrlForWord(word);
     });
   }
   return link;
@@ -847,17 +964,36 @@ async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<O
     }
     return;
   }
-  const { ok, message, cardUrl } = outcome;
+  const { ok, message, cardUrl, proRequired } = outcome;
   if (cardUrl) word.dataset.cardUrl = cardUrl;
   delete wrap.dataset.running;
   if (ok) renderActions(word, wrap); // state changed → re-render (Save → grade row + link)
   else for (const control of wrap.querySelectorAll<HTMLButtonElement>("button")) control.disabled = false;
-  if (ok) refreshStatusBar();
+  if (ok) refreshMetrics();
   const note = wrap.querySelector<HTMLElement>(".sb-feedback");
   if (note) {
     note.textContent = message;
-    note.classList.toggle("sb-error", !ok);
+    // "Needs Pro" isn't a red failure — it's the one refusal with somewhere to
+    // go, so it reads as an offer and carries the link rather than a dead end.
+    note.classList.toggle("sb-error", !ok && !proRequired);
+    note.classList.toggle("sb-upgrade", !!proRequired);
+    if (proRequired) note.append(" ", plansLink());
   }
+}
+
+// Opens shirabe.org/pricing in a new tab. `source=extension` so the funnel can
+// tell a hovering reader apart from someone who walked in the front door.
+function plansLink(): HTMLAnchorElement {
+  const link = document.createElement("a");
+  link.className = "sb-plans";
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = "See plans";
+  link.href = "#";
+  void loadConfig().then((config) => {
+    link.href = pricingUrl(config.apiBase, "extension");
+  });
+  return link;
 }
 
 // Small DOM helpers.
@@ -932,6 +1068,9 @@ const CSS = `
   --sb-known-btn-hover: light-dark(#4b5563, oklch(52% 0.02 260));
 }
 .sb-popup {
+  /* Width of the top-right chrome row (3 × 24px + 2 × 2px gap), so the first row
+     of any content state clears back, forward, and close in one number. */
+  --sb-chrome-gutter: 76px;
   position: relative;
   box-sizing: border-box;
   display: flex;
@@ -962,22 +1101,30 @@ const CSS = `
   flex: 1 1 auto;
 }
 
-/* Explicit close — top-right chrome, outside content swaps. */
-.sb-btn.sb-close {
+/* Back, forward, close — one row in the top-right, outside content swaps. Its
+   width is the gutter every first content row keeps clear. */
+.sb-chrome {
   position: absolute;
   top: 6px;
   right: 6px;
   z-index: 1;
-  width: 28px;
-  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.sb-btn.sb-chrome-button {
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--sb-ink-muted);
-  font: 600 18px/1 system-ui, sans-serif;
+  font: 600 14px/1 system-ui, sans-serif;
 }
-.sb-btn.sb-close:hover { background: var(--sb-surface-muted); color: var(--sb-ink); }
+.sb-btn.sb-chrome-button:hover:not(:disabled) { background: var(--sb-surface-muted); color: var(--sb-ink); }
+.sb-btn.sb-chrome-button:disabled { cursor: default; opacity: .35; }
+.sb-btn.sb-close { font-size: 18px; }
 
 /* Head + actions stay pinned; the body (badges, pitch, senses, examples)
    scrolls (Yomitan-style) so the reading is always visible. min-height:0 lets
@@ -987,22 +1134,19 @@ const CSS = `
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding-right: 28px; /* clear the absolute close button */
+  padding-right: var(--sb-chrome-gutter);
   font-size: 20px;
   font-weight: 700;
 }
-.sb-history-nav { display: inline-flex; gap: 3px; margin-left: auto; }
-.sb-btn.sb-history-button { cursor: pointer; border: 0; border-radius: 5px; padding: 3px 6px; background: var(--sb-surface-muted); color: var(--sb-ink-muted); }
-.sb-btn.sb-history-button:hover { background: var(--sb-surface-hover); }
-.sb-btn.sb-history-button:disabled { cursor: default; opacity: .35; }
 .sb-headword { color: var(--sb-ink); text-decoration: none; cursor: pointer; }
 .sb-headword:hover { color: var(--sb-accent); text-decoration: underline; }
 .sb-headword ruby { ruby-align: center; }
 .sb-headword ruby rt { font-size: 0.5em; font-weight: 600; color: var(--sb-accent); user-select: none; }
 .sb-popup-reading { font-size: 14px; font-weight: 500; color: var(--sb-accent); }
-.sb-popup-message { color: var(--sb-ink-subtle); padding-right: 28px; }
+.sb-popup-message { color: var(--sb-ink-subtle); padding-right: var(--sb-chrome-gutter); }
 .sb-inflection { margin-bottom: 7px; color: var(--sb-ink-subtle); font-size: 12px; }
 .sb-study-unavailable { flex: 0 0 auto; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--sb-outline); color: var(--sb-ink-subtle); font-size: 11px; }
+.sb-study-unavailable .sb-plans { font-size: 11px; }
 
 .sb-body { flex: 0 1 auto; min-height: 0; overflow-y: auto; margin-top: 8px; }
 
@@ -1027,9 +1171,17 @@ const CSS = `
 .sb-badge-jlpt { background: var(--sb-jlpt-bg); color: var(--sb-jlpt-fg); }
 .sb-badge-freq { background: var(--sb-surface-muted); color: var(--sb-ink-muted); font-variant-numeric: tabular-nums; }
 
-.sb-pitch { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.sb-pitch-patterns { display: grid; gap: 4px; min-width: 0; }
-.sb-pitch-item { display: flex; align-items: center; gap: 8px; }
+.sb-pitch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-bottom: 8px; }
+.sb-pitch-item { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sb-btn.sb-pitch-more {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--sb-surface-muted);
+  color: var(--sb-ink-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.sb-btn.sb-pitch-more:hover { background: var(--sb-surface-hover); color: var(--sb-ink); }
 .sb-pitch-svg { height: 46px; }
 .sb-pitch-svg line { stroke: var(--sb-accent); stroke-width: 2; }
 .sb-pitch-svg circle { fill: var(--sb-accent); }
@@ -1045,6 +1197,24 @@ const CSS = `
 
 .sb-senses { margin: 0; padding-left: 18px; }
 .sb-senses li { margin: 4px 0; }
+/* Sense picker: drop the list marker, lay checkbox + sense body side by side. */
+.sb-senses-pick { padding-left: 2px; list-style: none; }
+.sb-senses-pick li { display: flex; align-items: flex-start; gap: 7px; }
+.sb-sense-pick { margin: 3px 0 0; flex: none; cursor: pointer; accent-color: var(--sb-accent); }
+.sb-senses-pick li > div { min-width: 0; }
+/* A meaning already saved: still readable, visibly not on offer. The chip sits
+   where its checkbox would, so the rows stay in one column. */
+.sb-sense-saved { color: var(--sb-ink-subtle); }
+.sb-sense-saved-mark {
+  flex: none;
+  margin-top: 1px;
+  border-radius: 999px;
+  padding: 1px 6px;
+  background: var(--sb-surface-muted);
+  color: var(--sb-ink-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
 .sb-source { font-size: 11px; font-weight: 600; color: var(--sb-source); }
 .sb-pos {
   display: block; font-size: 11px; font-weight: 600; color: var(--sb-ink-subtle);
@@ -1099,6 +1269,10 @@ const CSS = `
 
 .sb-feedback { display: block; margin-top: 8px; font-size: 12px; color: var(--sb-ink-subtle); }
 .sb-feedback.sb-error { color: var(--sb-error); }
+/* Needs-Pro reads as an offer, not a failure: normal ink, an underlined way out. */
+.sb-feedback.sb-upgrade { color: var(--sb-ink); }
+.sb-plans { color: var(--sb-accent); font-weight: 600; text-decoration: underline; cursor: pointer; }
+.sb-plans:hover { color: var(--sb-accent-hover); }
 .sb-btn:focus-visible, .sb-headword:focus-visible, .sb-tok:focus-visible, .sb-btn.sb-close:focus-visible {
   outline: 3px solid var(--sb-accent); outline-offset: 2px;
 }

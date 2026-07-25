@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
 import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
@@ -241,7 +242,10 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   const expressionTokens = await parseOffline("一石二鳥は便利だ。", ["eng"], "https://shirabe.test");
   assert.deepEqual(expressionTokens.filter((token) => token.content)[0], {
     start: 0, length: 4, surface: "一石二鳥", reading: "いっせきにちょう",
-    lemma: "一石二鳥", pos: "Expression", content: true, state: "none", frequency: 80_000,
+    // The code, not the label: `exp` is what content.css and the i+1
+    // function-word test match on. The label belongs to the popup, which reads
+    // it from the sense (asserted below).
+    lemma: "一石二鳥", pos: "exp", content: true, state: "none", frequency: 80_000,
   });
   const expressionLookup = await lookupOffline("一石二鳥", ["eng"], "https://shirabe.test");
   assert.deepEqual(expressionLookup?.senses[0]?.partsOfSpeech, ["Expression"]);
@@ -465,4 +469,15 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     : new Response(archive, { headers: { "Content-Type": "application/gzip" } })) as typeof fetch;
   await checkDictionaryUpdate("https://api.test");
   assert.equal((await dictionaryStatus()).revision, "v3");
+});
+
+test("a parsed token's part of speech is the JMdict code, not the label the popup prints", () => {
+  const source = readFileSync("src/common/offline-dictionary.ts", "utf8");
+  // A definition is built for display, so its `partsOfSpeech` are already run
+  // through posLabels — "Godan verb", which matches none of the code selectors
+  // in content.css and colours nothing. Everything downstream (underline hues,
+  // the i+1 function-word test, counters) matches on codes.
+  assert.match(source, /posCodes: sense\.partsOfSpeech/);
+  assert.match(source, /const code = sense\.posCodes\?\.\[0\]/);
+  assert.doesNotMatch(source, /pos: definition\.senses\[0\]\?\.partsOfSpeech/);
 });

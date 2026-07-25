@@ -1,5 +1,5 @@
 import { ext } from "../common/browser.js";
-import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type ScanModifier } from "../common/config.js";
+import { DEFAULTS, loadConfig, onConfigChanged, pricingUrl, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type ScanModifier } from "../common/config.js";
 import { sendDictionary } from "../common/dictionary-port.js";
 import { loadHostRules, matchUrl, normalizePattern, resolveHostMode, siteScopeFor, type HostRule } from "../common/host-rules.js";
 import { send } from "../common/messages.js";
@@ -17,7 +17,6 @@ Promise.all([loadConfig(), loadHostRules(), activeTabUrl()]).then(([c, r, url]) 
   config = c;
   rules = r;
   siteUrl = url;
-  $<HTMLAnchorElement>("licensesLink").href = ext.runtime.getURL("licenses.html");
   $<HTMLSelectElement>("dictionaryLanguages").value = c.languages.join(",");
   $<HTMLSelectElement>("lookupScanModifier").value = c.scanModifier;
   $<HTMLSelectElement>("lookupFuriganaMode").value = c.furiganaMode;
@@ -139,6 +138,7 @@ async function renderHostControls(): Promise<void> {
   const resolution = resolveHostMode(siteUrl, {
     disabledHosts: config.disabledHosts,
     rules,
+    apiBase: config.apiBase,
   });
   const readerOn = resolution.mode !== "off";
   readerToggle.setAttribute("aria-pressed", String(readerOn));
@@ -202,7 +202,7 @@ async function refresh(): Promise<void> {
   } else if (connected) {
     showPane("unentitled");
     $<HTMLElement>("unentitledName").textContent = named;
-    $<HTMLAnchorElement>("upgradeLink").href = apiBase.replace(/\/$/, "") + "/pricing";
+    $<HTMLAnchorElement>("upgradeLink").href = pricingUrl(apiBase, "extension_popup");
   } else if (connecting) {
     showPane("connecting");
   } else {
@@ -218,7 +218,7 @@ async function refreshDecks(): Promise<void> {
     return;
   }
   $<HTMLElement>("deckRow").hidden = false;
-  select.replaceChildren(new Option("Default deck", ""));
+  select.replaceChildren(new Option("Saved words (default)", ""));
   for (const deck of res.decks) select.add(new Option(deck.name, String(deck.id)));
   select.value = config.preferredDeckId == null ? "" : String(config.preferredDeckId);
   if (select.value === "" && config.preferredDeckId != null) await patch({ preferredDeckId: null });
@@ -289,17 +289,6 @@ async function refreshDictionary(): Promise<void> {
     setDictionaryDot(false);
     const size = dict.bytes ? `${(dict.bytes / 1024 / 1024).toFixed(1)} MB download` : "installed";
     $<HTMLElement>("dictionaryVersion").textContent = `${dict.terms.toLocaleString()} terms · ${dict.kanji.toLocaleString()} kanji · ${size} · ${dict.revision ?? "unknown version"}`;
-    const credits = $<HTMLUListElement>("dictionaryCredits");
-    credits.replaceChildren(...dict.sources.map((source) => {
-      const item = document.createElement("li");
-      const link = document.createElement("a");
-      link.href = source.licenseUrl || source.url;
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.textContent = `${source.name} — ${source.license}`;
-      item.append(link);
-      return item;
-    }));
   } else {
     showDictionaryPane("missing");
     setDictionaryDot(false);

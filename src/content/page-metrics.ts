@@ -106,20 +106,42 @@ export function measurePageWords(words: HTMLElement[]): WordMetrics {
   };
 }
 
-export function isIPlusOne(words: HTMLElement[], options: IPlusOneOptions): boolean {
-  const unknown = new Map<string, number | null>();
+// Function words carry grammar, not meaning. A block whose only other word is a
+// copula or a particle — 「Xです」, 「Xか」 — leaves the new word with nothing to be
+// read against, so it teaches nothing however few unknowns it holds. Everything
+// else counts as context, including tokens the tokenizer left unlabelled: an
+// unknown part of speech is far more often a real word than a particle.
+const FUNCTION_WORD_POS = new Set([
+  "prt", "cop", "aux", "aux-v", "aux-adj", "conj", "int", "pref", "suf", "n-pref", "n-suf",
+]);
+
+const carriesMeaning = (word: HTMLElement): boolean => !FUNCTION_WORD_POS.has(word.dataset.pos ?? "");
+
+// What a block would teach: every occurrence of its single unknown lemma, or
+// nothing when the block isn't a candidate. One pass answers both questions the
+// caller has — whether to cue the block, and which word to point at inside it.
+export function iPlusOneTargets(words: HTMLElement[], options: IPlusOneOptions): HTMLElement[] {
+  const unknown = new Map<string, HTMLElement[]>();
+  let context = 0;
   for (const word of words) {
     const state = wordState(word);
     const learned = state === "known" || state === "due" || (options.includesLearning && (state === "new" || state === "learning"));
-    if (learned) continue;
-    const lemma = word.dataset.lemma || word.dataset.surface || word.textContent || "";
-    const frequency = Number(word.dataset.frequency);
-    unknown.set(lemma, Number.isFinite(frequency) && frequency > 0 ? frequency : null);
+    if (learned) {
+      if (carriesMeaning(word)) context += 1;
+      continue;
+    }
+    const lemma = lemmaOf(word);
+    unknown.set(lemma, [...(unknown.get(lemma) ?? []), word]);
   }
-  if (unknown.size !== 1) return false;
-  const frequency = [...unknown.values()][0];
-  return frequency == null || frequency <= options.frequencyMax;
+  if (unknown.size !== 1 || !context) return [];
+  const occurrences = [...unknown.values()][0];
+  const frequency = Number(occurrences[0].dataset.frequency);
+  if (Number.isFinite(frequency) && frequency > 0 && frequency > options.frequencyMax) return [];
+  return occurrences;
 }
+
+export const isIPlusOne = (words: HTMLElement[], options: IPlusOneOptions): boolean =>
+  iPlusOneTargets(words, options).length > 0;
 
 function wordState(word: HTMLElement): WordState {
   const state = word.dataset.state;
