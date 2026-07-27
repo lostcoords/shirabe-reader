@@ -70,11 +70,6 @@ export function keybindFromEvent(event: KeyboardEvent): Keybind {
   };
 }
 
-// Whether two binds collide (same combo) — used to warn on duplicate assignment.
-export function sameKeybind(a: Keybind, b: Keybind): boolean {
-  if (!a || !b) return false;
-  return a.code === b.code && a.alt === b.alt && a.ctrl === b.ctrl && a.shift === b.shift && a.meta === b.meta;
-}
 
 // Pretty label, e.g. "Alt + P", "Shift + 1", "⌘ + K". Uses Mac glyphs when the
 // popup is running on a Mac.

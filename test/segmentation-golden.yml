@@ -239,14 +239,37 @@
 
 - name: de-particle-eaten-by-dearu
   text: お風呂であったまる
-  expect: [お風呂, であった=である, まる]
-  todo: [お風呂, で, あったまる=あったまる]
+  expect: [お風呂, で, あったまる=あったまる]
   pack: full
   why: >
-    The frequency-weighted path scoring gap, in one line. Greedy longest-match at
-    the で takes であった (である + past, 4 chars) over で + あったまる, so the verb the
-    reader wanted is shredded — the same shape as はと(鳩)+ても eating とても. The web
-    reads で + あったまる (Sudachi scores a whole path, we score one position), and
-    the neighbouring 部屋があったまらない case parses correctly here, so this is
-    strictly the path problem, not the あったまる entry.
-    See docs/plans/offline-parsing-improvements.md → ▶ NEXT.
+    Greedy longest-match at the で takes であった (である + past, 4 chars) over
+    で + あったまる and shreds the verb. Fixed by path scoring (2026-07-27): the two
+    readings are priced by corpus rank over the span they explain, and
+    である(186) + まる(11,270) is a more expensive sentence than で(7) +
+    あったまる(18,919). This is the case that motivated it — the pack has to carry
+    あったまる's rank for the comparison to be possible at all (recipe 7).
+
+# The three failures the plan listed as the path-scoring gap, all of the same
+# shape: a longer span that IS a word, made of two words that are far commoner.
+- name: path-hato-vs-totemo
+  text: 本はとても面白い
+  expect: [本, は, とても, 面白い]
+  pack: full
+  why: >
+    はと (鳩, rank 23,198) + ても (14,045) explains the same four characters as
+    は (2) + とても (443). Coverage cannot separate them — which is why the earlier
+    coverage-based attempt was reverted — but cost can.
+
+- name: path-gai-vs-imasu
+  text: 兄がいます
+  expect: [兄, が, います]
+  pack: full
+  why: がい (8,722) + ます beats nothing; が (5) + います (いる, 38) is the sentence.
+
+- name: path-gataku-vs-takusan
+  text: 友達がたくさんいる
+  expect: [友達, が, たくさん, いる]
+  pack: full
+  why: >
+    がたく and さんい have no corpus rank at all — the unranked case, which is
+    exactly what a greedy match hallucinates out of two neighbouring words.

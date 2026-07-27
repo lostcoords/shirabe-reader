@@ -116,9 +116,6 @@ export const isConnected = (config: Config): boolean => config.apiKey.length > 0
 export const canWriteSrs = (config: Config): boolean =>
   config.scopes.includes("WRITE_SRS") && config.entitled;
 
-// Connected study features are usable iff signed in and SRS-entitled. Local
-// dictionary lookup and parsing never depend on this predicate.
-export const isUsable = (config: Config): boolean => isConnected(config) && config.entitled;
 
 export async function saveConfig(config: Config): Promise<void> {
   await ext.storage.local.set({ [KEY]: config });

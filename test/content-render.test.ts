@@ -40,7 +40,7 @@ test("nested blocks cue i+1 once, and a mixed block still counts its own words",
     window, document: window.document, Node: window.Node, HTMLElement: window.HTMLElement,
     MutationObserver: window.MutationObserver,
   });
-  const known = `<span class="sb-word" data-lemma="猫" data-state="known"></span>`;
+  const known = `<span class="sb-word" data-lemma="猫" data-state="retired"></span>`;
   const unknown = `<span class="sb-word" data-lemma="犬" data-state="none" data-frequency="1200"></span>`;
   window.document.body.innerHTML = `<blockquote id="outer">${known}<p id="inner">${known}${unknown}</p></blockquote>`;
 

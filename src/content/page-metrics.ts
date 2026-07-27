@@ -8,7 +8,7 @@ export type DetailedPageMetrics = PageMetrics;
 export type WordMetrics = Omit<PageMetrics, "iPlusOne">;
 export type IPlusOneOptions = { includesLearning: boolean; frequencyMax: number };
 
-const priority: Record<WordState, number> = { none: 0, new: 1, learning: 2, due: 3, known: 4 };
+const priority: Record<WordState, number> = { none: 0, new: 1, learning: 2, due: 3, retired: 4 };
 
 // A reverted page has no words: the same shape, all zero, so callers never
 // special-case "parsed but empty" against "not parsed".
@@ -125,7 +125,7 @@ export function iPlusOneTargets(words: HTMLElement[], options: IPlusOneOptions):
   let context = 0;
   for (const word of words) {
     const state = wordState(word);
-    const learned = state === "known" || state === "due" || (options.includesLearning && (state === "new" || state === "learning"));
+    const learned = state === "retired" || state === "due" || (options.includesLearning && (state === "new" || state === "learning"));
     if (learned) {
       if (carriesMeaning(word)) context += 1;
       continue;
@@ -145,7 +145,7 @@ export const isIPlusOne = (words: HTMLElement[], options: IPlusOneOptions): bool
 
 function wordState(word: HTMLElement): WordState {
   const state = word.dataset.state;
-  return state === "new" || state === "learning" || state === "due" || state === "known" ? state : "none";
+  return state === "new" || state === "learning" || state === "due" || state === "retired" ? state : "none";
 }
 
 function emptyCounts(): StateCounts {
@@ -171,7 +171,9 @@ function replaceUnique(counts: StateCounts, prior?: WordState, next?: WordState)
 }
 
 function count(counts: StateCounts, state: WordState, by = 1): void {
-  if (state === "known") counts.known += by;
+  // `counts.known` is the page aggregate — everything the reader knows, which is
+  // the retired tier PLUS the words they are actively reviewing.
+  if (state === "retired") counts.known += by;
   else if (state === "due") { counts.known += by; counts.due += by; }
   else if (state === "new" || state === "learning") counts.learning += by;
   else counts.unknown += by;

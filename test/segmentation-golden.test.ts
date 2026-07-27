@@ -52,7 +52,7 @@ function term(
 }
 
 const records = [
-  { type: "header", schemaVersion: 3, languages: ["eng", "spa"], source: "Shirabe golden corpus" },
+  { type: "header", schemaVersion: 4, languages: ["eng", "spa"], source: "Shirabe golden corpus" },
   // The 逸脱 trap: a noun/suru-verb that the godan った→つ rule would otherwise
   // reach from いつだった, burying the usually-kana いつ.
   term(1, "逸脱", "いつだつ", ["n", "vs"], 15_000),
@@ -89,10 +89,11 @@ const records = [
 const archive = gzipSync(records.map((record) => JSON.stringify(record)).join("\n") + "\n");
 const checksum = createHash("sha256").update(archive).digest("hex");
 const manifest = {
-  schemaVersion: 3, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: "golden",
+  schemaVersion: 4, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: "golden",
+  audio: { baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f", engineVersion: 1, salt: "test-salt", defaultVoice: "male", voices: { male: 1_628_969_216, female: 345_585_728 } },
   builtAt: "2026-07-15T00:00:00Z", artifact: "dictionary.ndjson.gz", compression: "gzip",
   mediaType: "application/x-ndjson", bytes: archive.byteLength, sha256: checksum,
-  counts: { terms: records.length - 1, kanji: 0 }, languages: ["eng", "spa"],
+  counts: { terms: records.length - 1, kanji: 0, sentences: 0 }, languages: ["eng", "spa"],
   dictionaries: [{ slug: "jmdict", version: "golden" }], modifications: [], sources: [],
   downloadUrl: "https://packs.test/dictionary.gz",
 };
@@ -191,7 +192,7 @@ test("golden segmentation corpus", async (context) => {
     const digest = createHash("sha256").update(payload).digest("hex");
     packManifest = {
       ...manifest, contentRevision: "golden-real", bytes: payload.byteLength, sha256: digest,
-      counts: { terms: realSubset.length - 1, kanji: 0 },
+      counts: { terms: realSubset.length - 1, kanji: 0, sentences: 0 },
     };
     context.diagnostic(`golden corpus: using real pack ${packPath} (${realSubset.length - 1} relevant entries)`);
   } else {

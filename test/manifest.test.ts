@@ -201,13 +201,22 @@ test("offline storage indexes lookup keys off the term record", () => {
   assert.doesNotMatch(dictionary, /"lookups"/, "the join table is gone; nothing may reference it");
 });
 
-test("dictionary failures render self-contained popup diagnostics", () => {
-  const popup = readFileSync("src/action/popup.html", "utf8");
-  const logic = readFileSync("src/action/popup.ts", "utf8");
-  assert.match(popup, /id="dictionaryDiagnostics"/);
-  assert.match(logic, /build: 0\.2\.0-contextual-search/);
-  assert.match(logic, /manifest: HTTP \$\{response\.status\}/);
-  assert.match(logic, /background: reachable/);
+test("dictionary failures render self-contained diagnostics, on both surfaces", () => {
+  const panel = readFileSync("src/common/dictionary-panel.ts", "utf8");
+  // A failed install must answer "whose fault?" without a second tool: can this
+  // browser store and decompress at all, is the pack even there, and what does
+  // the background itself say — the three real failures we saw.
+  assert.match(panel, /indexedDB: \$\{typeof indexedDB/);
+  assert.match(panel, /gzip: \$\{typeof DecompressionStream/);
+  assert.match(panel, /manifest: HTTP \$\{response\.status\}/);
+  assert.match(panel, /background: reachable/);
+  // Both surfaces mount that one implementation and carry the element it fills.
+  for (const page of ["src/action/popup.html", "src/options/options.html"]) {
+    assert.match(readFileSync(page, "utf8"), /id="dictionaryDiagnostics"/, `${page} shows diagnostics`);
+  }
+  for (const surface of ["src/action/popup.ts", "src/options/options.ts"]) {
+    assert.match(readFileSync(surface, "utf8"), /mountDictionaryPanel\(/, `${surface} mounts the shared panel`);
+  }
 });
 
 test("dictionary installation uses a persistent background port", () => {
@@ -245,7 +254,9 @@ test("anonymous dictionary use is the default and OAuth is an explicit account a
   assert.match(api, /const OAUTH_SCOPES = \["READ_ACCOUNT", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"\]/);
   assert.match(api, /"\/v1\/preferences"/);
   assert.match(popupLogic, /send\(\{ type: "updateLanguages", languages \}\)/);
-  assert.match(popupLogic, /\$<HTMLButtonElement>\("connect"\)\.addEventListener\("click"/);
+  // Connecting is an explicit click on the shared account card, never something
+  // lookup or an install can trigger on the reader's behalf.
+  assert.match(readFileSync("src/common/account-panel.ts", "utf8"), /\$<HTMLButtonElement>\("connect"\)\.addEventListener\("click"/);
   assert.match(background, /launchWebAuthFlow\(\{ url, interactive: true \}\)/);
   assert.doesNotMatch(background, /launchWebAuthFlow\([^)]*redirect_uri/);
 });

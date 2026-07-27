@@ -1,6 +1,6 @@
 {
   "name": "shirabe-reader",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Parse Japanese on any web page and look it up with Shirabe.",
   "type": "module",

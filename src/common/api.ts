@@ -1,7 +1,6 @@
 import type { Config } from "./config.js";
-import { posLabel, tagLabel } from "./jmdict-tags.js";
 import { glossLanguagesFrom, uiLanguagesFrom, type GlossLanguage } from "./languages.js";
-import type { Definition, Example, Sense, WordState } from "./types.js";
+import type { WordState } from "./types.js";
 import type { Deck, GradeResult, IntervalPreviews, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
 
 export class ApiError extends Error {
@@ -24,31 +23,6 @@ export class ApiError extends Error {
 // OAuth exists only for the personal online layer: identify the account, read
 // its study state, and save/grade through the SRS.
 const OAUTH_SCOPES = ["READ_ACCOUNT", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"];
-
-// /v1/search: the server already returns a full word card — headword, reading,
-// pitch (with audio), common/JLPT/frequency, and nested entries → senses →
-// definitions/tags. The popup mirrors what shirabe.org shows, so we model the
-// rich shape here rather than throwing it away.
-type RawDefinition = { lang: string; text: string; kind?: string };
-type RawTag = { category: string; code: string; label: string };
-type RawEntry = {
-  dictionary: string; // slug: jmdict / jmnedict / wikipedia / a user upload
-  senses: Array<{ position: number; definitions: RawDefinition[]; tags: RawTag[] }>;
-};
-type RawPitch = { downstep: number; pattern: string; audioUrl: string | null };
-type RawSentenceToken = { surface: string; lemma: string; content: boolean; matched: boolean };
-type RawSentence = { japanese: string; translations: Array<{ lang: string; text: string }>; tokens?: RawSentenceToken[] };
-type RawResult = {
-  headword: string;
-  reading: string | null;
-  common: boolean;
-  jlpt: string | null;
-  frequency: number | null;
-  pitch?: RawPitch[];
-  entries: RawEntry[];
-  sentences?: RawSentence[]; // only with include=sentences
-};
-type RawSearch = { results: RawResult[] };
 
 // One word, as every word-level endpoint reports it (/v1 `WordStateEntry`): the
 // batch lookup, setting a state, and saving all answer in this shape, so the
@@ -74,85 +48,25 @@ const studyDetails = (word: WordStateEntry): StudyDetails => ({
   ...(word.intervals ? { intervals: word.intervals } : {}),
 });
 
+// The pack cites an entry as one handle ("jmdict:2517580"); /v1 takes it as the
+// (dictionarySlug, sourceId) pair it links a card by — never a row id, which
+// changes on every dictionary rebuild. Split on the FIRST colon: a slug never
+// contains one, a source id may (jmnedict ids are free text). A handle that
+// isn't a pair links nothing rather than posting half of one.
+function entryHandle(entry?: string): { dictionarySlug: string; sourceId: string } | Record<string, never> {
+  const at = entry ? entry.indexOf(":") : -1;
+  if (!entry || at < 1 || at === entry.length - 1) return {};
+  return { dictionarySlug: entry.slice(0, at), sourceId: entry.slice(at + 1) };
+}
+
 // Gloss language + dictionary display names for a sense's source label, echoing
 // the web ("Español · JMdict"). Unknown codes/slugs fall back to a title-cased
 // form so user-uploaded dictionaries still read sensibly.
-const LANG_NAMES: Record<string, string> = {
-  ja: "日本語", en: "English", es: "Español", fr: "Français", de: "Deutsch",
-  nl: "Nederlands", ru: "Русский", sv: "Svenska", hu: "Magyar", sl: "Slovenščina",
-};
-const DICT_NAMES: Record<string, string> = { jmdict: "JMdict", jmnedict: "Names", wikipedia: "Wikipedia" };
-const POS_CATEGORIES = new Set(["partOfSpeech", "nameType"]);
-const TAG_CATEGORIES = new Set(["misc", "field", "dialect"]);
-
-function sourceLabel(lang: string | undefined, dict: string): string {
-  const dictName = DICT_NAMES[dict] ?? dict.charAt(0).toUpperCase() + dict.slice(1);
-  const langName = lang ? (LANG_NAMES[lang] ?? lang.toUpperCase()) : "";
-  return langName ? `${langName} · ${dictName}` : dictName;
-}
-
-
 export class ShirabeApi {
   constructor(private config: Config) {}
 
   update(config: Config): void {
     this.config = config;
-  }
-
-  // Hover-popup definition — a faithful slice of the shirabe.org word card. We
-  // don't send a locale: the server applies the key owner's saved language +
-  // dictionary preferences, so the extension never second-guesses them. Asks for
-  // example sentences too, and maps the first result into our display shape.
-  async lookup(query: string): Promise<Definition | null> {
-    const data = await this.post<RawSearch>("/v1/search", { query, take: 1, include: ["sentences"] });
-    const result = data.results[0];
-    return result ? this.toDefinition(result) : null;
-  }
-
-  private toDefinition(result: RawResult): Definition {
-    const wordBase = `${this.config.apiBase.replace(/\/$/, "")}/word/`;
-    const senses: Sense[] = [];
-    for (const entry of result.entries) {
-      for (const sense of entry.senses) {
-        const glosses = sense.definitions.filter((d) => d.kind !== "abstract").map((d) => d.text).filter(Boolean);
-        if (!glosses.length) continue; // Wikipedia abstracts etc. live on the full page
-        senses.push({
-          position: sense.position,
-          source: sourceLabel(sense.definitions[0]?.lang, entry.dictionary),
-          // Prefer the stable code through posLabel so chips match the site
-          // ("Godan verb") rather than the verbose JMdict entity string.
-          partsOfSpeech: sense.tags
-            .filter((t) => POS_CATEGORIES.has(t.category))
-            .map((t) => posLabel(t.code, t.label)),
-          tags: sense.tags
-            .filter((t) => TAG_CATEGORIES.has(t.category))
-            .map((t) => tagLabel(t.code, t.label)),
-          glosses,
-        });
-      }
-    }
-
-    const examples: Example[] = (result.sentences ?? []).slice(0, 3).map((s) => ({
-      japanese: s.japanese,
-      translation: s.translations[0]?.text ?? null,
-      tokens: (s.tokens ?? []).map((t) => ({
-        surface: t.surface,
-        url: t.content ? wordBase + encodeURIComponent(t.lemma) : null,
-        matched: t.matched,
-      })),
-    }));
-
-    return {
-      headword: result.headword,
-      reading: result.reading,
-      url: `${wordBase}${encodeURIComponent(result.headword)}`,
-      common: result.common,
-      jlpt: result.jlpt,
-      frequency: result.frequency,
-      pitch: (result.pitch ?? []).map((p) => ({ downstep: p.downstep, audioUrl: p.audioUrl })),
-      senses,
-      examples,
-    };
   }
 
   // ── Redirect login (OAuth 2.0 authorization code + PKCE) ────────────────────
@@ -186,8 +100,15 @@ export class ShirabeApi {
   // Save (or mine) a word as a review card. `sensePositions` scopes the card to a
   // subset of the word's senses (empty/omitted = the whole word). Grading is a
   // separate call — see `grade`.
-  async save(options: { lemma: string; surface?: string; reading?: string; deckId?: number; sentence?: SentenceCapture; sensePositions?: number[]; imageDataUrl?: string; audioDataUrl?: string }): Promise<SaveResult> {
-    const response = await this.post<{ card: { id: number }; created: boolean; word: WordStateEntry }>("/v1/srs/saves", options);
+  async save(options: {
+    lemma: string; surface?: string; reading?: string; entry?: string; deckId?: number; newDeckName?: string;
+    hint?: string; notes?: string; sentence?: SentenceCapture; sentences?: SentenceCapture[];
+    sensePositions?: number[]; imageDataUrl?: string; audioDataUrl?: string; cardImageDataUrl?: string;
+  }): Promise<SaveResult> {
+    const { entry, ...fields } = options;
+    const response = await this.post<{ card: { id: number }; created: boolean; word: WordStateEntry }>(
+      "/v1/srs/saves", { ...fields, ...entryHandle(entry) },
+    );
     // The card that was written identifies itself; everything else about the word
     // — its state, decks, how many cards it now holds — comes from `word`, the
     // same block a lookup returns.
@@ -223,10 +144,10 @@ export class ShirabeApi {
     };
   }
 
-  // Set a word's state directly: "known" parks it as learned, "reviewing" brings
+  // Set a word's state directly: "retired" parks it as learned, "reviewing" brings
   // it into rotation. A state is word-level — it lands on every card the word
   // holds — so the answer is the whole word, not one card.
-  async setState(lemma: string, state: "known" | "reviewing"): Promise<StudyDetails> {
+  async setState(lemma: string, state: "retired" | "reviewing"): Promise<StudyDetails> {
     const { word } = await this.post<{ word: WordStateEntry }>("/v1/srs/states", { lemma, state });
     return studyDetails(word);
   }

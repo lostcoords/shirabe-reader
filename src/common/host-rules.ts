@@ -114,13 +114,6 @@ export function normalizePattern(raw: string): string {
   return `*://${p}/*`;
 }
 
-// Split a textarea list (newline / comma / semicolon / whitespace separated).
-export function parseHostList(text: string): string[] {
-  return text
-    .split(/[\n,;\s]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
 
 // Resolve the page's mode. Parsing is local, so reader-on means auto everywhere:
 // the old manual default existed only to avoid sending arbitrary page text to

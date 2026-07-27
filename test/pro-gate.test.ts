@@ -60,14 +60,20 @@ test("every upgrade entry point tags itself, so none of them lands as organic tr
   // The word card, the toolbar popup, and the settings page each reach Pro from
   // a different moment; an untagged /pricing from any of them is a click the
   // funnel can't attribute (the web app tags the same way: pricing_path(source:)).
+  // The word card builds its own link; the toolbar popup and the settings page
+  // share one account card and declare the tag they mount it with.
+  const wordCard = readFileSync("src/content/popup.ts", "utf8");
+  assert.match(wordCard, /pricingUrl\([^)]*"extension"\)/, "the word card must tag its upgrade link");
+  const accountPanel = readFileSync("src/common/account-panel.ts", "utf8");
+  assert.match(accountPanel, /pricingUrl\(apiBase, hooks\.pricingSource\)/, "the shared card must tag through its mount");
   for (const [file, source] of [
-    ["src/content/popup.ts", "extension"],
     ["src/action/popup.ts", "extension_popup"],
     ["src/options/options.ts", "extension_settings"],
   ] as const) {
-    const code = readFileSync(file, "utf8");
-    assert.match(code, new RegExp(`pricingUrl\\([^)]*"${source}"\\)`), `${file} must tag its upgrade link`);
-    assert.doesNotMatch(code, /\+ "\/pricing"/, `${file} must not hand-build an untagged pricing URL`);
+    assert.match(readFileSync(file, "utf8"), new RegExp(`pricingSource: "${source}"`), `${file} must declare its source`);
+  }
+  for (const file of ["src/content/popup.ts", "src/action/popup.ts", "src/options/options.ts", "src/common/account-panel.ts"]) {
+    assert.doesNotMatch(readFileSync(file, "utf8"), /\+ "\/pricing"/, `${file} must not hand-build an untagged pricing URL`);
   }
 });
 

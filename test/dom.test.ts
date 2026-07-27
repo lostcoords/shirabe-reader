@@ -460,8 +460,8 @@ test("furigana distributes a reading over kanji runs only, not okurigana", async
 
 test("page metrics distinguish occurrences and unique words and apply the i+1 cap", async () => {
   const window = installDom(`
-    <p><span class="sb-word" data-lemma="猫" data-state="known"></span><span class="sb-word" data-lemma="猫" data-state="known"></span></p>
-    <p id="candidate"><span class="sb-word" data-lemma="食べる" data-state="none" data-frequency="1200"></span><span class="sb-word" data-lemma="猫" data-state="known"></span></p>
+    <p><span class="sb-word" data-lemma="猫" data-state="retired"></span><span class="sb-word" data-lemma="猫" data-state="retired"></span></p>
+    <p id="candidate"><span class="sb-word" data-lemma="食べる" data-state="none" data-frequency="1200"></span><span class="sb-word" data-lemma="猫" data-state="retired"></span></p>
   `);
   const { isIPlusOne, measurePageWords, PageMetricIndex } = await import("../src/content/page-metrics.js");
   const words = [...window.document.querySelectorAll<HTMLElement>(".sb-word")];
@@ -475,7 +475,7 @@ test("page metrics distinguish occurrences and unique words and apply the i+1 ca
   const index = new PageMetricIndex();
   for (const word of words) index.update(word);
   assert.deepEqual(index.metrics(), metrics);
-  candidate[0].dataset.state = "known";
+  candidate[0].dataset.state = "retired";
   index.update(candidate[0]);
   assert.equal(index.metrics().occurrenceCoverage, 100);
   index.remove(words[0]);
@@ -485,8 +485,8 @@ test("page metrics distinguish occurrences and unique words and apply the i+1 ca
 
 test("a new word needs something to be read against before the block counts as i+1", async () => {
   const window = installDom(`
-    <p id="bare"><span class="sb-word" data-lemma="紫陽花" data-state="none"></span><span class="sb-word" data-lemma="です" data-pos="cop" data-state="known"></span><span class="sb-word" data-lemma="ね" data-pos="prt" data-state="known"></span></p>
-    <p id="context"><span class="sb-word" data-lemma="紫陽花" data-state="none"></span><span class="sb-word" data-lemma="咲く" data-pos="v5k" data-state="known"></span></p>
+    <p id="bare"><span class="sb-word" data-lemma="紫陽花" data-state="none"></span><span class="sb-word" data-lemma="です" data-pos="cop" data-state="retired"></span><span class="sb-word" data-lemma="ね" data-pos="prt" data-state="retired"></span></p>
+    <p id="context"><span class="sb-word" data-lemma="紫陽花" data-state="none"></span><span class="sb-word" data-lemma="咲く" data-pos="v5k" data-state="retired"></span></p>
   `);
   const { isIPlusOne } = await import("../src/content/page-metrics.js");
   const options = { includesLearning: true, frequencyMax: 20_000 };
@@ -500,8 +500,8 @@ test("a new word needs something to be read against before the block counts as i
 
 test("the status bar counts every i+1 block on the page, not just the changed ones", async () => {
   const window = installDom(`
-    <li id="one-unknown"><span class="sb-word" data-lemma="猫" data-state="known"></span><span class="sb-word" data-lemma="食べる" data-state="none" data-frequency="1200"></span></li>
-    <li id="all-known"><span class="sb-word" data-lemma="猫" data-state="known"></span></li>
+    <li id="one-unknown"><span class="sb-word" data-lemma="猫" data-state="retired"></span><span class="sb-word" data-lemma="食べる" data-state="none" data-frequency="1200"></span></li>
+    <li id="all-known"><span class="sb-word" data-lemma="猫" data-state="retired"></span></li>
     <li id="two-unknown"><span class="sb-word" data-lemma="犬" data-state="none"></span><span class="sb-word" data-lemma="鳥" data-state="none"></span></li>
   `);
   // Patch the resolved `ext`, not globalThis.chrome: the module binds once, to

@@ -135,6 +135,31 @@ function numberFrom(value: string | undefined): number | undefined {
   return Number.isInteger(number) && number >= 0 ? number : undefined;
 }
 
+// Everything a save carries about the page: the mined line, the frame it was on,
+// and the clip of it being spoken. The full capture form needs the same bundle
+// the quick save posts, so it is collected once here and used by both.
+export async function captureFor(word: HTMLElement): Promise<{ sentence?: SentenceCapture; imageDataUrl?: string; audioDataUrl?: string }> {
+  const video = videoFrameFor(word);
+  const imageDataUrl = await captureScreenshot(video);
+  const cue = video ? cueOf(word, video) : null;
+  const audioDataUrl = cue && video ? await captureSentenceAudio(video, cue) : undefined;
+  return { sentence: sentenceOf(word, cue) ?? undefined, imageDataUrl, audioDataUrl };
+}
+
+// The dictionary entry to link the card to. The popup stamps it on the word it
+// resolved, but a shortcut fires on whatever is HOVERED — and in modifier mode
+// that word's popup may never have opened, so nothing looked it up. Ask then:
+// the background answers from the installed pack through its own LRU, which is
+// nothing beside the screenshot this save is already taking, and it is the whole
+// difference between a linked card and an orphan.
+async function entryFor(word: HTMLElement): Promise<string | undefined> {
+  if (word.dataset.entry) return word.dataset.entry;
+  const res = await send({ type: "lookup", query: lemmaOf(word) });
+  const entry = res.ok ? res.definition?.entry : undefined;
+  if (entry) word.dataset.entry = entry;
+  return entry;
+}
+
 async function saveRequest(word: HTMLElement, sensePositions?: number[]) {
   const config = await loadConfig();
   // Snap the source image for the mined card (Shirabe chrome hidden). Sentence
@@ -157,6 +182,7 @@ async function saveRequest(word: HTMLElement, sensePositions?: number[]) {
     lemma: lemmaOf(word),
     surface: word.dataset.surface,
     reading: word.dataset.reading,
+    entry: await entryFor(word),
     ...(config.preferredDeckId == null ? {} : { deckId: config.preferredDeckId }),
     ...(sentence ? { sentence } : {}),
     ...(sensePositions?.length ? { sensePositions } : {}),
@@ -343,7 +369,7 @@ export async function save(word: HTMLElement, sensePositions?: number[]): Promis
 // Park as learned (out of review rotation).
 export async function markKnown(word: HTMLElement): Promise<Outcome> {
   const lemma = lemmaOf(word);
-  const res = await send({ type: "setState", lemma, state: "known" });
+  const res = await send({ type: "setState", lemma, state: "retired" });
   if (res.ok) {
     applyStateEverywhere(lemma, res.state);
     // The answer describes the whole word — its state, its decks, how many cards

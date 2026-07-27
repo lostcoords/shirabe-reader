@@ -1,8 +1,9 @@
 import { send, type Rating } from "../common/messages.js";
 import { loadConfig, pricingUrl } from "../common/config.js";
 import { sendDictionary } from "../common/dictionary-port.js";
-import type { Definition, Example, Sense, SentenceToken } from "../common/types.js";
-import { applyStudyDetails, grade, GRADES, markKnown, REVIEW_IN_READER, save, setScanOrigin, studyUrlForWord, type Outcome } from "./actions.js";
+import type { Definition, Example, Sense } from "../common/types.js";
+import { applyStudyDetails, captureFor, grade, GRADES, markKnown, REVIEW_IN_READER, save, setScanOrigin, studyUrlForWord, type Outcome } from "./actions.js";
+import { renderCardForm } from "./card-form.js";
 import { refreshMetrics } from "./metrics-reporter.js";
 import { rangeFromCaret } from "./dom-text.js";
 import { placeCard } from "./placement.js";
@@ -215,9 +216,14 @@ export function scheduleTextLookup(query: string, rect: DOMRect, sentence: strin
 }
 
 export function scheduleHide(): void {
+  if (pinned) return; // the capture form is open; typing takes the pointer away
   window.clearTimeout(showTimer);
   hideTimer = window.setTimeout(hide, 250); // grace to cross the gap onto the popup
 }
+
+// Held open by the capture form. A click outside still dismisses (that is a
+// decision to leave), but drifting off the card no longer closes it.
+let pinned = false;
 
 // A page-level highlight of the matched span for raw-text scans, via the CSS
 // Custom Highlight API — it never touches the user's real text selection. Styled
@@ -329,6 +335,10 @@ async function showTarget(target: PopupTarget): Promise<void> {
     target.word.dataset.lemma = res.definition.headword;
     target.word.dataset.surface = res.definition.sourceForm ?? target.query;
     if (res.definition.reading) target.word.dataset.reading = res.definition.reading;
+    // The entry behind the word the reader is looking at, so a Quick Save posts
+    // the same dictionary handle the full form does and the card lands linked.
+    if (res.definition.entry) target.word.dataset.entry = res.definition.entry;
+    else delete target.word.dataset.entry;
     const matched = res.definition.sourceForm ?? target.query;
     const targetStart = Number(target.word.dataset.targetStart);
     if (Number.isInteger(targetStart) && targetStart >= 0) {
@@ -507,7 +517,7 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
   if (examples) body.append(examples);
 
   const rows: Node[] = [headRow(def), body];
-  if (canWrite) rows.push(actions(word));
+  if (canWrite) rows.push(actions(word, def));
   else rows.push(studyUnavailable());
   return rows;
 }
@@ -808,31 +818,12 @@ function examplesBlock(examples: Example[]): Node | null {
     const jp = document.createElement("div");
     jp.className = "sb-example-jp";
     jp.lang = "ja";
-    // Render the sentence as clickable word tokens (searched word highlighted);
-    // fall back to plain text if the server didn't tokenize it.
-    if (ex.tokens.length) {
-      for (const tok of ex.tokens) jp.append(sentenceToken(tok));
-    } else {
-      jp.textContent = ex.japanese;
-    }
+    jp.textContent = ex.japanese;
     fig.append(jp);
     if (ex.translation) fig.append(block("sb-example-tr", ex.translation));
     wrap.append(fig);
   }
   return wrap;
-}
-
-// One example-sentence token: a content word links to its shirabe.org page (new
-// tab), the searched word is highlighted, and particles stay plain text.
-function sentenceToken(tok: SentenceToken): Node {
-  if (!tok.url) return document.createTextNode(tok.surface);
-  const link = document.createElement("a");
-  link.className = tok.matched ? "sb-tok sb-tok-match" : "sb-tok";
-  link.href = tok.url;
-  link.target = "_blank";
-  link.rel = "noopener";
-  link.textContent = tok.surface;
-  return link;
 }
 
 // The clip is fetched by the background worker and returned as a data: URL:
@@ -861,14 +852,40 @@ async function playAudio(url: string): Promise<void> {
 // the site's dictionary results carry. Reviewing is not here — see
 // REVIEW_IN_READER. Each action recolours every occurrence and surfaces any error
 // (e.g. the Pro card cap) inline rather than pretend.
-function actions(word: HTMLElement): HTMLElement {
+function actions(word: HTMLElement, def: Definition | null = null): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "sb-actions";
-  renderActions(word, wrap);
+  renderActions(word, wrap, def);
   return wrap;
 }
 
-function renderActions(word: HTMLElement, wrap: HTMLElement): void {
+// The capture form takes over the action row in place — the card is already the
+// right surface, and a second floating panel over a hover card is one too many.
+// It holds the popup open while it is up, because typing moves the pointer away.
+async function openCardForm(word: HTMLElement, wrap: HTMLElement, def: Definition): Promise<void> {
+  pinned = true;
+  const close = () => {
+    pinned = false;
+    renderActions(word, wrap, def);
+  };
+  wrap.replaceChildren(block("sb-feedback", "Capturing…"));
+  const capture = await captureFor(word);
+  const config = await loadConfig();
+  await renderCardForm(wrap, {
+    word, definition: def, capture,
+    preferredDeckId: config.preferredDeckId ?? undefined,
+    onCancel: close,
+    onSaved: (message) => {
+      pinned = false;
+      renderActions(word, wrap, def);
+      const note = wrap.querySelector(".sb-feedback");
+      if (note) note.textContent = message;
+      void refreshMetrics();
+    },
+  });
+}
+
+function renderActions(word: HTMLElement, wrap: HTMLElement, def: Definition | null = null): void {
   wrap.replaceChildren();
   const saved = (word.dataset.state ?? "none") !== "none";
 
@@ -895,8 +912,13 @@ function renderActions(word: HTMLElement, wrap: HTMLElement): void {
   // Open card sits beside Known once the word is saved (exact card when we
   // know cardId, otherwise the card browser search for the lemma).
   if (saved) extra.append(cardLink(word));
-  if (!saved) extra.append(button("＋ Save", "sb-btn-save", "S", () => run(word, wrap, () => save(word, pickedPositions()))));
-  extra.append(button("✓ Known", "sb-btn-known", "K", () => run(word, wrap, () => markKnown(word))));
+  if (!saved) {
+    extra.append(button("＋ Save", "sb-btn-save", "S", () => run(word, wrap, () => save(word, pickedPositions()), def)));
+    // Everything you can do with a word hangs off Save; composing the card in
+    // full is another item there, not a second button competing with it.
+    if (def) extra.append(button("Add details…", "sb-btn-ghost", "D", () => void openCardForm(word, wrap, def)));
+  }
+  extra.append(button("✓ Known", "sb-btn-known", "K", () => run(word, wrap, () => markKnown(word), def)));
   wrap.append(extra);
 
   const note = document.createElement("span");
@@ -944,7 +966,7 @@ function cardLink(word: HTMLElement): HTMLAnchorElement {
   return link;
 }
 
-async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<Outcome>): Promise<void> {
+async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<Outcome>, def: Definition | null = null): Promise<void> {
   if (wrap.dataset.running === "true") return;
   wrap.dataset.running = "true";
   for (const control of wrap.querySelectorAll<HTMLButtonElement>("button")) control.disabled = true;
@@ -967,7 +989,7 @@ async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<O
   const { ok, message, cardUrl, proRequired } = outcome;
   if (cardUrl) word.dataset.cardUrl = cardUrl;
   delete wrap.dataset.running;
-  if (ok) renderActions(word, wrap); // state changed → re-render (Save → grade row + link)
+  if (ok) renderActions(word, wrap, def); // state changed → re-render (Save → grade row + link)
   else for (const control of wrap.querySelectorAll<HTMLButtonElement>("button")) control.disabled = false;
   if (ok) refreshMetrics();
   const note = wrap.querySelector<HTMLElement>(".sb-feedback");
@@ -1226,19 +1248,47 @@ const CSS = `
 .sb-example-jp { color: var(--sb-ink); }
 .sb-example-tr { font-size: 13px; color: var(--sb-ink-subtle); }
 /* Clickable sentence tokens: subtle until hovered; the searched word tinted. */
-.sb-tok {
-  color: inherit; text-decoration: none; cursor: pointer;
-  border-radius: 3px; text-underline-offset: 2px;
-}
-.sb-tok:hover { text-decoration: underline; background: var(--sb-surface-muted); }
-.sb-tok-match { color: var(--sb-accent); background: var(--sb-accent-tint); }
-.sb-tok-match:hover { background: var(--sb-accent-tint-strong); }
 
 .sb-actions { flex: 0 0 auto; margin-top: 12px; }
 .sb-membership { margin-bottom: 6px; color: var(--sb-ink-muted); font-size: 11px; }
 .sb-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .sb-extra { display: flex; gap: 6px; margin-top: 6px; }
 .sb-extra .sb-btn { flex: 1; }
+
+/* The capture form (card-form.ts), in place of the action row. Same tokens as
+   the rest of the card — it is the same surface, not a dialog over it. */
+.sb-form { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.sb-field { display: flex; flex-direction: column; gap: 4px; }
+.sb-field-label { color: var(--sb-ink-muted); font-size: 11px; font-weight: 600; }
+.sb-field-hint { color: var(--sb-ink-muted); font-size: 11px; }
+.sb-row { display: flex; align-items: center; gap: 6px; }
+.sb-input {
+  width: 100%; box-sizing: border-box; padding: 5px 7px; font: inherit; font-size: 12px;
+  color: var(--sb-ink); background: var(--sb-surface); border: 1px solid var(--sb-divider); border-radius: 6px;
+}
+.sb-input:focus-visible { outline: 2px solid var(--sb-accent); outline-offset: 1px; }
+.sb-form-senses { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.sb-form-senses li { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
+.sb-form-gloss { flex: 1; }
+.sb-form-examples { display: flex; flex-direction: column; gap: 6px; }
+.sb-form-picks:empty { display: none; }
+.sb-form-picks { display: flex; flex-wrap: wrap; gap: 4px; }
+.sb-form-chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  padding: 2px 4px 2px 7px; font-size: 11px; line-height: 1.5;
+  background: var(--sb-accent-tint); color: var(--sb-ink); border-radius: 999px;
+}
+.sb-form-chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.sb-form-chip-x { border: 0; background: none; color: inherit; cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
+.sb-form-offers { display: flex; flex-direction: column; gap: 2px; }
+.sb-form-offer {
+  text-align: left; border: 0; background: none; padding: 2px 0; cursor: pointer;
+  color: var(--sb-ink-muted); font: inherit; font-size: 11px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sb-form-offer:hover { color: var(--sb-accent); text-decoration: underline; }
+.sb-form-shot { max-width: 120px; border-radius: 4px; border: 1px solid var(--sb-divider); }
+.sb-form-actions { display: flex; align-items: center; gap: 6px; }
 
 .sb-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -1273,7 +1323,7 @@ const CSS = `
 .sb-feedback.sb-upgrade { color: var(--sb-ink); }
 .sb-plans { color: var(--sb-accent); font-weight: 600; text-decoration: underline; cursor: pointer; }
 .sb-plans:hover { color: var(--sb-accent-hover); }
-.sb-btn:focus-visible, .sb-headword:focus-visible, .sb-tok:focus-visible, .sb-btn.sb-close:focus-visible {
+.sb-btn:focus-visible, .sb-headword:focus-visible, .sb-btn.sb-close:focus-visible {
   outline: 3px solid var(--sb-accent); outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {

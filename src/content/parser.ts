@@ -183,7 +183,7 @@ export function mediaTimestamp(): string | null {
 }
 
 /** True when `root` still has Japanese text outside our wraps. */
-export function hasUnparsedJapanese(root: Node, filter?: string): boolean {
+function hasUnparsedJapanese(root: Node, filter?: string): boolean {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => parseableTextNode(node, filter),
   });

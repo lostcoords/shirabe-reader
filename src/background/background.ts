@@ -4,7 +4,7 @@ import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveCo
 import { isR2AudioUrl } from "../common/audio.js";
 import { normalizePattern, refreshRemoteHostRules } from "../common/host-rules.js";
 import { cancelDictionaryInstall, checkDictionaryUpdate, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary, resumeInterruptedDictionaryInstall } from "../common/offline-dictionary.js";
-import type { Deck, Failure, LookupHistoryItem, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
+import type { Deck, Failure, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
 import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers } from "./telemetry.js";
 import { installDevReload } from "./dev-reload.js";
@@ -172,20 +172,15 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
     case "lookup": {
       try {
         const kind = request.kind ?? "word";
-        // The connection state belongs in the key, because it decides the answer:
-        // a signed-out miss caches `null` for a word the pack doesn't carry, and
-        // after signing in that word must reach the server instead of replaying
-        // "no definition" until something else happens to clear the cache.
-        const scope = isConnected(config) ? "online" : "offline";
-        const definition = await lookupCache.fetch(`${kind}:${scope}:${config.languages.join(",")}:${request.query}`, async () => {
-          // The kanji breakdown has no server counterpart (/v1 search excludes
-          // KANJIDIC), so it answers from the local pack or not at all.
-          if (kind === "kanji") return lookupKanjiOffline(request.query, config.languages, config.apiBase);
-          const local = await lookupOffline(request.query, config.languages, config.apiBase);
-          if (local) return local;
-          return isConnected(config) ? api.lookup(request.query) : null;
-        });
-        if (definition) await recordLookup(request.query, definition.headword, definition.reading);
+        // A definition is whatever the installed pack says — signing in changes
+        // nothing about it, so the connection state is not part of the key. Words
+        // the pack doesn't carry (encyclopedia entries, a personal dictionary)
+        // are what the "open on shirabe.org" link is for.
+        const definition = await lookupCache.fetch(`${kind}:${config.languages.join(",")}:${request.query}`, async () => (
+          kind === "kanji"
+            ? lookupKanjiOffline(request.query, config.languages, config.apiBase)
+            : lookupOffline(request.query, config.languages, config.apiBase)
+        ));
         return { ok: true, type: "lookup", definition };
       } catch (error) {
         if (!(error instanceof DictionaryNotInstalledError)) throw error;
@@ -261,11 +256,6 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       return { ok: true, type: "decks", decks: await cachedDecks() };
     case "states":
       return { ok: true, type: "states", ...(await stateSnapshotFor(request.lemmas)) };
-    case "lookupHistory":
-      return { ok: true, type: "lookupHistory", history: await lookupHistory() };
-    case "clearLookupHistory":
-      await ext.storage.local.remove(LOOKUP_HISTORY_KEY);
-      return { ok: true, type: "clearLookupHistory" };
     case "pageMetrics": {
       // Remember the page's coverage so the popup can lead with "how much of
       // this can you read" instead of making you parse again to find out. Keyed
@@ -385,20 +375,6 @@ const STATE_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
 const STATE_CACHE_MAX_LEMMAS = 20_000;
 const STATE_REQUEST_MAX_LEMMAS = 1_000;
 const DECK_CACHE_KEY = "profileDeckSnapshot";
-const LOOKUP_HISTORY_KEY = "lookupHistory";
-
-async function lookupHistory(): Promise<LookupHistoryItem[]> {
-  const stored = await ext.storage.local.get(LOOKUP_HISTORY_KEY);
-  return (stored[LOOKUP_HISTORY_KEY] as LookupHistoryItem[] | undefined) ?? [];
-}
-
-async function recordLookup(query: string, headword: string, reading: string | null): Promise<void> {
-  const history = await lookupHistory();
-  const latest: LookupHistoryItem = { query, headword, reading, lookedUpAt: new Date().toISOString() };
-  const deduped = history.filter((item) => item.query !== query || item.headword !== headword);
-  await ext.storage.local.set({ [LOOKUP_HISTORY_KEY]: [latest, ...deduped].slice(0, 100) });
-}
-
 async function stateSnapshotFor(lemmas: string[]): Promise<{ states: Record<string, WordState>; details: Record<string, StudyDetails> }> {
   const cached = await cachedStateSnapshot();
   if (!isConnected(config) || !config.scopes.includes("READ_SRS")) {

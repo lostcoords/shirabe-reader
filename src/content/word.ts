@@ -6,7 +6,7 @@ import type { ParsedToken, WordState } from "../common/types.js";
 // lazily — detached nodes are skipped on recolour, not tracked for removal.
 const byLemma = new Map<string, Set<HTMLElement>>();
 
-const STATE_CLASS = /sb-(none|new|learning|due|known)/;
+const STATE_CLASS = /sb-(none|new|learning|due|retired)/;
 
 // Furigana only earns its place over words that actually contain kanji — a
 // kana-only surface (この, では, アクセント) reads its own reading, so ruby there
@@ -119,7 +119,7 @@ const IRREGULAR_STEM_LEMMAS = new Set(["来る", "來る", "為る"]);
 // their kanji stem and differ only in trailing okurigana — the ordinary verb /
 // adjective inflection — swap the dictionary okurigana for the surface's. Anything
 // else (no kanji stem, mismatched stem) keeps the dictionary reading.
-export function surfaceReading(surface: string, lemma: string, reading: string): string | null {
+function surfaceReading(surface: string, lemma: string, reading: string): string | null {
   if (!lemma || surface === lemma) return reading;
   if (IRREGULAR_STEM_LEMMAS.has(lemma)) return null; // 来て etc. — reading isn't derivable
   const stem = kanjiStem(lemma);
@@ -180,7 +180,7 @@ function register(lemma: string, word: HTMLElement): void {
 }
 
 // Reflect a freshly-set learning state on one already-rendered word.
-export function applyState(word: HTMLElement, state: WordState): void {
+function applyState(word: HTMLElement, state: WordState): void {
   word.className = word.className.replace(STATE_CLASS, `sb-${state}`);
   word.dataset.state = state; // keep the popup's gating in sync after a review
 }

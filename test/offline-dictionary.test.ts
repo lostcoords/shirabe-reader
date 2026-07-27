@@ -7,16 +7,16 @@ import { gzipSync } from "node:zlib";
 import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
 
 const records = [
-  { type: "header", schemaVersion: 3, languages: ["eng", "spa"], source: "Shirabe open-core" },
+  { type: "header", schemaVersion: 4, languages: ["eng", "spa"], source: "Shirabe open-core" },
   {
     type: "term", id: "jmdict:1", dictionary: "jmdict", headword: "食べる",
     expressions: [{ text: "食べる", script: "mixed", common: true, tags: [] }],
     readings: [{ text: "たべる", kind: "kana" }],
     senses: [{ glosses: { eng: ["to eat"], spa: ["comer"] }, partsOfSpeech: ["v1", "vt"], fields: [], misc: [], dialects: [], restrictions: [] }],
     pitch: [
-      { text: "食べる", reading: "たべる", downstep: 2, audioUrl: `https://cdn.shirabe.org/audio/${"a".repeat(64)}.m4a` },
-      { text: "たべる", reading: "たべる", downstep: 2, audioUrl: `https://cdn.shirabe.org/audio/${"b".repeat(64)}.m4a` },
-      { text: "たべる", reading: "たべる", downstep: 0, audioUrl: `https://cdn.shirabe.org/audio/${"c".repeat(64)}.m4a` },
+      { text: "食べる", reading: "たべる", downstep: 2 },
+      { text: "たべる", reading: "たべる", downstep: 2 },
+      { text: "たべる", reading: "たべる", downstep: 0 },
     ],
     frequencies: [{ source: "jiten-global", text: "食べる", reading: "たべる", rank: 100 }],
   },
@@ -40,6 +40,8 @@ const records = [
     readings: [{ text: reading, kind: "kana" }],
     senses: [{ glosses: { eng: [english], spa: [spanish] }, partsOfSpeech: [pos], fields: [], misc: [], dialects: [], restrictions: [] }],
     frequencies: [{ source: "jiten-global", text: headword, reading, rank }],
+    // Cited by id — the sentence record itself is further down, stored once.
+    ...(headword === "猫" ? { examples: ["tatoeba:tatoeba_1"] } : {}),
   })),
   {
     type: "term", id: "jmdict:9", dictionary: "jmdict", headword: "Ｔシャツ",
@@ -102,6 +104,24 @@ const records = [
     readings: [{ text: "について", kind: "kana" }],
     senses: [{ glosses: { eng: ["about; concerning; regarding"], spa: ["sobre; acerca de"] }, partsOfSpeech: ["exp"], fields: [], misc: ["uk"], dialects: [], restrictions: [] }],
     frequencies: [{ source: "jiten-global", text: "について", reading: "について", rank: 50 }],
+  },
+  // Pitch is filed under a WRITING (綺麗, きれい), but a usually-kana word leads with
+  // its kana — and the corpus has an exact (きれい, きれい) row for almost nothing. So
+  // the popup has to accept the sibling row for the same reading, or every kana-led
+  // word (まつ, はな, こと) goes silent offline while the site shows its accent.
+  {
+    type: "term", id: "jmdict:25", dictionary: "jmdict", headword: "綺麗",
+    expressions: [{ text: "綺麗", script: "mixed", common: true, tags: [] }],
+    readings: [{ text: "きれい", kind: "kana" }],
+    senses: [{ glosses: { eng: ["pretty; beautiful"], spa: ["bonito"] }, partsOfSpeech: ["adj-na"], fields: [], misc: ["uk"], dialects: [], restrictions: [] }],
+    pitch: [{ text: "綺麗", reading: "きれい", downstep: 1 }],
+    frequencies: [{ source: "jiten-global", text: "綺麗", reading: "きれい", rank: 1_500 }],
+  },
+  // An example sentence is stored ONCE and cited by id: the same Tatoeba line
+  // illustrates dozens of words, so inlining it would ship it dozens of times.
+  {
+    type: "sentence", id: "tatoeba:tatoeba_1", japanese: "猫が好きです。",
+    translations: { eng: "I like cats.", spa: "Me gustan los gatos." },
   },
   // The bare particle が/に is common and confident on its own; without the fix a
   // について page splits into this particle + leftover kana one code point at a time.
@@ -182,11 +202,13 @@ const checksum = createHash("sha256").update(compressed).digest("hex");
 const counts = {
   terms: records.filter((record) => record.type === "term").length,
   kanji: records.filter((record) => record.type === "kanji").length,
+  sentences: records.filter((record) => record.type === "sentence").length,
 };
 
 function manifest(revision: string, sha256 = checksum) {
   return {
-    schemaVersion: 3, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
+    schemaVersion: 4, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
+    audio: { baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f", engineVersion: 1, salt: "test-salt", defaultVoice: "male", voices: { male: 1_628_969_216, female: 345_585_728 } },
     artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
     bytes: compressed.byteLength, sha256, counts, languages: ["eng", "spa"],
     dictionaries: [{ slug: "jmdict", version: "test" }], modifications: [], sources: [], downloadUrl: "https://packs.test/dictionary.gz",
@@ -220,11 +242,32 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   const definition = await lookupOffline("食べました", ["spa"], "https://shirabe.test");
   assert.equal(definition?.headword, "食べる");
   assert.equal(definition?.sourceForm, "食べました");
+  assert.equal(definition?.entry, "jmdict:1",
+    "a hit names the entry it came from, so a card saved off it links instead of landing an orphan");
   assert.deepEqual(definition?.senses[0]?.glosses, ["comer"]);
   assert.deepEqual(definition?.senses[0]?.partsOfSpeech, ["Ichidan verb", "Transitive verb"],
     "offline POS codes resolve to the same short labels as the site");
-  assert.equal(definition?.pitch[0]?.audioUrl, `https://cdn.shirabe.org/audio/${"a".repeat(64)}.m4a`);
   assert.deepEqual(definition?.pitch.map((pitch) => pitch.downstep), [2], "alternate-spelling pitch rows do not leak into the displayed headword");
+  // The clip URL is no longer shipped per row (that was 40% of the pack) — it is
+  // hashed from the manifest's recipe. Recomputed here the way Audio::Clip#digest
+  // does it server-side: if either side ever drifts, both stop naming the same
+  // file on the CDN and every play button silently 404s.
+  const expectedDigest = createHash("sha256")
+    .update(["たべる", "2", "1628969216", "1", "test-salt"].join("\x1f")).digest("hex");
+  assert.equal(definition?.pitch[0]?.audioUrl, `https://cdn.shirabe.org/audio/words/${expectedDigest}.m4a`);
+
+  const kanaLed = await lookupOffline("きれい", ["eng"], "https://shirabe.test");
+  assert.equal(kanaLed?.headword, "きれい", "a usually-kana word leads with its kana");
+  assert.deepEqual(kanaLed?.pitch.map((pitch) => pitch.downstep), [1],
+    "a kana-led headword still shows the pattern filed under its writing — the accent, and its clip, belong to the reading");
+  assert.equal(kanaLed?.pitch[0]?.audioUrl, `https://cdn.shirabe.org/audio/words/${
+    createHash("sha256").update(["きれい", "1", "1628969216", "1", "test-salt"].join("\x1f")).digest("hex")}.m4a`,
+    "the clip is named after the reading being displayed, not the spelling the row was filed under");
+
+  const withExample = await lookupOffline("猫", ["spa"], "https://shirabe.test");
+  assert.deepEqual(withExample?.examples, [{ japanese: "猫が好きです。", translation: "Me gustan los gatos." }],
+    "a term cites its example by id and the popup gets the sentence itself, in the reader's language");
+  assert.equal((await lookupOffline("猫", ["eng"], "https://shirabe.test"))?.examples[0]?.translation, "I like cats.");
 
   const tokens = await parseOffline("昨日、食べました。", ["eng"], "https://shirabe.test");
   assert.ok(tokens.some((token) => token.lemma === "食べる" && token.surface === "食べました"));
@@ -439,12 +482,13 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   await assert.rejects(installDictionary("https://api.test"), /executable/i);
   assert.equal((await dictionaryStatus()).revision, "v1");
 
-  const externalAudioRecords = structuredClone(records);
-  (externalAudioRecords[1] as typeof records[1]).pitch[0].audioUrl = "https://example.com/local-tts.mp3";
-  archive = gzipSync(externalAudioRecords.map((record) => JSON.stringify(record)).join("\n") + "\n");
-  const externalAudioChecksum = createHash("sha256").update(archive).digest("hex");
-  current = { ...manifest("v-external-audio", externalAudioChecksum), bytes: archive.byteLength };
-  await assert.rejects(installDictionary("https://api.test"), /term record is invalid/i);
+  // Clip URLs are built from the manifest's recipe now, so the recipe is where a
+  // hostile pack would aim a play button. The base has to survive the same guard
+  // the privileged background fetch applies — our bucket, over https, or nothing.
+  archive = compressed;
+  const offSiteAudio = manifest("v-external-audio");
+  current = { ...offSiteAudio, audio: { ...offSiteAudio.audio, baseUrl: "https://example.com/audio" } };
+  await assert.rejects(installDictionary("https://api.test"), /manifest is invalid/i);
   assert.equal((await dictionaryStatus()).revision, "v1");
 
   archive = compressed;

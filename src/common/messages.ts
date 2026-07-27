@@ -33,6 +33,12 @@ export type GradeResult = { state: WordState; intervals: IntervalPreviews; cardI
 export type SentenceCapture = {
   text: string;
   translation?: string;
+  /**
+   * Where the line came from: omitted for one mined off the page (the server
+   * reads that as `browser_extension`), `tatoeba` for one picked off the word's
+   * example list, `manual` for one the learner typed.
+   */
+  origin?: "tatoeba" | "manual";
   url?: string;
   title?: string;
   capturedAt: string;
@@ -42,8 +48,10 @@ export type SentenceCapture = {
   mediaEndMs?: number;
   targetStart?: number;
   targetEnd?: number;
+  /** This line's own screenshot / clip — a written sentence can carry both. */
+  imageDataUrl?: string;
+  audioDataUrl?: string;
 };
-export type LookupHistoryItem = { query: string; headword: string; reading: string | null; lookedUpAt: string };
 export type StateCounts = { known: number; learning: number; due: number; unknown: number };
 export type PageMetrics = {
   occurrenceCoverage: number;
@@ -83,19 +91,30 @@ export type Request =
   | { type: "cancelDictionaryInstall" }
   | {
       type: "save"; lemma: string; surface?: string; reading?: string; deckId?: number; sentence?: SentenceCapture;
+      // The dictionary entry the lemma came from ("jmdict:2517580"), so the saved
+      // card links to it rather than landing as an orphan. Omitted when the word
+      // was never looked up (nothing to link to), and the save still succeeds.
+      entry?: string;
       // 0-based sense positions to scope the card to (empty/omitted = whole word).
       sensePositions?: number[];
       imageDataUrl?: string; audioDataUrl?: string;
+      // The full capture form's extras (docs/plans/extension-card-form.md): a deck
+      // typed instead of picked, the learner's own fields, every example the card
+      // should link, and the card's own picture. A quick save sends none of them,
+      // which is what leaves an existing card's notes and examples alone.
+      newDeckName?: string;
+      hint?: string;
+      notes?: string;
+      sentences?: SentenceCapture[];
+      cardImageDataUrl?: string;
     }
   // Grade a due card on the 1–4 FSRS scale, by lemma (+reading). POST /v1/srs/reviews.
   | { type: "grade"; lemma: string; reading?: string; rating: Rating }
   | { type: "decks" }
   | { type: "states"; lemmas: string[] }
-  | { type: "lookupHistory" }
-  | { type: "clearLookupHistory" }
   | { type: "pageMetrics"; metrics: PageMetrics }
   | { type: "activePageMetrics" } // popup asks what the active tab last measured
-  | { type: "setState"; lemma: string; state: "known" | "reviewing" }
+  | { type: "setState"; lemma: string; state: "retired" | "reviewing" }
   | { type: "connect" } // begin device login; resolves with the code to show
   | { type: "disconnect" }
   | { type: "updateLanguages"; languages: GlossLanguage[] }
@@ -124,8 +143,6 @@ export type Response =
   | { ok: true; type: "grade"; result: GradeResult }
   | { ok: true; type: "decks"; decks: Deck[] }
   | { ok: true; type: "states"; states: Record<string, WordState>; details: Record<string, StudyDetails> }
-  | { ok: true; type: "lookupHistory"; history: LookupHistoryItem[] }
-  | { ok: true; type: "clearLookupHistory" }
   | { ok: true; type: "pageMetrics" }
   | { ok: true; type: "activePageMetrics"; metrics: PageMetrics | null }
   | { ok: true; type: "setState"; state: WordState; details: StudyDetails }

@@ -78,11 +78,12 @@ const bump = (map: Map<string, { count: number; example: string }>, key: string,
   const kept = subset(pack, rows.map((row) => row.text));
   const payload = gzipSync(kept.join("\n") + "\n");
   const manifest = {
-    schemaVersion: 3, buildRecipeVersion: 6, minimumExtensionVersion: "0.2.1", contentRevision: "sweep",
+    schemaVersion: 4, buildRecipeVersion: 6, minimumExtensionVersion: "0.2.1", contentRevision: "sweep",
+    audio: { baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f", engineVersion: 1, salt: "test-salt", defaultVoice: "male", voices: { male: 1_628_969_216, female: 345_585_728 } },
     builtAt: "2026-07-15T00:00:00Z", artifact: "dictionary.ndjson.gz", compression: "gzip",
     mediaType: "application/x-ndjson", bytes: payload.byteLength,
     sha256: createHash("sha256").update(payload).digest("hex"),
-    counts: { terms: kept.length - 1, kanji: 0 }, languages: ["eng", "spa"],
+    counts: { terms: kept.length - 1, kanji: 0, sentences: 0 }, languages: ["eng", "spa"],
     dictionaries: [{ slug: "jmdict", version: "sweep" }], modifications: [], sources: [],
     downloadUrl: "https://packs.test/dictionary.gz",
   };

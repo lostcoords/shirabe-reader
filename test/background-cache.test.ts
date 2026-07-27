@@ -7,12 +7,15 @@ import type { TelemetrySignal } from "../src/common/telemetry.js";
 // installs global crash handlers on import — so the two worker-only invariants
 // below are asserted against its source, the way telemetry.test.ts does.
 
-test("the lookup cache is keyed by connection state, so signing in can't replay a signed-out miss", () => {
+test("a definition comes from the pack alone, so the cache key carries no connection state", () => {
   const background = readFileSync("src/background/background.ts", "utf8");
   const key = background.match(/lookupCache\.fetch\(`([^`]+)`/)?.[1];
   assert.ok(key, "expected a template-literal lookup cache key");
-  assert.match(key, /\$\{scope\}/);
-  assert.match(background, /const scope = isConnected\(config\) \? "online" : "offline"/);
+  // Signing in cannot change what a word means, so it must not fork the cache —
+  // and nothing in the lookup path may reach the network for a definition.
+  assert.doesNotMatch(key, /scope|connected|online/i);
+  const handler = background.slice(background.indexOf('case "lookup"'), background.indexOf('case "dictionaryStatus"'));
+  assert.doesNotMatch(handler, /api\./, "the pack is the dictionary; there is no server fallback to drift from");
 });
 
 test("a cached word state from an older build still renders, deck list or not", () => {

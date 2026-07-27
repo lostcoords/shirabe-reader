@@ -147,7 +147,7 @@ html:not(.sb-reader-off) :is(
 .sb-new { --sb-cue: #0369a1; }
 .sb-learning { --sb-cue: #f59e0b; }
 .sb-due { --sb-cue: #ef4444; }
-.sb-known { --sb-cue: transparent; }
+.sb-retired { --sb-cue: transparent; }
 /* Not yet tracked — a faint dotted hint that it's interactive. */
 .sb-none { --sb-cue: rgba(3, 105, 161, 0.5); --sb-cue-style: dotted; }
 

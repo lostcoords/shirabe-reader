@@ -3,7 +3,7 @@
 // A word's learning status, mirroring Shirabe's Card::STATES. `/v1/parse`
 // stamps each word with the caller's state; "none" means the user has no card
 // for it yet (not-yet-tracked). Ordered weakest → strongest, like the server.
-export type WordState = "none" | "new" | "learning" | "due" | "known";
+export type WordState = "none" | "new" | "learning" | "due" | "retired";
 
 // One token as the content script needs it: where it sits in the source text
 // (UTF-16 offsets, matching the DOM), how to render furigana, and its state.
@@ -38,21 +38,23 @@ export type Sense = {
   glosses: string[];
 };
 
-// One token of an example sentence. Content words carry a word-page `url` (so
-// they're clickable); particles have `url: null` and render as plain text.
-// `matched` marks the looked-up word so we can highlight it.
-export type SentenceToken = { surface: string; url: string | null; matched: boolean };
-
-// An example sentence with its translation (from ?include=sentences). `tokens`
-// is the sentence rendered as clickable words; empty when the server didn't
-// tokenize it (older server), in which case the popup shows plain `japanese`.
-export type Example = { japanese: string; translation: string | null; tokens: SentenceToken[] };
+// An example sentence with its translation, from the pack's own sentence
+// records. Plain text: shipping a token stream per sentence to make the words
+// clickable would have cost several megabytes, and the parser can tokenize one
+// locally if that ever earns its place.
+export type Example = { japanese: string; translation: string | null };
 
 // A definition as shown in the hover popup — a faithful slice of the shirabe.org
 // word card. Flattened from /v1/search (which already returns all of this).
 export type Definition = {
   headword: string;
   reading: string | null;
+  /** The dictionary entry this hit came from, as the pack's stable
+      `slug:sourceId` handle ("jmdict:2517580"). Sent back when the word is saved
+      so the card LINKS to that entry (enrichment, drift-tracking) instead of
+      landing as an orphan the learner has to relink by hand. Absent for a kanji,
+      which is not a dictionary word. */
+  entry?: string;
   url: string; // the word's page on shirabe.org
   common: boolean;
   jlpt: string | null; // e.g. "N3"

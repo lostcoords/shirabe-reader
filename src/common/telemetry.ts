@@ -10,7 +10,7 @@
 // tested; the actual network send lives in background/telemetry.ts.
 
 export const MAX_MESSAGE = 300;
-export const MAX_STACK = 4000;
+const MAX_STACK = 4000;
 const MAX_FRAMES = 40;
 
 export type ClientContext = "content" | "popup" | "options";
