@@ -273,3 +273,40 @@
   why: >
     がたく and さんい have no corpus rank at all — the unranked case, which is
     exactly what a greedy match hallucinates out of two neighbouring words.
+
+# JMdict lists inflected forms as entries in their own right, and a form entry is
+# itself conjugable — so the promotion that lemmas 知らない to 知る has to survive
+# the form arriving inflected.
+- name: form-entry-inflected-loses-to-its-verb
+  text: 町の様子が変わっていた。
+  expect: [町, の, 様子, が, 変わっていた=変わる]
+  pack: full
+  why: >
+    変わっていた is the past of the entry 変わっている ("to be eccentric", rank 9,576)
+    in one step, and 変わる (rank 233) in three — so the fewer-steps sort led with
+    the form entry, and the promotion behind 知らない → 知る skipped it for having an
+    INFLECTED leader. Rarity alone could not save it either: 5.35 bits apart, just
+    inside MUCH_COMMONER. The rival is the same reading carried further (its chain
+    walks the leader's, then keeps going), which is what the rule now asks for.
+    Bare 変わっている already lemma'd to 変わる, so this is the parser agreeing with
+    itself — and with Sudachi, which reads 変わっていた as 変わる too.
+
+- name: form-entry-inflected-negative
+  text: 彼は変わっていない。
+  expect: [彼, は, 変わっていない=変わる]
+  pack: full
+  why: >
+    The same promotion through a longer chain (negative + progressive + te-form).
+    Both readings are real Japanese — "he hasn't changed" and "he isn't eccentric"
+    — and no context in the span separates them; the card front follows the verb,
+    and the sources modal offers the swap (docs/specs/srs.md §1.1).
+
+- name: form-entry-vs-te-auxiliary
+  text: 街がどんどん変わっていった
+  expect: [街, が, どんどん, 変わって=変わる, いった]
+  pack: full
+  why: >
+    The boundary guard for the two rules above. いった is a form of いく, which the
+    te-auxiliary lookahead has to recognise through its own inflection — otherwise
+    変わってい takes the span as 変わっている and strands った. Promotion must not
+    paper over that: the answer here is a SPLIT, not a longer merge.

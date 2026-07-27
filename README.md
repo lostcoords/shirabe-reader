@@ -24,8 +24,7 @@ Normal lookup and page parsing are free, local, and offline after installing the
 maintained Shirabe EN/ES dictionary pack. Connecting an account is optional;
 **Pro + online** adds exact-context sentence mining, FSRS grading, deck selection,
 sync, and knowledge-state colouring. Full product spec:
-[`docs/specs/browser-extension.md`](../docs/specs/browser-extension.md). Phased
-hand-off: [`docs/plans/offline-browser-extension.md`](../docs/plans/offline-browser-extension.md).
+[`docs/specs/browser-extension.md`](../docs/specs/browser-extension.md).
 
 ## Status (v1)
 
@@ -212,7 +211,7 @@ src/
   background/
     background.ts owns the key + OAuth redirect login; rate-limits + caches
   content/
-    parser.ts     TreeWalker over text nodes → local parse → wrapped words
+    parser.ts     paragraph/fragments → local parse → token spans
     word.ts       renders one token; lemma→spans index for live recolour
     popup.ts      shadow-DOM hover popup; lazy lookup + grade/mine controls
     actions.ts    save / grade / mark-known, shared by popup + keyboard
@@ -224,8 +223,9 @@ src/
 Content scripts never touch storage or remote APIs directly. The background
 worker owns the offline dictionary, scoped key, state hydration, connected
 writes, and caches. Installed-pack lookup and local page parsing send no page
-text. If no pack is installed, a connected user can use the legacy server
-fallback. URL/title/sentence context is sent only on an explicit save action.
+text. If no pack is installed, the extension installs/repairs it and reports
+progress; it never uploads the page as a parsing fallback. URL/title/sentence
+context is sent only on an explicit save action.
 
 ## Parsing engine
 
@@ -234,5 +234,5 @@ paragraphs/fragments, batched, parsed, and mapped back onto the DOM — plus the
 reference study of jiten/JitenReader and the phased build plan, lives in
 [`docs/specs/extension-parsing.md`](../docs/specs/extension-parsing.md).
 
-Remaining release work and browser/platform verification are tracked in
-[`docs/plans/offline-browser-extension.md`](../docs/plans/offline-browser-extension.md).
+Release and browser-store operations live in
+[`docs/specs/browser-extension.md`](../docs/specs/browser-extension.md#10-store-release-and-update-velocity).

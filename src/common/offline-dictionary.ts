@@ -843,9 +843,18 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
   // forms and lemmas them to the verb, and the verb is what a card wants on its
   // front: 知る, not 知らない. Only ever in favour of a word JMdict itself calls
   // common, which is what keeps について off 似つく (rank 113,027) and 全く off 全い.
-  if (leader && !leader.candidate.reasons.length) {
+  //
+  // A form entry is itself conjugable, so the rule cannot ask that the leader be
+  // an EXACT match: 変わっていた is the past of the entry 変わっている ("to be
+  // eccentric") — one step — where the verb behind it takes three, and requiring a
+  // stepless leader is the whole reason it stood. What actually marks the rival as
+  // the same reading carried further is that it walks the leader's chain and keeps
+  // going (`extendsChain`); with a stepless leader that is every chain, which is
+  // the original rule unchanged.
+  if (leader) {
     const form = confident.findIndex((hit) => hit.prefixLength === leader.prefixLength
-      && hit.candidate.reasons.length > 0 && matchingExpression(hit)?.common
+      && extendsChain(leader.candidate.reasons, hit.candidate.reasons)
+      && matchingExpression(hit)?.common
       && VERBAL_POS.test(firstSensePos(hit))
       && hit.candidate.reasons.every((reason) => PREDICATE_FORMS.has(reason))
       // …and the verb has to be the commoner reading of the two. それ is the
@@ -1213,6 +1222,15 @@ const PREDICATE_FORMS = new Set([ "negative", "past", "polite", "te-form", "prog
   "passive", "causative", "short causative", "volitional", "imperative",
   "desiderative (-tai)", "polite imperative (-nasai)", "negative (-naide)",
   "negative (-zu)", "negative (-nu)", "negative (-n)", "negative conditional (-neba)" ]);
+
+// Is `rival` the same analysis taken further — the leader's own chain, then more?
+// Chains read surface → dictionary form, so "one reading is a continuation of the
+// other" is literally a prefix test: 変わっていた is [past] to 変わっている and
+// [past, progressive, te-form] to 変わる, which is that same past plus the two steps
+// the form entry stops at. Two chains that merely SHARE a length say nothing —
+// they can be different readings of the span — so nothing but an extension counts.
+const extendsChain = (leader: readonly string[], rival: readonly string[]): boolean =>
+  rival.length > leader.length && leader.every((reason, index) => rival[index] === reason);
 
 function firstSensePos(hit: LookupHit): string {
   for (const sense of hit.term.senses) {
