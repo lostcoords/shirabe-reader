@@ -1,0 +1,22 @@
+// Type-checks the test suite, which the base config deliberately leaves out: it
+// describes browser code, so it carries no node types and no node globals.
+//
+// dom.test.ts is excluded, not skipped-and-forgotten: it drives happy-dom, whose
+// Element/Document are genuinely different types from lib.dom's, so every DOM
+// read in it is a type error (44 of them). Covering it needs a decision about
+// how to type a happy-dom test, not 44 casts. Everything else is checked.
+//
+// all.test.ts goes with it: it is the import manifest the runner bundles, so
+// including it would drag dom.test.ts back in through the import graph, where
+// `exclude` cannot reach. It holds fourteen imports and no logic of its own.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // Intl.Segmenter is ES2022; the base targets ES2021 because the extension
+    // ships to browsers, but a test may reach for it to cross-check segmentation.
+    "lib": ["ES2021", "ES2022.Intl", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src", "test"],
+  "exclude": ["test/dom.test.ts", "test/all.test.ts"]
+}

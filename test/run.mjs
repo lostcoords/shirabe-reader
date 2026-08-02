@@ -11,14 +11,14 @@ const dir = mkdtempSync(join(tmpdir(), "shirabe-extension-test-"));
 // moment MINIMUM_EXTENSION_VERSION is bumped.
 const manifestVersion = JSON.parse(readFileSync(new URL("../manifest.base.json", import.meta.url), "utf8")).version;
 
-// The golden segmentation corpus installs its own dictionary pack, so it runs in
-// its own process: sharing one with the unit suite means sharing the
-// offline-dictionary module singleton and fake-indexeddb, and tearing the
-// database down under another test's still-pending transactions.
+// The segmentation corpora install a dictionary pack, so they run in their own
+// process: sharing one with the unit suite means sharing the offline-dictionary
+// module singleton and fake-indexeddb, and tearing the database down under
+// another test's still-pending transactions. All of them share one process and
+// one installed pack, so the 58 MB pack is scanned once rather than per corpus.
 const suites = [
   { name: "all.test.ts", entry: "test/all.test.ts", outfile: join(dir, "tests.cjs") },
-  { name: "segmentation-golden.test.ts", entry: "test/segmentation-golden.test.ts", outfile: join(dir, "golden.cjs") },
-  { name: "cross-engine.test.ts", entry: "test/cross-engine.test.ts", outfile: join(dir, "cross-engine.cjs") },
+  { name: "segmentation.test.ts", entry: "test/segmentation.test.ts", outfile: join(dir, "segmentation.cjs") },
 ];
 
 try {

@@ -1,10 +1,7 @@
 import "fake-indexeddb/auto";
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { gunzipSync, gzipSync } from "node:zlib";
-import { deinflect } from "../src/common/deinflect.js";
-import { installDictionary, lookupVariants, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
+import { readFileSync } from "node:fs";
+import { parseOffline } from "../src/common/offline-dictionary.js";
+import { installTestPack, packPayload, realPackPath, subsetPack } from "./support/pack.js";
 
 // Runner for divergence-sweep.mjs: see that file for what this is and how to run it.
 
@@ -16,56 +13,6 @@ const rows = (JSON.parse(readFileSync("../tmp/tokenizer_web.json", "utf8")) as W
   .filter((row) => row.tokens?.length)
   .slice(0, Number.isFinite(limit) ? limit : undefined);
 
-function realPackPath(): string {
-  if (process.env.SHIRABE_PACK && existsSync(process.env.SHIRABE_PACK)) return process.env.SHIRABE_PACK;
-  const dir = "../storage/dictionary_packs/current";
-  const packs = readdirSync(dir).filter((name) => name.endsWith(".ndjson.gz")).map((name) => join(dir, name))
-    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-  if (!packs[0]) throw new Error("no dictionary pack: run `npm run prepare:dev-pack`");
-  return packs[0];
-}
-
-// A full pack gunzips past Node's maximum string length, so it has to be decoded
-// a line at a time (same as the golden and cross-engine corpora).
-function* packLines(path: string): Generator<string> {
-  const raw = gunzipSync(readFileSync(path));
-  let start = 0;
-  for (let at = 0; at < raw.length; at += 1) {
-    if (raw[at] !== 0x0a) continue;
-    if (at > start) yield raw.toString("utf8", start, at);
-    start = at + 1;
-  }
-  if (start < raw.length) yield raw.toString("utf8", start);
-}
-
-// A sweep is broad, so subset the pack to what these sentences can reach :
-// substrings, their deinflections, and their text-processor variants. Missing any
-// of those starves the parser and manufactures divergences that do not exist.
-function subset(path: string, sentences: string[]): string[] {
-  const keys = new Set<string>();
-  for (const sentence of sentences) {
-    const chars = [...sentence];
-    for (let start = 0; start < chars.length; start += 1) {
-      for (let end = start + 1; end <= Math.min(chars.length, start + 16); end += 1) {
-        for (const variant of lookupVariants(chars.slice(start, end).join(""))) {
-          keys.add(variant.text);
-          for (const found of deinflect(variant.text)) keys.add(found.term);
-        }
-      }
-    }
-  }
-  const kept: string[] = [];
-  for (const line of packLines(path)) {
-    if (!line) continue;
-    if (line.startsWith('{"type":"header"')) { kept.push(line); continue; }
-    const record = JSON.parse(line) as { type: string; headword?: string; expressions?: Array<{ text: string }>; readings?: Array<{ text: string }> };
-    if (record.type !== "term") continue;
-    const spellings = [record.headword ?? "", ...(record.expressions ?? []).map((i) => i.text), ...(record.readings ?? []).map((i) => i.text)];
-    if (spellings.some((spelling) => keys.has(spelling))) kept.push(line);
-  }
-  return kept;
-}
-
 const bump = (map: Map<string, { count: number; example: string }>, key: string, example: string): void => {
   const current = map.get(key);
   if (current) current.count += 1;
@@ -74,24 +21,19 @@ const bump = (map: Map<string, { count: number; example: string }>, key: string,
 
 (async () => {
   const pack = realPackPath();
+  if (!pack) throw new Error("no dictionary pack: run `npm run prepare:dev-pack`");
   process.stdout.write(`Subsetting ${pack} for ${rows.length} sentences…\n`);
-  const kept = subset(pack, rows.map((row) => row.text));
-  const payload = gzipSync(kept.join("\n") + "\n");
-  const manifest = {
-    schemaVersion: 4, buildRecipeVersion: 6, minimumExtensionVersion: "0.2.1", contentRevision: "sweep",
-    audio: { baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f", engineVersion: 1, salt: "test-salt", defaultVoice: "male", voices: { male: 1_628_969_216, female: 345_585_728 } },
-    builtAt: "2026-07-15T00:00:00Z", artifact: "dictionary.ndjson.gz", compression: "gzip",
-    mediaType: "application/x-ndjson", bytes: payload.byteLength,
-    sha256: createHash("sha256").update(payload).digest("hex"),
-    counts: { terms: kept.length - 1, kanji: 0, sentences: 0 }, languages: ["eng", "spa"],
-    dictionaries: [{ slug: "jmdict", version: "sweep" }], modifications: [], sources: [],
-    downloadUrl: "https://packs.test/dictionary.gz",
-  };
-  await removeDictionary();
-  globalThis.fetch = (async (input: string | URL | Request) => (String(input).endsWith("/current")
-    ? new Response(JSON.stringify(manifest), { headers: { "Content-Type": "application/json" } })
-    : new Response(payload, { headers: { "Content-Type": "application/gzip" } }))) as typeof fetch;
-  await installDictionary("https://api.test");
+  // Subsets at the same span cap as the asserting corpora. The sweep used to cap
+  // at 16, which put every longer expression out of reach of its own subset and
+  // reported those sentences as divergences the corpora structurally could not see.
+  //
+  // It is the slow half by far: every span of every sentence goes through
+  // lookupVariants + deinflect, so a 1,500-sentence sweep subsets for tens of
+  // minutes before it parses anything. That is the price of not lying, and this is
+  // a discovery tool run occasionally: start it in the background rather than
+  // trimming the cap back and reading manufactured divergences as real ones.
+  const kept = subsetPack(pack, rows.map((row) => row.text));
+  await installTestPack(packPayload(kept), { contentRevision: "sweep", terms: kept.length - 1 });
   process.stdout.write(`Installed ${kept.length - 1} entries. Sweeping…\n\n`);
 
   // A lemma disagreement is the one that costs users a duplicate SRS card.

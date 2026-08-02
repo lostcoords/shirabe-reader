@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { deinflect, inflectionLabel } from "../src/common/deinflect.js";
 
+// Deliberately NOT driven by test/tokenizer_eval/deinflection.yml, though at a
+// glance the two look like the same table. That corpus asserts the hint the
+// website renders under the search bar (Inflection.resolve), which is gated by
+// whether the surface is its own headword: it holds `見れる → no hint at all`,
+// because JMdict lists 見れる. This file asserts the raw rule chain, where 見れる
+// deinflects to 見る and must keep doing so, or the popup stops opening on it.
+// The same word, two answers, both correct: one corpus could only hold one.
+
 const forms = (text: string) => deinflect(text).map((candidate) => candidate.term);
 
 test("deinflects nested ichidan causative passive negative past", () => {

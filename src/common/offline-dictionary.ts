@@ -509,7 +509,16 @@ async function mergeExpressions(db: IDBDatabase, generation: string, tokens: Par
       const run = tokens.slice(at, at + span);
       // Punctuation and Latin runs end a phrase; they never continue one.
       if (!run.every((token) => token.content)) break;
-      const found = await grammarEntry(db, generation, run, languages, apiBase);
+      // Nothing in front for a case particle to mark: the run opens the text,
+      // follows punctuation, or the slot is already taken by another particle
+      // (だけでも, 犯罪だとでも). Tokenizer#nothing_to_mark? draws the same line.
+      // Both tests, because a bare particle looked up on its own is a homograph
+      // of something: で and も come back `n` (出, 藻), so the surface set has to
+      // stand in where the part of speech won't.
+      const previous = tokens[at - 1];
+      const unbound = !previous || !previous.content
+        || previous.pos === "prt" || BARE_PARTICLES.has(previous.surface);
+      const found = await grammarEntry(db, generation, run, languages, apiBase, unbound);
       if (found) { expression = found; taken = span; }
     }
     if (expression) {
@@ -531,13 +540,14 @@ async function mergeExpressions(db: IDBDatabase, generation: string, tokens: Par
 // The `exp`/`conj` entry a run spells exactly, if the dictionary has one and the
 // run is allowed to merge into it.
 async function grammarEntry(db: IDBDatabase, generation: string, run: ParsedToken[],
-  languages: readonly GlossLanguage[], apiBase: string): Promise<Definition | null> {
-  if (CASE_PARTICLES.has(run[0]!.surface) && run.every((token) => BARE_PARTICLES.has(token.surface))) return null;
+  languages: readonly GlossLanguage[], apiBase: string, unbound = false): Promise<Definition | null> {
+  if (!unbound
+    && CASE_PARTICLES.has(run[0]!.surface) && run.every((token) => BARE_PARTICLES.has(token.surface))) return null;
   if (!run.slice(1).every((token) => GRAMMAR_TAILS.has(token.surface))) return null;
   const text = run.map((token) => token.surface).join("");
   const hits = await hitsForCandidates(db, generation,
     [ { prefix: text, candidate: { text, reasons: [] } } ], false);
-  const grammar = hits.find((hit) => contextuallyConfident(hit)
+  const grammar = hits.find((hit) => contextuallyConfident(hit, unbound)
     && hit.term.senses.some((sense) => GRAMMAR_POS.some((pos) => sense.partsOfSpeech.includes(pos))));
   return grammar ? termDefinition(grammar, languages, apiBase) : null;
 }
@@ -819,7 +829,7 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
         candidate: { text: found.term, reasons: found.inflections.map(inflectionLabel), conditions: found.conditions, processingCost: variant.processingCost },
       })))), false);
   const hits = [...deinflectedHits, ...exactHits];
-  const confident = hits.filter(contextuallyConfident);
+  const confident = hits.filter((hit) => contextuallyConfident(hit));
   // Nothing cleared the gate: so fall back to what the parser is underneath, a
   // longest match. The gate exists to let a *confident shorter* word beat a long
   // unconfident one; with nothing confident it has no opinion, and dropping to
@@ -1011,7 +1021,7 @@ async function lookupInDatabase(db: IDBDatabase, generation: string, source: str
   // deinflection of its own span.
   // Verbatim only, for the reason in `gatherCandidates`: a spelling we guessed at
   // must not stand in for the span and hide the inflected reading of it.
-  const usableExact = (contextual ? exactHits.filter(contextuallyConfident) : exactHits)
+  const usableExact = (contextual ? exactHits.filter((hit) => contextuallyConfident(hit)) : exactHits)
     .filter((hit) => !hit.candidate.processingCost);
   const longestExact = usableExact.reduce((length, hit) => Math.max(length, hit.prefixLength), 0);
   const longerPrefixes = prefixes.filter((prefix) => [...prefix].length > longestExact);
@@ -1025,7 +1035,7 @@ async function lookupInDatabase(db: IDBDatabase, generation: string, source: str
     : [];
 
   if (contextual) {
-    const confident = [...deinflectedHits, ...exactHits].filter(contextuallyConfident);
+    const confident = [...deinflectedHits, ...exactHits].filter((hit) => contextuallyConfident(hit));
     if (confident.length) {
       confident.sort(contextualCompare);
       return termDefinition(confident[0], languages, apiBase);
@@ -1167,7 +1177,7 @@ function forcedExpression(hit: LookupHit): boolean {
   return hit.term.senses.some((sense) => sense.misc.some((tag) => CONTEXTUAL_MISC.has(tag)));
 }
 
-function contextuallyConfident(hit: LookupHit): boolean {
+function contextuallyConfident(hit: LookupHit, unbound = false): boolean {
   // A run of bare particles led by a case particle is not a word here, whatever
   // JMdict says about では (rank 80) or には (rank 30): で in 本では binds the noun
   // in front of it, so the reader is looking at で + は. Tokenizer#mergeable_expression?
@@ -1175,7 +1185,11 @@ function contextuallyConfident(hit: LookupHit): boolean {
   // 1,500 sentences bears it out: では/には/とは/でも come out apart 44/59/21/27
   // times against 2/2/0/2 merged. A deliberate lookup of では still finds the
   // entry; this is a rule about reading a sentence, not about the dictionary.
-  if (particleCluster(hit.surface)) return false;
+  //
+  // Unless nothing in front of the run can take the case: it opens the clause,
+  // or another particle already holds the slot (だけでも). There で is not binding
+  // anything, and でも / では are the words JMdict lists.
+  if (!unbound && particleCluster(hit.surface)) return false;
   const inflected = hit.candidate.reasons.length > 0;
   const usuallyKana = hit.term.senses.some((sense) => sense.misc.includes("uk"));
   const expression = matchingExpression(hit);

@@ -18,7 +18,7 @@ async function mountForm(options: {
   const window = new Window({ url: "https://reader.test/page" });
   const sent: Request[] = [];
   Object.assign(globalThis, {
-    window, document: window.document, HTMLElement: window.HTMLElement, Option: window.Option,
+    window, document: window.document, HTMLElement: window.HTMLElement, Option: (window as unknown as { Option: unknown }).Option,
     chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
   });
   // `ext` binds to whichever WebExtension global existed when browser.ts was
@@ -137,7 +137,7 @@ test("examples are picked into state, so removing one survives the list re-rende
 });
 
 test("the mined line leads the examples and keeps its page origin", async () => {
-  const { host, saveRequest } = await mountForm({
+  const { saveRequest } = await mountForm({
     senses: [{ glosses: ["expensive"] }],
     examples: [{ japanese: "この本は高い。", translation: "This book is expensive." }],
     capture: { sentence: { text: "この街は家賃が高い。", capturedAt: "2026-07-27T00:00:00Z" }, imageDataUrl: "data:image/png;base64,AA" },

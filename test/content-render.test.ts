@@ -14,7 +14,7 @@ test("a token split across inline markup does not stamp its reading on each frag
   // 日本語 is one token spanning two text nodes. The reading belongs to the whole
   // word, so neither fragment may carry it: stamping にほんご on both renders the
   // reading twice, once over 日本 and again over 語.
-  const line = window.document.getElementById("line") as HTMLElement;
+  const line = window.document.getElementById("line") as unknown as HTMLElement;
   const nodes = [line.querySelector("b")?.firstChild, line.childNodes[1]] as Text[];
   const context = "日本語";
   const token = { start: 0, length: 3, surface: context, reading: "にほんご", lemma: "日本語", pos: "noun", content: true, state: "none" as const };

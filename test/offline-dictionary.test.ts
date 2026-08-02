@@ -235,7 +235,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     const url = String(input);
     return url.endsWith("/current")
       ? new Response(JSON.stringify(current), { headers: { "Content-Type": "application/json" } })
-      : new Response(archive, { headers: { "Content-Type": "application/gzip" } });
+      : new Response(new Uint8Array(archive), { headers: { "Content-Type": "application/gzip" } });
   }) as typeof fetch;
 
   await installDictionary("https://api.test");
@@ -456,7 +456,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     const url = String(input);
     return url.endsWith("/current")
       ? new Response(JSON.stringify(current), { headers: { "Content-Type": "application/json" } })
-      : new Response(archive, { headers: { "Content-Type": "application/gzip" } });
+      : new Response(new Uint8Array(archive), { headers: { "Content-Type": "application/gzip" } });
   }) as typeof fetch;
   await assert.rejects(installDictionary("https://api.test"), /checksum/i);
   assert.equal((await dictionaryStatus()).revision, "v1");
@@ -475,7 +475,10 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal((await dictionaryStatus()).revision, "v1");
 
   const unsafeRecords = structuredClone(records);
-  (unsafeRecords[1] as typeof records[1]).senses[0].glosses.eng = ["<script>alert(1)</script>"];
+  // Name the one shape this reaches into, rather than indexing into the union of
+  // every record type in the fixture (a header has no senses).
+  const term = unsafeRecords[1] as { senses: Array<{ glosses: { eng: string[] } }> };
+  term.senses[0]!.glosses.eng = ["<script>alert(1)</script>"];
   archive = gzipSync(unsafeRecords.map((record) => JSON.stringify(record)).join("\n") + "\n");
   const unsafeChecksum = createHash("sha256").update(archive).digest("hex");
   current = { ...manifest("v-unsafe", unsafeChecksum), bytes: archive.byteLength };
@@ -487,16 +490,16 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   // the privileged background fetch applies: our bucket, over https, or nothing.
   archive = compressed;
   const offSiteAudio = manifest("v-external-audio");
-  current = { ...offSiteAudio, audio: { ...offSiteAudio.audio, baseUrl: "https://example.com/audio" } };
+  current = { ...offSiteAudio, audio: { ...offSiteAudio.audio, baseUrl: "https://example.com/audio" } } as unknown as typeof current; // deliberately off-site
   await assert.rejects(installDictionary("https://api.test"), /manifest is invalid/i);
   assert.equal((await dictionaryStatus()).revision, "v1");
 
   archive = compressed;
-  current = { ...manifest("v-future"), minimumExtensionVersion: "9.0.0" };
+  current = { ...manifest("v-future"), minimumExtensionVersion: "9.0.0" } as unknown as typeof current; // deliberately too new
   await assert.rejects(installDictionary("https://api.test"), /9\.0\.0 or newer/i);
   assert.equal((await dictionaryStatus()).revision, "v1");
 
-  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+  globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
     init?.signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true });
   })) as typeof fetch;
   const pending = installDictionary("https://api.test");
@@ -510,7 +513,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   archive = compressed;
   globalThis.fetch = (async (input: string | URL | Request) => String(input).endsWith("/current")
     ? new Response(JSON.stringify(current), { headers: { "Content-Type": "application/json" } })
-    : new Response(archive, { headers: { "Content-Type": "application/gzip" } })) as typeof fetch;
+    : new Response(new Uint8Array(archive), { headers: { "Content-Type": "application/gzip" } })) as typeof fetch;
   await checkDictionaryUpdate("https://api.test");
   assert.equal((await dictionaryStatus()).revision, "v3");
 });
