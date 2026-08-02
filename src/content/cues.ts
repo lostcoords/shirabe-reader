@@ -1,19 +1,19 @@
 // When a subtitle line started and ended.
 //
-// Everything mined off a video needs this — the clip to record, the moment to
-// deep-link back to — and getting it wrong is what makes an audio clip play the
+// Everything mined off a video needs this: the clip to record, the moment to
+// deep-link back to: and getting it wrong is what makes an audio clip play the
 // wrong sentence. Two sources of truth, in order of preference:
 //
-//   observed — watch the caption overlay mutate and read the playhead. Always
+//   observed: watch the caption overlay mutate and read the playhead. Always
 //              available, never exact: the caption is drawn a beat after the
 //              words, our parse debounce lands on top, and a line's end isn't
 //              knowable until the next line replaces it.
-//   refined  — the player's own cue list, where a surface has one. YouTube
+//   refined: the player's own cue list, where a surface has one. YouTube
 //              fetches a timed-text track; asbplayer parsed a subtitle file;
 //              Netflix has TTML. Exact, and known before the line is on screen.
 //
 // A surface registers a CueSource and refines the observation. Returning null
-// means "can't say", and the observation stands — so a source that breaks
+// means "can't say", and the observation stands: so a source that breaks
 // against a site redesign degrades to the old behaviour instead of failing.
 
 export type Cue = {
@@ -30,7 +30,7 @@ export type Cue = {
 export interface CueSource {
   /** Sharpen an observed cue, or null when this source can't place it. */
   refine(observed: Cue, element: HTMLElement): Cue | null;
-  /** The whole track, when there is one — a sentence can span several cues. */
+  /** The whole track, when there is one: a sentence can span several cues. */
   list?(): Cue[];
   stop(): void;
 }
@@ -40,7 +40,7 @@ let open: { element: HTMLElement; startMs: number; jumped: boolean; detach: () =
 
 // Every cue we watched go by, most recent last. A refined source has the whole
 // track and doesn't need this; without one it is the only way to know a line had
-// a line before it — which is what a clip needs to cover a whole sentence.
+// a line before it: which is what a clip needs to cover a whole sentence.
 const timeline: Cue[] = [];
 const TIMELINE_MAX = 40;
 
@@ -58,7 +58,7 @@ export function cueFor(element: HTMLElement, video: HTMLVideoElement, sentence?:
   if (!observed) return null;
   const anchor = source?.refine(observed, element) ?? observed;
   if (!sentence) return anchor;
-  // A source with no track (YouTube's, most days) must not shadow the timeline —
+  // A source with no track (YouTube's, most days) must not shadow the timeline :
   // an empty list would leave every clip pinned to the single line it started on.
   const known = source?.list?.();
   return spanCovering(known?.length ? known : timeline, anchor, sentence);
@@ -66,7 +66,7 @@ export function cueFor(element: HTMLElement, video: HTMLVideoElement, sentence?:
 
 // ── Sentence spans ───────────────────────────────────────────────────────────
 
-// The card already says which sentence was mined — `sentenceAt` picked it out of
+// The card already says which sentence was mined: `sentenceAt` picked it out of
 // the caption when the word was wrapped. The clip is the audio of exactly that
 // text, so the two can never disagree, and no rule about punctuation, particles
 // or pauses has to stand in for a decision that was already made.
@@ -99,7 +99,7 @@ export function spanCovering(list: Cue[], anchor: Cue, sentence: string): Cue {
   // line the word sits on is still the safest thing to record.
   if (!spans().includes(target)) return anchor;
 
-  // Reaching outward overshoots — a sentence that ran forwards is found only
+  // Reaching outward overshoots: a sentence that ran forwards is found only
   // after stepping back past lines it never included. Shrink to the smallest
   // window that still holds it, or the clip carries a line the card doesn't.
   while (first < last && compact(cues.slice(first + 1, last + 1).map((cue) => cue.text).join("")).includes(target)) first += 1;
@@ -127,7 +127,7 @@ const compact = (text: string): string => text.replace(/\s+/g, "");
 /**
  * Stamp when a cue *first appeared*, which is not when we last parsed it.
  * Auto-generated captions roll a line in word by word, and every added word is
- * another mutation, another parse, another "now" — re-stamping would walk the
+ * another mutation, another parse, another "now": re-stamping would walk the
  * start of the line forward until it pointed at the end of it, and audio mined
  * from that cue would replay whatever came next.
  *
@@ -146,7 +146,7 @@ export function stampCueStart(element: HTMLElement, timestamp: string | null): v
 /**
  * When the line already on screen is the line in front of us.
  *
- * A player may rebuild its caption nodes mid-sentence — same words, a brand new
+ * A player may rebuild its caption nodes mid-sentence: same words, a brand new
  * element carrying no stamp of ours. Stamping "now" moves the line's start to
  * wherever playback had reached, so a clip of it opens two thirds of the way
  * through the sentence. The words say it is the same line; take the start we
@@ -167,8 +167,8 @@ function startOfSameLine(text: string): number | undefined {
 
 /**
  * A cue's own words, without the furigana we put on top of them. Plain
- * `textContent` splices every reading into the line — 新しい becomes あたらしい新しい
- * — which breaks both the "is this line still growing?" test and any attempt to
+ * `textContent` splices every reading into the line: 新しい becomes あたらしい新しい
+ * : which breaks both the "is this line still growing?" test and any attempt to
  * match the line against a player's cue list.
  */
 export function cueText(element: HTMLElement): string {
@@ -191,7 +191,7 @@ export function noteCue(element: HTMLElement, video: HTMLVideoElement | null): v
   const startMs = Number(element.dataset.mediaTimestamp);
   if (!Number.isFinite(startMs)) return;
   if (open?.startMs === startMs) {
-    open.element = element; // same line, rebuilt node — follow it
+    open.element = element; // same line, rebuilt node: follow it
     return;
   }
 
@@ -210,7 +210,7 @@ export function noteCue(element: HTMLElement, video: HTMLVideoElement | null): v
 }
 
 /**
- * The caption window emptied. That usually means the line finished — the one
+ * The caption window emptied. That usually means the line finished: the one
  * moment its real end is observable, rather than inheriting the next line's
  * arrival and the silence in between.
  *
@@ -239,7 +239,7 @@ let clearing: number | undefined;
 /**
  * A cue's final text. Lines are stamped as they appear and auto-captions grow
  * afterwards, so what the timeline recorded at stamp time is a prefix of what
- * the learner actually read — and the sentence has to be matched against the
+ * the learner actually read: and the sentence has to be matched against the
  * whole line.
  */
 export function noteCueParsed(element: HTMLElement): void {

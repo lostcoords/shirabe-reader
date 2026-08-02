@@ -4,7 +4,7 @@ import type { Request } from "../src/common/messages.js";
 
 // A saved word has to arrive at /v1 with the entry it came from. The pack cites
 // an entry as one handle ("jmdict:2517580"); the API links a card by the pair
-// (dictionarySlug, sourceId). Getting that translation wrong is silent — the
+// (dictionarySlug, sourceId). Getting that translation wrong is silent: the
 // save still succeeds, it just lands an orphan card (docs/specs/srs.md §1.1),
 // which is what every Reader card used to be.
 
@@ -32,7 +32,7 @@ test("a save posts the entry as the (dictionarySlug, sourceId) pair /v1 links by
 
   assert.equal(body.dictionarySlug, "jmdict");
   assert.equal(body.sourceId, "1207590");
-  assert.equal(body.entry, undefined, "the packed handle is a client shape — the wire takes the pair");
+  assert.equal(body.entry, undefined, "the packed handle is a client shape: the wire takes the pair");
 });
 
 test("a source id may carry colons of its own; the slug never does", async () => {
@@ -43,7 +43,7 @@ test("a source id may carry colons of its own; the slug never does", async () =>
 });
 
 test("a quick save links the card even when the word's popup never opened", async () => {
-  // The popup stamps the entry it resolved — but a shortcut fires on the HOVERED
+  // The popup stamps the entry it resolved. But a shortcut fires on the HOVERED
   // word, and in modifier mode nothing looked it up. Keyboard mining is the fast
   // path through a page, so it cannot be the one that lands orphans.
   const { Window } = await import("happy-dom");
@@ -86,6 +86,6 @@ test("a word with no entry saves as free text rather than half a handle", async 
     const body = await postedBody({ lemma: "変わる", entry });
     assert.equal(body.dictionarySlug, undefined, `"${entry}" is not a handle`);
     assert.equal(body.sourceId, undefined, `"${entry}" is not a handle`);
-    assert.equal(body.lemma, "変わる", "the save still goes through — an orphan card beats no card");
+    assert.equal(body.lemma, "変わる", "the save still goes through: an orphan card beats no card");
   }
 });

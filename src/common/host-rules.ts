@@ -1,6 +1,6 @@
 import { ext } from "./browser.js";
 
-// A per-site parsing rule — the trimmed-for-Shirabe version of JitenReader's
+// A per-site parsing rule: the trimmed-for-Shirabe version of JitenReader's
 // HostMeta. `host` patterns use "*" globs (Chrome match-pattern style). Built-in
 // rules carry the smart bits (a `parse` root, whitespace folding for OCR) so
 // dedicated reader sites just work; user allow/deny lists compile into bare
@@ -46,7 +46,7 @@ export const BUILTIN_RULES: HostRule[] = [
   // jisho.org writes furigana as positioned spans rather than native `ruby`, so
   // a tree walker reads every kana of the reading as ordinary page text: the zen
   // bar came out tokenized twice over (きのう beside 昨日), and the kana jisho
-  // keeps only as invisible spacers — hidden with `color: white`, not removed —
+  // keeps only as invisible spacers: hidden with `color: white`, not removed :
   // reappeared wearing our own token colour and part-of-speech underline.
   { host: ["*://jisho.org/*", "*://*.jisho.org/*"], filter: ".furigana, .japanese_word__furigana_wrapper" },
   // ── Video captions (dedicated parser) ──
@@ -61,7 +61,7 @@ const REMOTE_KEY = "hostRules"; // storage cache of server-refreshed rules
 const REMOTE_VERSION_KEY = "hostRulesVersion";
 
 // Match patterns, matched per component the way the browsers do it: scheme, then
-// host, then path. Compiling the whole pattern to one regex does not work — the
+// host, then path. Compiling the whole pattern to one regex does not work: the
 // leading "*" of "*://" becomes ".*", which swallows any prefix and defeats the
 // anchor, so "*://example.com/*" matched every URL that merely *contained*
 // "://example.com/" (a redirect target, a share link, a search result).
@@ -125,7 +125,7 @@ export function resolveHostMode(
 ): HostResolution {
   // The Shirabe this reader is connected to is never a reading surface. The
   // built-in off rule covers the public hosts it was built with, but the API
-  // base is overridable at runtime (a dev server, a self-hosted instance) — and
+  // base is overridable at runtime (a dev server, a self-hosted instance): and
   // a release build has never heard of those, so it would happily parse the web
   // app's own Japanese and rewrite the DOM under it.
   if (opts.apiBase && sameOrigin(url, opts.apiBase)) return { mode: "off" };
@@ -150,7 +150,7 @@ function sameOrigin(a: string, b: string): boolean {
 }
 
 // The domain we'd add to the auto/off list for a "do this on this whole site"
-// toggle — the registrable host with a wildcard path, e.g. "*://ja.wikipedia.org/*".
+// toggle: the registrable host with a wildcard path, e.g. "*://ja.wikipedia.org/*".
 export function siteScopeFor(url: string): string {
   try {
     return `*://${new URL(url).hostname}/*`;
@@ -182,6 +182,6 @@ export async function refreshRemoteHostRules(apiBase: string): Promise<void> {
       await ext.storage.local.set({ [REMOTE_KEY]: data.rules, [REMOTE_VERSION_KEY]: data.version });
     }
   } catch {
-    // Offline or endpoint absent — keep whatever is cached / the built-ins.
+    // Offline or endpoint absent: keep whatever is cached / the built-ins.
   }
 }

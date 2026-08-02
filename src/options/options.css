@@ -1,4 +1,4 @@
-/* Same system-driven light-dark tokens as the action popup — settings page
+/* Same system-driven light-dark tokens as the action popup: settings page
    tracks the OS without a separate preference control. */
 :root {
   color-scheme: light dark;

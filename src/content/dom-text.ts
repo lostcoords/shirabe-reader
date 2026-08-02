@@ -6,7 +6,7 @@
 // can still match, so long compounds / expressions aren't truncated mid-word.
 const BLOCK_SELECTOR = "p,li,td,th,dd,dt,h1,h2,h3,h4,h5,h6,blockquote,figcaption,article,section,main,div";
 
-// Text nodes the scanner reads: page prose only — ruby readings (rt/rp), form
+// Text nodes the scanner reads: page prose only: ruby readings (rt/rp), form
 // controls, editables, and Shirabe's own UI are excluded. Shared by the window
 // builder and the highlight range so both see the same text.
 function acceptTextNode(candidate: Node): number {
@@ -25,7 +25,7 @@ export function logicalTextAt(node: Text, offset: number, maxChars = 32): { text
   if (index < 0) return { text: [...node.data.slice(offset)].slice(0, maxChars).join(""), context: node.data, contextOffset: offset };
 
   // Join the text nodes, but insert a newline wherever a block-level boundary
-  // separates two of them — otherwise the last word of one paragraph/list item
+  // separates two of them: otherwise the last word of one paragraph/list item
   // glues onto the first of the next (「…です猫が…」), corrupting both the lookup
   // window and sentence detection. A newline is exactly what `sentenceAround`
   // treats as a boundary. Nodes inside a single block (inline links/emphasis/

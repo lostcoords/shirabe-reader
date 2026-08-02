@@ -13,7 +13,7 @@ const identity: FaroIdentity = {
 test("scrub caps length and hostOnly keeps only the host", () => {
   assert.equal(scrub("x".repeat(1000)).length, MAX_MESSAGE);
   assert.equal(scrub(null), "");
-  // Never the path/query — only the registrable host survives.
+  // Never the path/query: only the registrable host survives.
   assert.equal(hostOnly("https://ja.wikipedia.org/wiki/秘密のページ?q=読んでいる"), "ja.wikipedia.org");
   assert.equal(hostOnly("not a url"), undefined);
 });
@@ -80,7 +80,7 @@ test("named failure counters are wired at their choke points", () => {
   assert.match(background, /status >= 500/);
   assert.match(background, /captureEvent\("api_error"/);
   // A 4xx the server returned on purpose (needs Pro, missing scope, not
-  // connected) is a state, not a fault — reporting it as an exception buries
+  // connected) is a state, not a fault: reporting it as an exception buries
   // the real ones and tells us nothing we didn't design.
   assert.match(background, /status >= 400 && api\.status < 500/);
   // Core-functionality + feature counters at their own sites.

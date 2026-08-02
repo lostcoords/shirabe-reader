@@ -13,7 +13,7 @@ export type StudyDetails = {
   state: WordState;
   decks: DeckMembership[];
   intervals?: IntervalPreviews;
-  /** Shirabe card id — open `/study/cards?card_id=` to view card + mined context. */
+  /** Shirabe card id: open `/study/cards?card_id=` to view card + mined context. */
   cardId?: number;
   /**
    * How many cards this word holds. A word can carry one per meaning, so `> 1`
@@ -48,7 +48,7 @@ export type SentenceCapture = {
   mediaEndMs?: number;
   targetStart?: number;
   targetEnd?: number;
-  /** This line's own screenshot / clip — a written sentence can carry both. */
+  /** This line's own screenshot / clip: a written sentence can carry both. */
   imageDataUrl?: string;
   audioDataUrl?: string;
 };
@@ -75,7 +75,7 @@ export type Status = {
 };
 
 // Content scripts and the action popup never touch the network or storage
-// directly — the background worker owns the API key, the device-login
+// directly: the background worker owns the API key, the device-login
 // handshake, and rate limiting. Everything goes through these.
 export type Request =
   // `requestId` lets the content script cancel a batch whose blocks all scrolled
@@ -155,8 +155,8 @@ export type Response =
   | { ok: true; type: "status"; status: Status }
   | Failure;
 
-// A failed request. `error` is the sentence a *person* reads — it goes straight
-// into the popup — while `detail` carries the exception dump for the options
+// A failed request. `error` is the sentence a *person* reads: it goes straight
+// into the popup: while `detail` carries the exception dump for the options
 // page and the console. They were one field, which is how a stack trace ended
 // up rendered under a Save button. `status`/`code` come from the API response
 // so callers can branch on the answer instead of pattern-matching prose.

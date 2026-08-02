@@ -3,12 +3,12 @@ import type { ParsedToken, WordState } from "../common/types.js";
 // Every interactive word renders into a `.sb-word` span and registers here,
 // keyed by lemma, so a single review can recolour *every* occurrence on the
 // page at once (jpd-breader's reverseIndex idea, kept tiny). Sets are pruned
-// lazily — detached nodes are skipped on recolour, not tracked for removal.
+// lazily: detached nodes are skipped on recolour, not tracked for removal.
 const byLemma = new Map<string, Set<HTMLElement>>();
 
 const STATE_CLASS = /sb-(none|new|learning|due|retired)/;
 
-// Furigana only earns its place over words that actually contain kanji — a
+// Furigana only earns its place over words that actually contain kanji: a
 // kana-only surface (この, では, アクセント) reads its own reading, so ruby there
 // is just noise. 々〇〻 count as kanji so 人々 and the like keep their gloss.
 const KANJI = /[\p{Script=Han}々〆〇〻]/u;
@@ -21,7 +21,7 @@ export type FuriganaSegment = { text: string; ruby?: string };
 // たべる floating over the whole word). Each surface run of kanji claims the
 // stretch of reading up to where the following kana run reappears; kana runs
 // pass through unchanged. If the reading can't be aligned (irregular/jukujikun
-// readings, unexpected katakana), it falls back to one whole-word ruby — still
+// readings, unexpected katakana), it falls back to one whole-word ruby: still
 // correct, just not split. Katakana is folded to hiragana only for matching.
 export function furiganaSegments(surface: string, reading: string): FuriganaSegment[] {
   const whole: FuriganaSegment[] = [{ text: surface, ruby: reading }];
@@ -48,7 +48,7 @@ export function furiganaSegments(surface: string, reading: string): FuriganaSegm
       if (at === -1) return whole;
       end = at;
     }
-    if (end <= cursor) return whole; // a kanji with no reading of its own — bail
+    if (end <= cursor) return whole; // a kanji with no reading of its own: bail
     segments.push({ text: run.text, ruby: reading.slice(cursor, end) });
     cursor = end;
   }
@@ -56,7 +56,7 @@ export function furiganaSegments(surface: string, reading: string): FuriganaSegm
   // The surface is fully aligned. Any leftover reading is the inflectional
   // okurigana the dictionary form carries but the inflected surface dropped
   // (考える→考え: token reading かんがえる, surface reading only かんがえ). It can only
-  // trail a final kana run — a trailing kanji run already consumes to the end —
+  // trail a final kana run: a trailing kanji run already consumes to the end :
   // so keep furigana over the kanji and let the unused tail (る) fall away,
   // instead of smearing the whole dictionary reading over the word.
   return segments;
@@ -97,7 +97,7 @@ export function renderToken(token: ParsedToken, showFurigana: boolean): Node {
   if (showFurigana && token.reading && hasKanji(token.surface)) {
     const reading = surfaceReading(token.surface, token.lemma, token.reading);
     if (reading) appendFurigana(word, token.surface, reading);
-    else word.textContent = token.surface; // irregular reading we can't align — plain
+    else word.textContent = token.surface; // irregular reading we can't align: plain
   } else {
     word.textContent = token.surface;
   }
@@ -107,7 +107,7 @@ export function renderToken(token: ParsedToken, showFurigana: boolean): Node {
 }
 
 // The kanji stem of 来る/為る changes reading by conjugation (来る く, 来て き, 来ない
-// こ), so an inflected surface can't be aligned from the dictionary reading alone —
+// こ), so an inflected surface can't be aligned from the dictionary reading alone :
 // unlike every regular verb, where the stem reading is invariant.
 const IRREGULAR_STEM_LEMMAS = new Set(["来る", "來る", "為る"]);
 
@@ -116,12 +116,12 @@ const IRREGULAR_STEM_LEMMAS = new Set(["来る", "來る", "為る"]);
 // token carries the dictionary reading (授ける → さずける), but furigana must sit over
 // the on-screen surface (授けて → さずけて), or an inflected okurigana won't align and
 // the whole reading floats over the word. When the surface and the lemma share
-// their kanji stem and differ only in trailing okurigana — the ordinary verb /
-// adjective inflection — swap the dictionary okurigana for the surface's. Anything
+// their kanji stem and differ only in trailing okurigana: the ordinary verb /
+// adjective inflection: swap the dictionary okurigana for the surface's. Anything
 // else (no kanji stem, mismatched stem) keeps the dictionary reading.
 function surfaceReading(surface: string, lemma: string, reading: string): string | null {
   if (!lemma || surface === lemma) return reading;
-  if (IRREGULAR_STEM_LEMMAS.has(lemma)) return null; // 来て etc. — reading isn't derivable
+  if (IRREGULAR_STEM_LEMMAS.has(lemma)) return null; // 来て etc.: reading isn't derivable
   const stem = kanjiStem(lemma);
   if (!stem || !surface.startsWith(stem)) return reading;
   const dictOkurigana = lemma.slice(stem.length);
@@ -138,7 +138,7 @@ function kanjiStem(word: string): string {
   return last === -1 ? "" : chars.slice(0, last + 1).join("");
 }
 
-// Render `surface` into `target` with furigana over the kanji runs only — each
+// Render `surface` into `target` with furigana over the kanji runs only: each
 // kanji run gets a <ruby>, okurigana and other kana render as plain text, so the
 // reading sits where it belongs instead of floating over the whole word (食べる
 // → 食[た]べる, not たべる over 食べる). Shared with the popup's headword furigana.
@@ -167,7 +167,7 @@ export function ensureFurigana(): void {
     const surface = word.dataset.surface;
     if (!reading || !surface || !hasKanji(surface)) continue;
     const aligned = surfaceReading(surface, word.dataset.lemma ?? surface, reading);
-    if (!aligned) continue; // irregular reading — leave it as plain text
+    if (!aligned) continue; // irregular reading: leave it as plain text
     word.replaceChildren();
     appendFurigana(word, surface, aligned);
   }

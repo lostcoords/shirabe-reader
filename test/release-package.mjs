@@ -12,8 +12,8 @@ for (const target of targets) {
   const manifest = JSON.parse(await readFile(join(root, "manifest.json"), "utf8"));
   // Required hosts are first-party Shirabe origins ONLY, listed exhaustively so a
   // new one has to be added here deliberately: shirabe.org (API), cdn.shirabe.org
-  // (audio clips the background worker fetches — src/common/audio.ts), and
-  // o.shirabe.org (the RUM collector the web app also ships to —
+  // (audio clips the background worker fetches: src/common/audio.ts), and
+  // o. shirabe.org (the RUM collector the web app also ships to:
   // src/common/telemetry.ts). Page access stays optional, asserted below.
   assert.deepEqual(
     manifest.host_permissions,

@@ -12,7 +12,7 @@ import { isR2AudioUrl } from "../common/audio.js";
 import { toast } from "./toast.js";
 
 // One reused popup, shown next to whichever word the pointer (or keyboard) is
-// over. It lives in a shadow root so the host page's CSS can never reach in —
+// over. It lives in a shadow root so the host page's CSS can never reach in:
 // definitions render the same on every site. Lookups are fetched lazily (and
 // cached in the background worker).
 let host: HTMLElement | null = null;
@@ -25,7 +25,7 @@ let showTimer: number | undefined;
 let hideTimer: number | undefined;
 let token = 0; // guards against a slow lookup landing after we've moved on
 let canWrite = false; // WRITE_SRS + entitled → render mining controls
-let connected = false; // signed in at all — decides what the no-controls row offers
+let connected = false; // signed in at all: decides what the no-controls row offers
 // The current popup's sense-picker checkboxes (empty unless the word has 2–8
 // senses and the user can save). Read at save time to scope the card; ticking
 // every box (the default) saves the whole word. `sensePickWord` is the element
@@ -58,7 +58,7 @@ function pickedPositions(): number[] | undefined {
 }
 
 // The picks for `word`, but only when it's the word this popup's picker was built
-// for — so the keyboard "save" shortcut honours the checkboxes without ever
+// for: so the keyboard "save" shortcut honours the checkboxes without ever
 // applying them to a different hovered word. Whole word otherwise.
 export function picksForWord(word: HTMLElement): number[] | undefined {
   return word === sensePickWord ? pickedPositions() : undefined;
@@ -76,7 +76,7 @@ function element(): HTMLElement {
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-label", "Shirabe dictionary");
 
-  // Permanent chrome — one top-right row of back, forward, close. It survives
+  // Permanent chrome: one top-right row of back, forward, close. It survives
   // content swaps, so every state (loading, error, definition) keeps an explicit
   // close (not only hover-away / click-outside) and the history arrows never
   // move as the content under them changes.
@@ -121,8 +121,8 @@ function element(): HTMLElement {
   return content;
 }
 
-// The popup stays open while the pointer is over the *safe zone* — the hovered
-// word OR the popup itself (across the shadow boundary) — and closes shortly
+// The popup stays open while the pointer is over the *safe zone*: the hovered
+// word OR the popup itself (across the shadow boundary). And closes shortly
 // after the pointer leaves both, or immediately on a click elsewhere. Tracking
 // the whole zone (rather than the popup's own mouseenter/leave) means a popup
 // that repositions when its content loads no longer vanishes under the pointer.
@@ -133,7 +133,7 @@ function installHoverGuards(): void {
 
   window.addEventListener("resize", scheduleReposition);
   // Capture phase so scrolling inside the page's own containers counts, and only
-  // for captions — see `scheduleReposition`.
+  // for captions: see `scheduleReposition`.
   window.addEventListener(
     "scroll",
     () => {
@@ -226,7 +226,7 @@ export function scheduleHide(): void {
 let pinned = false;
 
 // A page-level highlight of the matched span for raw-text scans, via the CSS
-// Custom Highlight API — it never touches the user's real text selection. Styled
+// Custom Highlight API: it never touches the user's real text selection. Styled
 // by `::highlight(sb-scan)` in content.css; a no-op where the API is unsupported.
 const SCAN_HIGHLIGHT = "sb-scan";
 function highlightScan(range: Range | null): void {
@@ -243,14 +243,14 @@ function hide(): void {
   currentTarget = null;
   // Retire the in-flight lookup too. Without this its `mine !== token` guard
   // still passes, and a lookup the user already dismissed goes on to register a
-  // scan highlight — a highlighted span on the page with no card above it.
+  // scan highlight: a highlighted span on the page with no card above it.
   token++;
   highlightScan(null);
 }
 
 // Re-anchor when the viewport changes under an open card. Ordinary page scrolling
-// needs nothing — the host is positioned in document coordinates, so it travels
-// with the word — but a subtitle overlay is `position: fixed`: the caption stays
+// needs nothing: the host is positioned in document coordinates, so it travels
+// with the word. But a subtitle overlay is `position: fixed`: the caption stays
 // put while the page moves, leaving the card stranded. A resize invalidates every
 // placement decision, caption or not. Coalesced onto one frame so a scroll burst
 // costs a single measure.
@@ -313,7 +313,7 @@ async function showTarget(target: PopupTarget): Promise<void> {
   el.replaceChildren(loadingRow(target.query));
   position(target);
   // The visibility class belongs on the dialog shell, not the content wrapper
-  // `element()` returns — `.sb-popup.sb-visible` is what the stylesheet, `hide`,
+  // `element()` returns: `.sb-popup.sb-visible` is what the stylesheet, `hide`,
   // and `visible()` all key off.
   box?.classList.add("sb-visible");
 
@@ -407,7 +407,7 @@ async function retryWhenDictionaryReady(target: PopupTarget, mine: number): Prom
   }
 }
 
-// Caption line/cue boxes to clear when a subtitle word is looked up — the popup
+// Caption line/cue boxes to clear when a subtitle word is looked up: the popup
 // must never cover the rest of the caption, only sit beside or clear of it.
 const CAPTION_SELECTOR = [
   ".caption-window", ".ytp-caption-window-container", // YouTube
@@ -425,7 +425,7 @@ function position(target: PopupTarget): void {
   // Parked at 0,0 the host's own rect tells us where its containing block starts
   // in viewport coordinates, so the offsets below need no assumption about what
   // that block is. Adding `scrollX/scrollY` instead only worked while `<body>`
-  // was static and untransformed — a site with `body { position: relative }`
+  // was static and untransformed: a site with `body { position: relative }`
   // pushed the card off by the body's origin.
   const { width, height, left: originLeft, top: originTop } = host.getBoundingClientRect();
 
@@ -440,7 +440,7 @@ function position(target: PopupTarget): void {
     vertical: isVerticalWriting(anchorElement(target)),
   });
 
-  // The cap belongs on `.sb-popup` inside the shadow root — it owns the scrollable
+  // The cap belongs on `.sb-popup` inside the shadow root: it owns the scrollable
   // body. Capping the host instead would leave the card overflowing it, uncapped.
   if (place.maxHeight != null) box.style.maxHeight = `${place.maxHeight}px`;
   host.style.left = `${place.left - originLeft}px`;
@@ -449,14 +449,14 @@ function position(target: PopupTarget): void {
 }
 
 // Whether the looked-up text is laid out vertically, which flips which side of
-// the word is "in the flow". Read off the word itself — writing mode inherits
+// the word is "in the flow". Read off the word itself: writing mode inherits
 // from whatever container the page laid the text out in.
 function isVerticalWriting(el: Element | null): boolean {
   return el ? /^(vertical|sideways)/.test(getComputedStyle(el).writingMode) : false;
 }
 
 // The connected element the target actually lives in. A raw-text scan's word
-// element is detached — it never entered the page — so the scan anchor's text
+// element is detached: it never entered the page. So the scan anchor's text
 // node is what still knows which container, and which writing mode, the match
 // sits in. Without this every scan lookup on a vertical reader like ttsu would
 // be measured against `document.body` and treated as horizontal.
@@ -506,7 +506,7 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
   const badges = badgeRow(def);
   if (badges) body.append(badges);
   if (def.pitch.length && def.reading) body.append(pitchRows(def.pitch, def.reading));
-  // A picker only when the user can save and every sense is shown (2–8) — so
+  // A picker only when the user can save and every sense is shown (2–8): so
   // "all ticked" unambiguously means the whole word.
   const pickable = canWrite && def.senses.length > 1 && def.senses.length <= 8;
   if (pickable) sensePickWord = word;
@@ -522,7 +522,7 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
   return rows;
 }
 
-// Kanji chips open the site's kanji page — richer than the offline KANJIDIC
+// Kanji chips open the site's kanji page: richer than the offline KANJIDIC
 // slice, and the path we keep if the pack eventually drops kanji records.
 function kanjiStrip(headword: string, wordUrl: string): HTMLElement | null {
   const characters = [...new Set([...headword].filter((character) => /\p{Script=Han}/u.test(character)))];
@@ -549,7 +549,7 @@ function kanjiStrip(headword: string, wordUrl: string): HTMLElement | null {
 // the case worth getting right: the reader isn't missing a connection, they're
 // missing the subscription, and telling them to "connect" an account they're
 // already signed into is both wrong and a dead end. Say what's missing, link it.
-// Exported for the test that renders it — it's the whole free-reader experience
+// Exported for the test that renders it: it's the whole free-reader experience
 // of this card, and asserting on the source text instead was never proof.
 export function studyUnavailable(): HTMLElement {
   const row = document.createElement("div");
@@ -574,14 +574,14 @@ function headRow(def: Definition): Node {
   link.target = "_blank";
   link.rel = "noopener";
 
-  // Furigana sits over the headword when it carries kanji — the reading then
+  // Furigana sits over the headword when it carries kanji: the reading then
   // reads in place, so the separate reading chip beside it would be redundant.
   // A kana-only headword keeps the plain text, and shows the reading chip only
-  // when it actually adds something — for この the reading IS この, so drop it.
+  // when it actually adds something: for この the reading IS この, so drop it.
   if (def.reading && hasKanji(def.headword)) {
     // Furigana sits over each kanji run only; okurigana/kana render plain. The
     // headword is always the dictionary form, so its reading needs no inflection
-    // adjustment (unlike a token surface) — pass it straight through.
+    // adjustment (unlike a token surface): pass it straight through.
     appendFurigana(link, def.headword, def.reading);
     head.append(link);
   } else {
@@ -599,7 +599,7 @@ function headRow(def: Definition): Node {
 }
 
 // The arrows sit in the shell's chrome row rather than in this row, so nothing
-// rebuilds them — every move through the history re-checks which ends are live.
+// rebuilds them: every move through the history re-checks which ends are live.
 function refreshHistoryNav(): void {
   historyBack?.toggleAttribute("disabled", historyIndex <= 0);
   historyForward?.toggleAttribute("disabled", historyIndex >= lookupHistory.length - 1);
@@ -663,7 +663,7 @@ function badgeRow(def: Definition): Node | null {
   return row;
 }
 
-// Patterns sit in a row that wraps, like the site's — two short accents fit on
+// Patterns sit in a row that wraps, like the site's: two short accents fit on
 // one line, where a stack spent a graph's height on each. Past this many, the
 // rest wait behind a "+N": a word with four accents is rare enough that it must
 // not cost every other word the senses being pushed out of the card.
@@ -715,7 +715,7 @@ function pitchGraph(reading: string, downstep: number): SVGSVGElement {
   }
   const n = morae.length;
   const high = (i: number) => (downstep === 0 ? i > 0 : downstep === 1 ? i === 0 : i > 0 && i < downstep);
-  // A column per mora, widened for the multi-character ones — きゃ and しょ collide
+  // A column per mora, widened for the multi-character ones: きゃ and しょ collide
   // under a fixed step. Same rule as the site's component.
   const centers: number[] = [];
   let edge = 8;
@@ -754,8 +754,8 @@ function pitchGraph(reading: string, downstep: number): SVGSVGElement {
 }
 
 // Numbered senses: source label (lang · dict), POS chips, misc/field/dialect
-// tags, then glosses — the same anatomy as a web meaning.
-// Which meanings this word already has a card for — "all" when a whole-word card
+// tags, then glosses: the same anatomy as a web meaning.
+// Which meanings this word already has a card for: "all" when a whole-word card
 // covers every one of them. Stamped by applyStudyDetails from the word's state.
 function coveredSenses(word: HTMLElement): Set<number> | "all" {
   const raw = word.dataset.savedSenses;
@@ -784,7 +784,7 @@ function sensesList(senses: Sense[], pickable = false, covered: Set<number> | "a
       box.checked = true;
       box.className = "sb-sense-pick";
       box.dataset.position = String(sense.position);
-      // Reference the gloss, not a sense number — the picker hides the list's
+      // Reference the gloss, not a sense number: the picker hides the list's
       // ordinals, so a number here would have no visible counterpart.
       box.setAttribute("aria-label", `Include "${sense.glosses.join("; ")}" when saving`);
       sensePicks.push(box);
@@ -849,7 +849,7 @@ async function playAudio(url: string): Promise<void> {
 
 // Mining controls, gated by whether the word is already a card. An untracked word
 // (state "none") offers Save + Known; a saved one offers Manage, the same control
-// the site's dictionary results carry. Reviewing is not here — see
+// the site's dictionary results carry. Reviewing is not here: see
 // REVIEW_IN_READER. Each action recolours every occurrence and surfaces any error
 // (e.g. the Pro card cap) inline rather than pretend.
 function actions(word: HTMLElement, def: Definition | null = null): HTMLElement {
@@ -859,7 +859,7 @@ function actions(word: HTMLElement, def: Definition | null = null): HTMLElement 
   return wrap;
 }
 
-// The capture form takes over the action row in place — the card is already the
+// The capture form takes over the action row in place: the card is already the
 // right surface, and a second floating panel over a hover card is one too many.
 // It holds the popup open while it is up, because typing moves the pointer away.
 async function openCardForm(word: HTMLElement, wrap: HTMLElement, def: Definition): Promise<void> {
@@ -936,7 +936,7 @@ function intervalPreviews(word: HTMLElement): { again: string; hard: string; goo
 
 function cardLink(word: HTMLElement): HTMLAnchorElement {
   const link = document.createElement("a");
-  // Same row / weight as Known — solid accent (site primary). "Manage" rather
+  // Same row / weight as Known: solid accent (site primary). "Manage" rather
   // than "Open card" to match the site's dictionary result: one door to the card,
   // its deck, and dropping it, instead of a menu rebuilt inside a hover popup.
   link.className = "sb-btn sb-btn-open";
@@ -995,7 +995,7 @@ async function run(word: HTMLElement, wrap: HTMLElement, action: () => Promise<O
   const note = wrap.querySelector<HTMLElement>(".sb-feedback");
   if (note) {
     note.textContent = message;
-    // "Needs Pro" isn't a red failure — it's the one refusal with somewhere to
+    // "Needs Pro" isn't a red failure: it's the one refusal with somewhere to
     // go, so it reads as an offer and carries the link rather than a dead end.
     note.classList.toggle("sb-error", !ok && !proRequired);
     note.classList.toggle("sb-upgrade", !!proRequired);
@@ -1071,7 +1071,7 @@ const CSS = `
   --sb-outline: light-dark(#e5e7eb, oklch(92% 0.02 285.7 / 0.14));
   --sb-outline-strong: light-dark(#d1d5db, oklch(92% 0.02 285.7 / 0.22));
   --sb-divider: light-dark(#f3f4f6, oklch(92% 0.02 285.7 / 0.1));
-  /* Site primary (sky) — pitch, readings, Save, Open card, links. Same tokens
+  /* Site primary (sky): pitch, readings, Save, Open card, links. Same tokens
      as shirabe.org --primary so the popup never reads purple. */
   --sb-accent: light-dark(#0369a1, oklch(72% 0.15 245));
   --sb-accent-hover: light-dark(#025a83, oklch(80% 0.13 245));
@@ -1123,7 +1123,7 @@ const CSS = `
   flex: 1 1 auto;
 }
 
-/* Back, forward, close — one row in the top-right, outside content swaps. Its
+/* Back, forward, close: one row in the top-right, outside content swaps. Its
    width is the gutter every first content row keeps clear. */
 .sb-chrome {
   position: absolute;
@@ -1256,7 +1256,7 @@ const CSS = `
 .sb-extra .sb-btn { flex: 1; }
 
 /* The capture form (card-form.ts), in place of the action row. Same tokens as
-   the rest of the card — it is the same surface, not a dialog over it. */
+   the rest of the card: it is the same surface, not a dialog over it. */
 .sb-form { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 .sb-field { display: flex; flex-direction: column; gap: 4px; }
 .sb-field-label { color: var(--sb-ink-muted); font-size: 11px; font-weight: 600; }
@@ -1309,7 +1309,7 @@ const CSS = `
 .sb-btn-save { background: var(--sb-accent); } .sb-btn-save:hover { background: var(--sb-accent-hover); }
 .sb-btn-known { background: var(--sb-known-btn); } .sb-btn-known:hover { background: var(--sb-known-btn-hover); }
 .sb-btn-known kbd, .sb-btn-save kbd { background: rgba(255, 255, 255, 0.22); }
-/* Solid accent — pairs with Known in .sb-extra. */
+/* Solid accent: pairs with Known in .sb-extra. */
 .sb-btn-open {
   background: var(--sb-accent);
   color: var(--sb-on-solid);

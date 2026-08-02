@@ -12,7 +12,7 @@ export type ParsedToken = {
   length: number;
   surface: string;
   reading: string | null; // hiragana reading, or null when no furigana needed
-  lemma: string; // dictionary form — what we look up / save
+  lemma: string; // dictionary form: what we look up / save
   pos: string; // short POS label: "noun", "verb", "prt", …
   content: boolean; // true for meaning-bearing words (not particles/punctuation)
   state: WordState;
@@ -26,12 +26,12 @@ export type PitchPattern = { downstep: number; audioUrl: string | null };
 // One dictionary sense, mirroring how shirabe.org renders a meaning: a source
 // label ("Español · JMdict"), POS chips, misc/field/dialect tags, and glosses.
 export type Sense = {
-  /** 0-based sense position in the entry — sent back as `sensePositions` to scope a save. */
+  /** 0-based sense position in the entry: sent back as `sensePositions` to scope a save. */
   position: number;
   source: string;
-  /** Learner-facing labels ("Godan verb") — what the popup prints. */
+  /** Learner-facing labels ("Godan verb"): what the popup prints. */
   partsOfSpeech: string[];
-  /** Raw JMdict codes (v5b, adj-i, prt) — what styling and metrics match on.
+  /** Raw JMdict codes (v5b, adj-i, prt): what styling and metrics match on.
       Offline packs carry them; the API path returns entity strings only. */
   posCodes?: string[];
   tags: string[];
@@ -44,7 +44,7 @@ export type Sense = {
 // locally if that ever earns its place.
 export type Example = { japanese: string; translation: string | null };
 
-// A definition as shown in the hover popup — a faithful slice of the shirabe.org
+// A definition as shown in the hover popup: a faithful slice of the shirabe.org
 // word card. Flattened from /v1/search (which already returns all of this).
 export type Definition = {
   headword: string;

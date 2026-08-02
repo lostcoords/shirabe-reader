@@ -1,9 +1,9 @@
 // Extension telemetry, shaped for the shared Grafana Faro receiver
-// (o.shirabe.org/collect — the same collector the web app's RUM ships to).
+// (o.shirabe.org/collect: the same collector the web app's RUM ships to).
 //
 // Privacy is the hard constraint. The extension's promise is local, offline
-// lookup that sends no page text, so telemetry reports failure *shape* only —
-// error class, message, our own stack frames, versions, browser — and never
+// lookup that sends no page text, so telemetry reports failure *shape* only :
+// error class, message, our own stack frames, versions, browser: and never
 // page content: no headwords, lookups, selections, page text, or URL paths.
 // A page's registrable host is the most that may ever be attached, and only
 // when a signal genuinely needs it. Everything here is pure so it can be unit
@@ -46,16 +46,16 @@ export type ClientReport = { context: ClientContext; signals: TelemetrySignal[] 
 
 export type FaroIdentity = {
   appVersion: string;
-  environment: string; // "production" | "development" — mirrors web DEPLOYMENT_ENV
+  environment: string; // "production" | "development": mirrors web DEPLOYMENT_ENV
   sessionId: string;
   userAgent: string;
 };
 
 // Truncate any human-facing string that could carry content into a bounded,
-// safe field. Callers still must not pass page text — this is defense in depth.
+// safe field. Callers still must not pass page text: this is defense in depth.
 export const scrub = (value: unknown, max = MAX_MESSAGE): string => String(value ?? "").slice(0, max);
 
-// Keep only the registrable host of a URL — never the path or query, which can
+// Keep only the registrable host of a URL: never the path or query, which can
 // reveal what the user is reading.
 export function hostOnly(url: string | null | undefined): string | undefined {
   if (!url) return undefined;

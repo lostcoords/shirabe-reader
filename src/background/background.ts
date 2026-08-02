@@ -161,7 +161,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
             ok: true, type: "parseBatch", tokens: request.texts.map(() => []), dictionaryInstalling: true,
           };
         }
-        // A real parse failure (not the transient "not installed yet" state) —
+        // A real parse failure (not the transient "not installed yet" state) :
         // core functionality broke on this page. Count it, then report as usual.
         captureMeasurement("parse_failed", 1);
         throw error;
@@ -172,7 +172,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
     case "lookup": {
       try {
         const kind = request.kind ?? "word";
-        // A definition is whatever the installed pack says — signing in changes
+        // A definition is whatever the installed pack says: signing in changes
         // nothing about it, so the connection state is not part of the key. Words
         // the pack doesn't carry (encyclopedia entries, a personal dictionary)
         // are what the "open on shirabe.org" link is for.
@@ -202,7 +202,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 150)),
       ]);
       // Past that window nobody is left on the channel to surface a failure, and
-      // a multi-megabyte download almost always fails later than 150ms — so the
+      // a multi-megabyte download almost always fails later than 150ms: so the
       // install reports its own outcome from here on, or the counter is dead.
       void pending.then(async () => {
         lookupCache.clear();
@@ -230,7 +230,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       const { type: _type, ...options } = request;
       // No fallback capture here. The content script is the only side that knows
       // to hide our popup first and to prefer the video frame, so a grab from
-      // here is a screenshot of the popup covering the scene — worse than the no
+      // here is a screenshot of the popup covering the scene: worse than the no
       // image it replaces.
       const result = await api.save(options);
       await cacheStates({ [request.lemma]: result.state }, { [request.lemma]: result });
@@ -307,13 +307,13 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
 
 // Parsing is local, always. The server used to parse whatever the local path
 // couldn't, which meant a reader whose pack failed to install had their page
-// text silently posted to us — the one thing the privacy promise rules out —
+// text silently posted to us: the one thing the privacy promise rules out :
 // and got a second tokenizer's boundaries at that. Without a dictionary we say
 // so instead. Only lemmas leave the device, during the separate state refresh.
 const LOCAL_PARSE_CONCURRENCY = 4;
 
 // Live parse controls keyed by the content script's requestId, so a `cancelParse`
-// message can stop the worker between text nodes. Only holds in-flight requests —
+// message can stop the worker between text nodes. Only holds in-flight requests :
 // each entry is removed the moment its parse settles, so a late cancel is a no-op
 // and nothing leaks.
 const activeParses = new Map<number, { cancelled: boolean }>();
@@ -491,7 +491,7 @@ function pickStates(states: Record<string, WordState>, lemmas: string[]): Record
 }
 
 // storage.local outlives any single build, so a snapshot written by an older one
-// still deserializes — a field short of the type it claims to be. `decks` was
+// still deserializes: a field short of the type it claims to be. `decks` was
 // `memberships` on the wire not long ago, and the reader dereferences it
 // directly to label a saved word. Normalize on the way out, so no consumer has
 // to defend itself against a cache older than it is.
@@ -507,7 +507,7 @@ function pickDetails(details: Record<string, StudyDetails>, lemmas: string[]): R
 // A browser extension can receive a redirect, so instead of a user code + poll
 // we open the consent page in an auth window and let the browser hand a one-time
 // code straight back to us. We exchange it (with the PKCE verifier we kept) for a
-// scoped key — no visible code, no polling.
+// scoped key: no visible code, no polling.
 async function connect(): Promise<void> {
   const { verifier, challenge } = await pkce();
   const state = randomToken(16);
@@ -518,7 +518,7 @@ async function connect(): Promise<void> {
   const params = new URL(redirect).searchParams;
   const error = params.get("error");
   if (error) throw new ApiError(error === "access_denied" ? "You denied the request." : `Sign-in failed (${error}).`, 400);
-  if (params.get("state") !== state) throw new ApiError("Sign-in was interrupted — please try again.", 400);
+  if (params.get("state") !== state) throw new ApiError("Sign-in was interrupted: please try again.", 400);
   const code = params.get("code");
   if (!code) throw new ApiError("No authorization code was returned.", 400);
 
@@ -557,7 +557,7 @@ async function adopt(apiKey: string, scopes: string[]): Promise<void> {
 // Re-check the connected account's name + SRS entitlement against the server, so
 // a lapsed subscription (or a freshly-activated one) is reflected the next time
 // the popup opens. Best-effort: on a network hiccup the stored values stay
-// authoritative — the key still mines fine if /v1/me merely blips.
+// authoritative: the key still mines fine if /v1/me merely blips.
 const ACCOUNT_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
 
 async function refreshAccount(force = false): Promise<void> {
@@ -578,7 +578,7 @@ async function refreshAccount(force = false): Promise<void> {
     await saveConfig(next);
     config = next;
   } catch {
-    // Offline or transient — keep the last-known account/entitlement.
+    // Offline or transient: keep the last-known account/entitlement.
   }
 }
 
@@ -628,7 +628,7 @@ function errorResponse(err: unknown, requestType = "unknown"): Failure {
   return {
     ok: false,
     // What a person reads. The dump rides along as `detail` for the options
-    // page's diagnostics and the console — never straight into the popup.
+    // page's diagnostics and the console: never straight into the popup.
     error: humanMessage(err),
     detail: `request: ${requestType}\n${detail}`,
     ...(api ? { status: api.status, ...(api.code ? { code: api.code } : {}) } : {}),
@@ -735,7 +735,7 @@ class LruCache<V> {
 // ── Caches ───────────────────────────────────────────────────────────────────
 // The same word gets revisited constantly as the user scans and hovers.
 const lookupCache = new LruCache<Definition | null>(1000);
-// Pronunciation clips replayed within a session — small, content-addressed, so
+// Pronunciation clips replayed within a session: small, content-addressed, so
 // a modest ring is plenty. Each entry is a base64 data: URL of one short clip.
 const audioCache = new LruCache<string>(64);
 

@@ -12,7 +12,7 @@ export type Outcome = { ok: boolean; message: string; cardUrl?: string; proRequi
 
 // Every write shares one refusal: the server's own sentence, plus the flag that
 // turns "needs Pro" from an error into an offer. Free accounts read and look up
-// all day — saving is the line (specs/browser-extension.md §1).
+// all day: saving is the line (specs/browser-extension.md §1).
 function refusal(res: Failure): Outcome {
   return isProRequired(res)
     ? { ok: false, message: "Saving to your reviews is part of Pro.", proRequired: true }
@@ -25,13 +25,13 @@ export const GRADES: Record<Rating, string> = { 1: "Again", 2: "Hard", 3: "Good"
 // result there offers: what the word is, and a way into its card. Grading wants
 // the review history and interval previews around it to mean anything, and the
 // popup is the wrong size for that argument. `grade` and its callers stay wired
-// up behind this — flipping it back on is the whole change.
+// up behind this: flipping it back on is the whole change.
 export const REVIEW_IN_READER = false;
 const INTERVAL_KEYS = { 1: "again", 2: "hard", 3: "good", 4: "easy" } as const;
 
 // Four callers feed this: a save response, a state change, and two reads of a
 // cache that outlives the build that wrote it. `decks` is only ever a label, so
-// none of them is worth throwing over — a missing list means no deck line, not a
+// none of them is worth throwing over: a missing list means no deck line, not a
 // dead Save button. (It threw here for real: a snapshot written back when the
 // field was `memberships` deserializes without it.)
 export function applyStudyDetails(word: HTMLElement, details: StudyDetails): void {
@@ -39,12 +39,12 @@ export function applyStudyDetails(word: HTMLElement, details: StudyDetails): voi
   word.dataset.deckNames = (details.decks ?? []).map((deck) => deck.name).join(", ");
   if (details.intervals) word.dataset.intervals = JSON.stringify(details.intervals);
   else delete word.dataset.intervals;
-  // Never clear an existing cardId — a later states payload without one would
+  // Never clear an existing cardId: a later states payload without one would
   // hide the "Open in Shirabe" link after a successful save.
   if (details.cardId != null) word.dataset.cardId = String(details.cardId);
   // Which meanings are taken, for the sense picker. Written as a plain list so
   // the picker reads it without parsing JSON, and cleared when nothing is
-  // covered — a stale list would grey out a meaning you can still save.
+  // covered: a stale list would grey out a meaning you can still save.
   const covered = details.savedWholeWord ? "all" : (details.savedSensePositions ?? []).join(",");
   if (covered) word.dataset.savedSenses = covered;
   else delete word.dataset.savedSenses;
@@ -66,7 +66,7 @@ export async function cardUrlFor(cardId: number | string): Promise<string> {
 // Where Manage goes. One card: straight to it, with its mined sentence context.
 // Several (a card per meaning): the card browser filtered by the word, because
 // `cardId` names whichever card was touched last and deep-linking it would leave
-// the others unreachable — the reader would show you a word and reach one of it.
+// the others unreachable: the reader would show you a word and reach one of it.
 export async function studyUrlForWord(word: HTMLElement): Promise<string> {
   if (word.dataset.cardUrl) return word.dataset.cardUrl;
   const single = Number(word.dataset.cardCount ?? "1") <= 1;
@@ -91,7 +91,7 @@ async function rememberCard(word: HTMLElement, cardId: number | undefined): Prom
 
 const lemmaOf = (word: HTMLElement) => word.dataset.lemma ?? word.dataset.surface ?? "";
 
-// A raw-text scan hands us a detached `<span>` — it never entered the page — so
+// A raw-text scan hands us a detached `<span>`: it never entered the page: so
 // `closest()` on it finds nothing: no caption context, no source URL, no media
 // timestamp. The popup registers where the scan actually came from, so mining a
 // subtitle the caption parser hasn't wrapped yet still resolves its integration
@@ -110,7 +110,7 @@ function sentenceOf(word: HTMLElement, cue?: Cue | null): SentenceCapture | unde
   const targetStart = numberFrom(word.dataset.targetStart);
   const targetEnd = numberFrom(word.dataset.targetEnd);
   // Both ends of the line, so the card can point back at the moment it came
-  // from — and so a clip can be re-cut later without mining the word again.
+  // from: and so a clip can be re-cut later without mining the word again.
   // The cue wins where there is one: it knows the sentence may have spanned
   // several caption lines, which the element's own stamp does not.
   const mediaTimestampMs = cue?.startMs ?? numberFrom(contextOf(word)?.closest<HTMLElement>("[data-media-timestamp]")?.dataset.mediaTimestamp);
@@ -147,7 +147,7 @@ export async function captureFor(word: HTMLElement): Promise<{ sentence?: Senten
 }
 
 // The dictionary entry to link the card to. The popup stamps it on the word it
-// resolved, but a shortcut fires on whatever is HOVERED — and in modifier mode
+// resolved, but a shortcut fires on whatever is HOVERED: and in modifier mode
 // that word's popup may never have opened, so nothing looked it up. Ask then:
 // the background answers from the installed pack through its own LRU, which is
 // nothing beside the screenshot this save is already taking, and it is the whole
@@ -164,13 +164,13 @@ async function saveRequest(word: HTMLElement, sensePositions?: number[]) {
   const config = await loadConfig();
   // Snap the source image for the mined card (Shirabe chrome hidden). Sentence
   // text can be edited later in Shirabe. For a video subtitle that's the video
-  // frame — the surrounding page (comments, sidebar, browser chrome) isn't the
+  // frame: the surrounding page (comments, sidebar, browser chrome) isn't the
   // scene the learner mined.
   const video = videoFrameFor(word);
   const imageDataUrl = await captureScreenshot(video);
   // Resolved once and shared: the clip and the range the card records have to
   // describe the same span, and the range is worth storing even when the audio
-  // isn't recorded — it is what makes a clip re-cuttable later.
+  // isn't recorded: it is what makes a clip re-cuttable later.
   const cue = video ? cueOf(word, video) : null;
   // Then the line as it was spoken. After the frame, never in parallel: the
   // replay moves the playhead, so a screenshot racing it would catch some other
@@ -196,8 +196,8 @@ async function saveRequest(word: HTMLElement, sensePositions?: number[]) {
 // present (YouTube/asbplayer/Netflix), so it's the signal that a frame applies.
 function videoFrameFor(word: HTMLElement): HTMLVideoElement | null {
   if (!contextOf(word)?.closest("[data-media-timestamp]")) return null;
-  // A page can hold several players at once — YouTube keeps an ad slot and hover
-  // previews around the real one — so take the biggest one actually on screen
+  // A page can hold several players at once: YouTube keeps an ad slot and hover
+  // previews around the real one: so take the biggest one actually on screen
   // rather than whichever comes first in the DOM.
   const onScreen = [...document.querySelectorAll("video")]
     .map((video) => ({ video, rect: video.getBoundingClientRect() }))
@@ -225,7 +225,7 @@ const MAX_FRAME_EDGE = 1920;
 // Read the frame straight off the <video>. Better than cropping a tab capture on
 // every count: it's the frame's own resolution rather than however small the
 // player is on screen, it needs no host permission, and nothing painted over the
-// video — our popup included — can end up in it.
+// video: our popup included: can end up in it.
 //
 // Returns undefined when the frame can't be read: no decoded frame yet, or a
 // canvas tainted by DRM (Netflix), where drawing "works" and reading back
@@ -253,7 +253,7 @@ function drawVideoFrame(video: HTMLVideoElement): string | undefined {
   }
 }
 
-/** True when every sampled pixel is pure black — a protected or undecoded frame. */
+/** True when every sampled pixel is pure black: a protected or undecoded frame. */
 function isBlank(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement): boolean {
   // max(1) or a tiny frame divides down to a zero step and never advances.
   const step = { x: Math.max(1, Math.floor(canvas.width / 4)), y: Math.max(1, Math.floor(canvas.height / 4)) };
@@ -284,7 +284,7 @@ async function capturePageScreenshot(cropTo?: HTMLVideoElement | null): Promise<
 // captureVisibleTab returns the whole viewport at device resolution. Map the
 // element's CSS-pixel viewport rect onto that image (scale = image px per CSS
 // px, so any zoom/DPR is handled) and redraw just that region. Returns undefined
-// if the element isn't laid out or the crop can't be produced — the caller then
+// if the element isn't laid out or the crop can't be produced: the caller then
 // keeps the full-frame shot rather than losing the image entirely.
 async function cropToElement(dataUrl: string, element: HTMLElement): Promise<string | undefined> {
   const rect = element.getBoundingClientRect();
@@ -372,8 +372,8 @@ export async function markKnown(word: HTMLElement): Promise<Outcome> {
   const res = await send({ type: "setState", lemma, state: "retired" });
   if (res.ok) {
     applyStateEverywhere(lemma, res.state);
-    // The answer describes the whole word — its state, its decks, how many cards
-    // it holds — so Manage re-points itself without a second lookup.
+    // The answer describes the whole word: its state, its decks, how many cards
+    // it holds: so Manage re-points itself without a second lookup.
     applyStudyDetails(word, res.details);
     delete word.dataset.intervals;
   }

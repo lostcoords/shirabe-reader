@@ -3,13 +3,13 @@
 // The cross-engine corpus (test/tokenizer_eval/cross_engine.yml) only contains
 // differences someone thought to look for. This sweeps a large slice of REAL
 // sentences through the extension parser and diffs against the web's answer,
-// surfacing the divergences nobody predicted — ranked by how often they occur, so
+// surfacing the divergences nobody predicted: ranked by how often they occur, so
 // the frequent ones get fixed first.
 //
 //   bin/rails tokenizer_eval:export[2000]     # from the repo root: writes tmp/tokenizer_web.json
 //   node test/divergence-sweep.mjs            # from extension/: diffs and reports
 //
-// Divergence is EXPECTED — the engines segment at different granularity by
+// Divergence is EXPECTED: the engines segment at different granularity by
 // design. The signal to act on is a lemma disagreement (which forks the SRS card)
 // or a content word one engine finds and the other shatters.
 

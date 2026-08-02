@@ -1,4 +1,4 @@
-// Short learner-facing labels for JMdict annotation codes — the same ones
+// Short learner-facing labels for JMdict annotation codes: the same ones
 // shirabe.org shows on sense chips (SearchHelper#pos_label / legend terms).
 // Offline packs store raw codes (v5r, vi, uk…); the API returns full entity
 // strings. Both paths resolve through here so the popup matches the site.
@@ -70,7 +70,7 @@ const NAME_TYPE_LABELS: Record<string, string> = {
   relig: "Religion name",
 };
 
-// Misc / usage flags — legend short labels where the web has them, else the
+// Misc / usage flags: legend short labels where the web has them, else the
 // usual JMdict English gloss. Field/dialect fall through to the raw code when
 // unknown (they're usually readable already: "comp", "ksb"…).
 const MISC_LABELS: Record<string, string> = {

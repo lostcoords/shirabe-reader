@@ -6,7 +6,7 @@ import { applyStateEverywhere, renderToken } from "./word.js";
 // text that uses full-width alphanumerics (ＣＤ, Ｔシャツ) is still collected.
 const JAPANESE = /[々〇〻\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}０-９Ａ-Ｚａ-ｚｦ-ﾟ]/u;
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "CODE", "PRE"]);
-// A reading the page already supplies is an annotation, not text to tokenize —
+// A reading the page already supplies is an annotation, not text to tokenize :
 // so `ruby` is skipped whole, base and annotation together (a base we rewrote
 // would lose the <rt> aligned over it). Matched by ancestor rather than parent
 // tag: <rt><span>かんじ</span></rt> is ordinary markup, and a parent-tag test
@@ -33,7 +33,7 @@ export type ParseOptions = {
 // not already processed or inside something we shouldn't touch (form fields,
 // our own output, editable regions, or a rule's `filter` selector). Nodes with
 // no Japanese are rejected here, so a page/batch with no Japanese never reaches
-// the network — we only ever /parse Japanese text.
+// the network: we only ever /parse Japanese text.
 function collectTextNodes(root: Node, filter?: string): Text[] {
   const nodes: Text[] = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -117,7 +117,7 @@ const CLOSING_QUOTES = new Map([...QUOTE_PAIRS].map(([open, close]) => [close, o
 
 // The sentence around `offset`, used as the mined card's context. A terminator
 // inside quoted speech does NOT end the sentence: 「行くぞ。」と彼は言った。 is one
-// sentence, and breaking on that inner 。 mined the fragment 」と彼は言った。 —
+// sentence, and breaking on that inner 。 mined the fragment 」と彼は言った。 :
 // stray quote, speech lost. Scanning outward, an unmatched closing quote behind
 // us (or opening quote ahead) means we started inside a quotation, so keep going
 // until it is balanced.
@@ -146,7 +146,7 @@ function sentenceAt(text: string, offset: number): { text: string; start: number
     } else if (depth === 0 && SENTENCE_BOUNDARY.test(char)) break;
     end += 1;
   }
-  // Keep the terminator itself, plus any closing quote that follows it (。」) —
+  // Keep the terminator itself, plus any closing quote that follows it (。」) :
   // but not when the word sat inside the quotation, where the opening 「 was
   // excluded too: mining 行く from 「行くぞ。」 gives 行くぞ。, not 行くぞ。」.
   let stop = Math.min(text.length, end + 1);
@@ -175,7 +175,7 @@ export async function parse(root: Node, showFurigana: boolean, opts: ParseOption
 }
 
 // The active <video>'s current time in milliseconds, or null when the frame has
-// no video — stamped onto caption cues (data-media-timestamp) so a mined card
+// no video: stamped onto caption cues (data-media-timestamp) so a mined card
 // can deep-link back to the moment. Read once per caption pass, not per cue.
 export function mediaTimestamp(): string | null {
   const video = document.querySelector("video");
@@ -198,7 +198,7 @@ function hasUnparsedJapanese(root: Node, filter?: string): boolean {
 // Read the source with `sourceText`, not raw `textContent`: once a cue is
 // rendered with furigana on, our own `<rt>` readings live in the DOM and
 // `textContent` folds them back in (考え → 考えかんがえ). YouTube streams a cue by
-// appending to the same segment, so each growth trips the re-parse below — with
+// appending to the same segment, so each growth trips the re-parse below: with
 // raw textContent the leaked reading re-tokenizes as literal source and
 // compounds on every update (考えかんがえかんがえかんがえた…). Stripping `<rt>`
 // keeps the snapshot to the actual caption text.
@@ -214,7 +214,7 @@ export async function parseCaptionElement(root: HTMLElement, showFurigana: boole
     const res = await send({ type: "parseBatch", texts: [snapshot] });
     if (!res.ok) throw new Error(res.error);
     if (res.dictionaryInstalling) throw new Error("The offline dictionary is still installing.");
-    // Cue moved on while we looked words up — drop the stale result.
+    // Cue moved on while we looked words up: drop the stale result.
     if (!root.isConnected || sourceText(root) !== snapshot) return 0;
     const tokens = res.tokens[0] ?? [];
     reconcileCaption(root, buildWrapper(snapshot, tokens, showFurigana));
@@ -229,7 +229,7 @@ export async function parseCaptionElement(root: HTMLElement, showFurigana: boole
 // Mount a freshly built caption wrapper by reconciling against the one already
 // on screen, not by replacing it wholesale. Streamed captions grow by re-parsing
 // the whole line each cue (a late character can change a word boundary), but the
-// leading run of words is usually identical — replacing everything re-rendered
+// leading run of words is usually identical: replacing everything re-rendered
 // stable furigana on every frame, which read as a twitch. Keep the matching
 // prefix mounted so only the growing tail (and its ruby) actually re-renders.
 function reconcileCaption(root: HTMLElement, next: HTMLElement): void {
@@ -255,7 +255,7 @@ function reconcileCaption(root: HTMLElement, next: HTMLElement): void {
   for (const sibling of [...root.childNodes]) if (sibling !== mounted) sibling.remove();
 }
 
-// Two rendered caption nodes are interchangeable when they read identically —
+// Two rendered caption nodes are interchangeable when they read identically :
 // same gap text, or same word surface and furigana. State colour (a className)
 // is deliberately ignored so a word recoloured by a review stays put.
 function sameRendered(a: Node, b: Node): boolean {
@@ -268,7 +268,7 @@ function sameRendered(a: Node, b: Node): boolean {
 }
 
 // The sentence around a kept word grows as the cue streams, so refresh its
-// mining offsets from the new render — a data-attribute write, no layout cost.
+// mining offsets from the new render: a data-attribute write, no layout cost.
 function syncCaptionMining(a: Node, b: Node): void {
   if (!(a instanceof HTMLElement) || !(b instanceof HTMLElement)) return;
   a.dataset.sentence = b.dataset.sentence ?? "";
@@ -400,7 +400,7 @@ function enterBlock(block: HTMLElement): void {
 function exitBlock(block: HTMLElement): void {
   queuedBlocks.delete(block);
   // If the block's batch is still in flight and none of its blocks are visible
-  // any more, cancel the remaining background lookups — nothing on screen needs
+  // any more, cancel the remaining background lookups: nothing on screen needs
   // them, and they'll re-parse if the reader scrolls back.
   const requestId = blockRequest.get(block);
   if (requestId === undefined || cancelledRequests.has(requestId)) return;
@@ -422,7 +422,7 @@ export function setParsingPaused(value: boolean): void {
   blockFlushFrame = 0;
 }
 
-// The element's text as it reads on the page — our injected `<rt>` furigana
+// The element's text as it reads on the page: our injected `<rt>` furigana
 // readings stripped out, so re-parsing never mistakes a reading for source.
 function sourceText(element: HTMLElement): string {
   const clone = element.cloneNode(true) as HTMLElement;
@@ -501,7 +501,7 @@ async function parseBlockBatch(blocks: PreparedBlock[]): Promise<void> {
     if (generation !== renderGeneration || cancelledRequests.has(requestId)) return;
     blocks.forEach((item, blockIndex) => {
       // A block that scrolled out of view mid-flight is left observed (not flagged
-      // parsed) so it re-parses if the reader scrolls back — no wasted render now.
+      // parsed) so it re-parses if the reader scrolls back: no wasted render now.
       if (!item.block.isConnected || !visibleBlocks.has(item.block)) return;
       const tokens = response.tokens[blockIndex] ?? [];
       const replacements = item.nodes.map((node, index) =>
@@ -523,7 +523,7 @@ async function parseBlockBatch(blocks: PreparedBlock[]): Promise<void> {
     }
     batchBlocks.delete(requestId);
     cancelledRequests.delete(requestId);
-    // A block can scroll back into view while its batch is still in flight — the
+    // A block can scroll back into view while its batch is still in flight: the
     // intersection fires, but `enterBlock` ignores it because the block is still
     // pending. Once the batch settles (cancelled, reverted, or a block that was
     // off-screen at render time) nothing re-queues it, and IntersectionObserver

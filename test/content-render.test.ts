@@ -12,7 +12,7 @@ test("a token split across inline markup does not stamp its reading on each frag
   const { mappedWrapper } = await import("../src/content/parser.js");
 
   // 日本語 is one token spanning two text nodes. The reading belongs to the whole
-  // word, so neither fragment may carry it — stamping にほんご on both renders the
+  // word, so neither fragment may carry it: stamping にほんご on both renders the
   // reading twice, once over 日本 and again over 語.
   const line = window.document.getElementById("line") as HTMLElement;
   const nodes = [line.querySelector("b")?.firstChild, line.childNodes[1]] as Text[];
@@ -45,7 +45,7 @@ test("nested blocks cue i+1 once, and a mixed block still counts its own words",
   window.document.body.innerHTML = `<blockquote id="outer">${known}<p id="inner">${known}${unknown}</p></blockquote>`;
 
   const { startMetrics, stopMetrics } = await import("../src/content/metrics-reporter.js");
-  stopMetrics(); // the module's index/timer are singletons — start clean
+  stopMetrics(); // the module's index/timer are singletons: start clean
   try {
     startMetrics();
     const marked = [...window.document.querySelectorAll(".sb-i-plus-one")].map((block) => block.id);

@@ -30,7 +30,7 @@ test("Firefox watch builds isolate development storage from the release add-on",
 });
 
 test("all extension-owned surfaces preserve focus, reduced-motion, and forced-color behavior", () => {
-  // content.css decorates the host page's own text — it owns no control of ours
+  // content.css decorates the host page's own text: it owns no control of ours
   // to focus (the popup's live in its shadow root, styled from popup.ts), so it
   // answers for motion and forced colours only.
   const withControls = [
@@ -51,7 +51,7 @@ test("optional host access is only ever requested from an explicit user action",
 
   // Store review turns on this: <all_urls> is optional, and the only thing that
   // asks for it is the user clicking the per-site reader toggle. The separate
-  // siteMode select is gone — the toggle is the one control that grants access.
+  // siteMode select is gone: the toggle is the one control that grants access.
   assert.match(popup, /readerToggle\.addEventListener\("click"/);
   assert.match(popup, /const siteAccess = await requestSiteAccess\(siteUrl\)/);
   assert.match(popup, /return ext\.permissions\.request\(\{ origins: \[origin\] \}\)/);
@@ -113,7 +113,7 @@ test("the action popup navigates with a bottom bar and hands settings to its own
   assert.equal(manifest.options_ui.open_in_tab, true);
 
   // The preferences the popup dropped must exist on the options page instead.
-  // Server / key / host lists are not user-facing here — connect flow and the
+  // Server / key / host lists are not user-facing here: connect flow and the
   // per-site reader toggle own those.
   for (const id of [ "prefs", "keybinds", "scanModifier" ]) {
     assert.match(options, new RegExp(`id="${id}"`), `options page is missing #${id}`);
@@ -205,7 +205,7 @@ test("dictionary failures render self-contained diagnostics, on both surfaces", 
   const panel = readFileSync("src/common/dictionary-panel.ts", "utf8");
   // A failed install must answer "whose fault?" without a second tool: can this
   // browser store and decompress at all, is the pack even there, and what does
-  // the background itself say — the three real failures we saw.
+  // the background itself say: the three real failures we saw.
   assert.match(panel, /indexedDB: \$\{typeof indexedDB/);
   assert.match(panel, /gzip: \$\{typeof DecompressionStream/);
   assert.match(panel, /manifest: HTTP \$\{response\.status\}/);
@@ -282,7 +282,7 @@ test("pronunciation audio only plays processed R2 clips and never browser speech
   // The R2 allowlist is the fetch security boundary, shared by popup + background.
   assert.match(audio, /hostname === "cdn\.shirabe\.org"/);
   assert.match(audio, /pathname\.startsWith\("\/audio\/"\)/);
-  // The background — not the content script — fetches the clip (bypassing page
+  // The background: not the content script: fetches the clip (bypassing page
   // CSP) and only after re-validating the URL, then returns a playable data: URL.
   assert.match(background, /case "audioClip"/);
   assert.match(background, /if \(!isR2AudioUrl\(url\)\)/);

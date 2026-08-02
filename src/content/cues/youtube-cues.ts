@@ -4,7 +4,7 @@ import { cueText, type Cue, type CueSource } from "../cues.js";
 //
 // Watching the caption overlay can only ever say "a line appeared around now".
 // The track says 「新しい車です」 runs 12.480 → 15.100, before it is on screen and
-// regardless of how the overlay renders it — which is what makes auto-generated
+// regardless of how the overlay renders it: which is what makes auto-generated
 // captions (rolled in word by word) minable at all.
 //
 // The track list lives in the watch page's own player-response payload. On a
@@ -15,7 +15,7 @@ import { cueText, type Cue, type CueSource } from "../cues.js";
 // As of 2026-07 that last step usually fails: YouTube answers the signed
 // timedtext URL with 200 and an empty body unless the request carries a
 // proof-of-origin token the player mints internally. Verified against the live
-// endpoint — bare, json3, srv3, vtt, and four InnerTube clients all come back
+// endpoint: bare, json3, srv3, vtt, and four InnerTube clients all come back
 // empty. The code stays because it costs one request per video, disables itself
 // when that request is empty, and starts working again the day the endpoint
 // does. Reading the caption data the *player* fetches, from a MAIN-world hook,
@@ -73,7 +73,7 @@ export function youTubeCueSource(): CueSource {
       });
   }
 
-  // Start fetching now, not on the first mine — a track that arrives after the
+  // Start fetching now, not on the first mine: a track that arrives after the
   // save has already begun is a track that did nothing for it. `refine` asks
   // again so an SPA navigation to another video reloads.
   ensureLoaded();
@@ -142,7 +142,7 @@ async function loadCues(id: string): Promise<LoadReport> {
 
   // json3 first, then the legacy XML the same endpoint still serves. Which one
   // answers moves with YouTube's own plumbing, and a track we can't read costs
-  // exact timing on every line of the video — worth the second request.
+  // exact timing on every line of the video: worth the second request.
   const json = await json3Cues(track);
   const parsed = json ?? (await xmlCues(track));
   const format = json ? "json3" : parsed ? "xml" : "unreadable";
@@ -179,7 +179,7 @@ async function xmlCues(track: string): Promise<Cue[] | null> {
   });
 }
 
-// Manual captions over auto-generated ones — same timings either way, but a
+// Manual captions over auto-generated ones: same timings either way, but a
 // human track is the one whose text matches what is on screen.
 function japaneseTrack(response: PlayerResponse | null): string | undefined {
   const tracks = response?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
@@ -189,7 +189,7 @@ function japaneseTrack(response: PlayerResponse | null): string | undefined {
 }
 
 // The payload the page was served with. Only usable while it still describes the
-// video being watched — YouTube navigates without replacing it.
+// video being watched: YouTube navigates without replacing it.
 function playerResponseFromDom(id: string): PlayerResponse | null {
   for (const script of document.scripts) {
     if (!script.textContent?.includes("ytInitialPlayerResponse")) continue;

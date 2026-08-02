@@ -1,5 +1,5 @@
 /* Extension chrome follows the OS theme via light-dark() (same role tokens as
-   the site). No user preference — system only, unlike the gated web dark mode. */
+   the site). No user preference: system only, unlike the gated web dark mode. */
 :root {
   color-scheme: light dark;
   --surface: light-dark(#ffffff, #1a1a1e);

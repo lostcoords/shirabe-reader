@@ -3,13 +3,13 @@
 //
 // The rule set (resources/japanese-transforms.json) and this algorithm are
 // ported from Yomitan's Japanese language transforms and LanguageTransformer,
-// by way of daidai's Ruby port — the same gem the website already uses to name
+// by way of daidai's Ruby port: the same gem the website already uses to name
 // inflections (see tokens_helper.rb), so a chain reads identically in the
 // extension and on the page. Both upstreams are GPL-3.0; see ../../LICENSE and
 // ../../NOTICE.
 //
 // Why rules rather than a suffix table: every rule declares the grammatical
-// state it consumes and produces (`conditionsIn`/`conditionsOut` — Ichidan,
+// state it consumes and produces (`conditionsIn`/`conditionsOut`: Ichidan,
 // Godan, Kuru, Suru, i-adjective…), so a rule only fires when the form actually
 // permits it. A flat table happily "deinflects" 高くなかった as if 高い were a verb.
 import transformData from "./resources/japanese-transforms.json" with { type: "json" };
@@ -21,7 +21,7 @@ export type Deinflection = {
   conditions: number; // grammatical class the dictionary form must satisfy (bitflags)
 };
 
-// Friendly names for the rules, kept identical to daidai's LABELS — daidai calls
+// Friendly names for the rules, kept identical to daidai's LABELS: daidai calls
 // that map "the single source of truth for naming an inflection", and the
 // website renders it (tokens_helper.rb), so the same word reads the same way in
 // both places. Unlisted names fall through to the raw rule name.
@@ -113,8 +113,8 @@ const CONDITION_FLAGS = computeConditionFlags();
 const DICTIONARY_MASK = Object.entries(conditions)
   .reduce((mask, [type, condition]) => (condition.isDictionaryForm ? mask | (CONDITION_FLAGS[type] ?? 0) : mask), 0);
 
-// Inflected/deinflected fragments are literal kana/kanji — no regex
-// metacharacters — so they are matched verbatim, as Yomitan's helpers do.
+// Inflected/deinflected fragments are literal kana/kanji: no regex
+// metacharacters: so they are matched verbatim, as Yomitan's helpers do.
 function buildRule(rule: RawRule): Rule {
   const { inflected, deinflected } = rule;
   let isInflected: RegExp;
@@ -186,7 +186,7 @@ export function deinflect(text: string): Deinflection[] {
     const inflections = result.trace.slice().reverse().map((frame) => TRANSFORMS_BY_ID.get(frame.transform)?.name ?? frame.transform);
     const key = `${result.text}\0${inflections.join(",")}`;
     // Two rules can reach the same form by the same-named path but declare
-    // different classes — 来た → 来る fires both the generic ichidan た→る (v1) and
+    // different classes: 来た → 来る fires both the generic ichidan た→る (v1) and
     // the kuru 来た→来る (vk). OR their conditions so the candidate advertises every
     // class it could be; otherwise the first-seen (v1) shadows the real vk and a
     // part-of-speech-gated lookup rejects 来る against its vk entry.
@@ -203,7 +203,7 @@ export function deinflect(text: string): Deinflection[] {
 
 // Which grammatical class(es) a set of JMdict part-of-speech codes satisfies, as
 // deinflection condition bitflags. Lets a caller reject a deinflection whose
-// dictionary form can't be that class — e.g. いつだった "deinflects" to いつだつ by
+// dictionary form can't be that class: e.g. いつだった "deinflects" to いつだつ by
 // the godan った→つ rule (conditionsOut v5), but 逸脱 is a noun/suru-verb, never a
 // godan verb, so the match is spurious and must be dropped. Codes that aren't a
 // conjugating class (nouns, particles, vt/vi, expressions) contribute nothing.

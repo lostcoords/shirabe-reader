@@ -2,7 +2,7 @@
 //
 // Firefox exposes the standard `browser.*` (promises). Chrome exposes
 // `chrome.*`, which in MV3 also returns promises when you omit the callback.
-// So a single reference works everywhere — we just need a type for it without
+// So a single reference works everywhere: we just need a type for it without
 // pulling in @types/firefox-webext-browser or @types/chrome.
 type StorageArea = {
   get(keys?: string | string[] | Record<string, unknown> | null): Promise<Record<string, unknown>>;

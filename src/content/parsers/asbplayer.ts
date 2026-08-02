@@ -4,7 +4,7 @@ type ParseTarget = (root: HTMLElement, showFurigana: boolean) => Promise<number>
 
 // asbplayer subtitle parser. asbplayer injects an offscreen DOM cache of
 // subtitle lines (`.asbplayer-offscreen > div`) on any streaming page or on
-// app.asbplayer.dev — the same selectable text Yomitan/JitenReader mine. Those
+// app.asbplayer.dev: the same selectable text Yomitan/JitenReader mine. Those
 // nodes are moved between the cache and the on-screen overlay, so wrapping them
 // once keeps hover/save working when the line is visible.
 //
@@ -66,7 +66,7 @@ export function startAsbplayer(showFurigana: boolean): void {
   }, POLL_MS);
 
   // Also catch a late-created offscreen via body mutations (faster than the poll).
-  // Stop both watchers on success — otherwise every mutation on every page the
+  // Stop both watchers on success: otherwise every mutation on every page the
   // content script touches keeps running a whole-document querySelector forever.
   const watcher = new MutationObserver(() => {
     if (!tryAttach()) return;
@@ -83,14 +83,14 @@ export async function parseAsbplayerLines(root: Document | Element, showFurigana
 
   let parsed = 0;
   const timestamp = mediaTimestamp();
-  // No lines on screen is the subtitle ending — the only chance to record when.
+  // No lines on screen is the subtitle ending: the only chance to record when.
   if (![...nodes].some((node) => node.textContent?.trim())) {
     noteCuesCleared(document.querySelector("video"));
     return 0;
   }
   for (const context of nodes) {
     // Skip empty / non-Japanese shells the cache may hold briefly. Do not skip
-    // just because a prior wrap exists — progressive lines can grow in place.
+    // just because a prior wrap exists: progressive lines can grow in place.
     if (!context.textContent?.trim()) continue;
     context.dataset.integration = "asbplayer";
     stampCueStart(context, timestamp);

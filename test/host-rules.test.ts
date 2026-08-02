@@ -17,7 +17,7 @@ test("match patterns anchor the host instead of matching anywhere in the URL", a
   const { matchUrl } = await load();
   // The reason this test exists: compiling the whole pattern to one regex turns
   // the leading "*" of "*://" into ".*", which eats any prefix and matches every
-  // URL that merely *contains* the host — a redirect target, a share link, a
+  // URL that merely *contains* the host: a redirect target, a share link, a
   // search result carrying the URL in its query string.
   assert.equal(matchUrl("*://example.com/*", "https://evil.test/?q=https://example.com/"), false);
   assert.equal(matchUrl("*://reader.ttsu.app/*", "https://evil.test/page?next=https://reader.ttsu.app/x"), false);
@@ -27,7 +27,7 @@ test("match patterns anchor the host instead of matching anywhere in the URL", a
   assert.equal(matchUrl("*://shirabe.org/*", "https://notshirabe.org/en"), false);
   assert.equal(matchUrl("*://*.shirabe.org/*", "https://evilshirabe.org/"), false);
 
-  // A "*" scheme is web pages only — never file: or an extension origin.
+  // A "*" scheme is web pages only: never file: or an extension origin.
   assert.equal(matchUrl("*://example.com/*", "file:///example.com/x"), false);
   assert.equal(matchUrl("*://example.com/*", "https://example.com/ok"), true);
 });
@@ -57,8 +57,8 @@ test("a bare domain typed by the user becomes a host-anchored pattern", async ()
 
 test("the Shirabe the reader is connected to is never parsed, whatever it is", async () => {
   const { BUILTIN_RULES, resolveHostMode } = await load();
-  // A release build only knows the public hosts, so the connected instance —
-  // a dev server, a self-hosted one — has to be recognised at runtime. Without
+  // A release build only knows the public hosts, so the connected instance,
+  // a dev server, a self-hosted one, has to be recognised at runtime. Without
   // this the reader parses the web app's own Japanese and rewrites its DOM.
   const mode = (url: string, apiBase: string) =>
     resolveHostMode(url, { disabledHosts: [], rules: BUILTIN_RULES, apiBase }).mode;

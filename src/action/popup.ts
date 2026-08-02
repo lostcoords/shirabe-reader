@@ -123,7 +123,7 @@ $<HTMLSelectElement>("lookupFuriganaMode").addEventListener("change", async (eve
 
 // ── Per-site reader on/off ───────────────────────────────────────────────────
 // Reader-on means Yomitan-style scanning (and dedicated adapters) on this host.
-// Full-page parse stays opt-in via hotkey / context menu — there is no separate
+// Full-page parse stays opt-in via hotkey / context menu: there is no separate
 // "parse automatically" control. Turning the reader on requests optional host
 // access so the scanner survives reloads without reopening the popup.
 const readerToggle = $<HTMLButtonElement>("readerToggle");
@@ -225,7 +225,7 @@ async function renderPageState(): Promise<void> {
   const installing = installed.ok && installed.dictionary.installing;
   const connected = config?.apiKey ? true : false;
 
-  // While an install is running, don't re-offer Install — show a progress entry.
+  // While an install is running, don't re-offer Install: show a progress entry.
   $("needsDictionary").hidden = hasDictionary || installing;
   $("dictionaryInstallingBanner").hidden = !installing;
   $("signInBanner").hidden = !hasDictionary || connected || installing;

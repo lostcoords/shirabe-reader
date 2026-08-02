@@ -15,7 +15,7 @@ test("a horizontal lookup drops below the word, never beside it", () => {
   assert.equal(place.top, 132); // clears the word by the 12px margin
   assert.equal(place.left, 100); // aligned to the word's left edge, not offset to a side
   assert.equal(place.maxHeight, null);
-  // The rest of the sentence runs to the right of the word — the card must not reach it.
+  // The rest of the sentence runs to the right of the word: the card must not reach it.
   assert.ok(place.top >= word.bottom, "card overlaps the line it was looked up from");
 });
 
@@ -43,7 +43,7 @@ test("a card squeezed past the readable floor overlaps the page rather than the 
   const word = rect(100, 180, 40, 40);
   const place = placeCard({ rect: word, avoid: word, size: { width: 360, height: 460 }, view, vertical: false });
 
-  assert.equal(place.maxHeight, 160); // MIN_HEIGHT — shrinking further is unreadable
+  assert.equal(place.maxHeight, 160); // MIN_HEIGHT: shrinking further is unreadable
   assert.ok(place.top >= word.bottom, "squeezed card covers the word itself");
 });
 

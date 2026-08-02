@@ -49,7 +49,7 @@ const studyDetails = (word: WordStateEntry): StudyDetails => ({
 });
 
 // The pack cites an entry as one handle ("jmdict:2517580"); /v1 takes it as the
-// (dictionarySlug, sourceId) pair it links a card by — never a row id, which
+// (dictionarySlug, sourceId) pair it links a card by: never a row id, which
 // changes on every dictionary rebuild. Split on the FIRST colon: a slug never
 // contains one, a source id may (jmnedict ids are free text). A handle that
 // isn't a pair links nothing rather than posting half of one.
@@ -86,7 +86,7 @@ export class ShirabeApi {
     return `${this.config.apiBase.replace(/\/$/, "")}/oauth/authorize?${query}`;
   }
 
-  // Exchange the one-time code (+ PKCE verifier) for a scoped key. No key yet —
+  // Exchange the one-time code (+ PKCE verifier) for a scoped key. No key yet :
   // the code and verifier are the proof.
   async exchangeCode(opts: { code: string; verifier: string; redirectUri: string }): Promise<{ apiKey: string; scopes: string[] }> {
     return this.post(
@@ -99,7 +99,7 @@ export class ShirabeApi {
   // ── SRS write-back (/v1/srs/*, requires a WRITE_SRS key) ────────────────────
   // Save (or mine) a word as a review card. `sensePositions` scopes the card to a
   // subset of the word's senses (empty/omitted = the whole word). Grading is a
-  // separate call — see `grade`.
+  // separate call: see `grade`.
   async save(options: {
     lemma: string; surface?: string; reading?: string; entry?: string; deckId?: number; newDeckName?: string;
     hint?: string; notes?: string; sentence?: SentenceCapture; sentences?: SentenceCapture[];
@@ -110,7 +110,7 @@ export class ShirabeApi {
       "/v1/srs/saves", { ...fields, ...entryHandle(entry) },
     );
     // The card that was written identifies itself; everything else about the word
-    // — its state, decks, how many cards it now holds — comes from `word`, the
+    //: its state, decks, how many cards it now holds: comes from `word`, the
     // same block a lookup returns.
     return {
       ...studyDetails(response.word),
@@ -145,8 +145,8 @@ export class ShirabeApi {
   }
 
   // Set a word's state directly: "retired" parks it as learned, "reviewing" brings
-  // it into rotation. A state is word-level — it lands on every card the word
-  // holds — so the answer is the whole word, not one card.
+  // it into rotation. A state is word-level: it lands on every card the word
+  // holds: so the answer is the whole word, not one card.
   async setState(lemma: string, state: "retired" | "reviewing"): Promise<StudyDetails> {
     const { word } = await this.post<{ word: WordStateEntry }>("/v1/srs/states", { lemma, state });
     return studyDetails(word);
@@ -154,11 +154,11 @@ export class ShirabeApi {
 
   // Connected account's display name + SRS entitlement, for the settings UI.
   // Needs READ_ACCOUNT (the device key has it). `entitled` mirrors the server's
-  // srs_entitled? — the popup gates the whole reader on it.
+  // srs_entitled? : the popup gates the whole reader on it.
   //
   // `languages` is the account's ordered gloss languages, in UI codes like
   // ["es","en"]. Server-side it's *derived* from the reader's dictionary stack
-  // (Prefs#sources) — the distinct languages of it, in order. We read the
+  // (Prefs#sources): the distinct languages of it, in order. We read the
   // derived list rather than the stack because this pack is a single
   // dictionary: dictionary order is a distinction it can't represent.
   // Carrying it keeps the extension's meaning order identical to the website's
@@ -202,7 +202,7 @@ export class ShirabeApi {
   }
 
   private async request<T>(path: string, init: RequestInit, opts: { auth?: boolean } = {}): Promise<T> {
-    const auth = opts.auth !== false; // device endpoints opt out — they mint the key
+    const auth = opts.auth !== false; // device endpoints opt out: they mint the key
     if (auth && !this.config.apiKey) throw new ApiError("Not connected. Open the extension and connect to Shirabe.", 401);
 
     const res = await fetch(this.config.apiBase.replace(/\/$/, "") + path, {

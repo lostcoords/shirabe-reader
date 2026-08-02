@@ -1,7 +1,7 @@
 import { pricingUrl, type Config } from "./config.js";
 import { send } from "./messages.js";
 
-// The account card — connect, disconnect, entitlement, and the deck a save goes
+// The account card: connect, disconnect, entitlement, and the deck a save goes
 // to. Mounted by BOTH the toolbar popup and the options page, which shipped the
 // same code twice; the only real difference is which funnel source the upgrade
 // link is tagged with, so that is the parameter.
@@ -16,7 +16,7 @@ type AccountState = (typeof ACCOUNT_STATES)[number];
 export type AccountPanel = { refresh: () => Promise<void> };
 
 export type AccountPanelHooks = {
-  /** The card element's id — `account` in the popup, `accountPanel` in options. */
+  /** The card element's id: `account` in the popup, `accountPanel` in options. */
   cardId: string;
   /** Funnel tag for the upgrade link: an untagged /pricing reads as organic traffic. */
   pricingSource: string;

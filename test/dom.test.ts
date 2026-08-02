@@ -19,7 +19,7 @@ function installDom(html: string): Window {
 test("a caption that grows word by word keeps the moment it first appeared", async () => {
   // Auto-generated captions roll a line in one word at a time, and every added
   // word is another parse. Re-stamping each time walks the line's start forward
-  // until it points at the end of it — and the audio mined from that cue then
+  // until it points at the end of it: and the audio mined from that cue then
   // replays whatever came next instead of the sentence on screen.
   const window = installDom("<div id='cue'></div>");
   const { stampCueStart } = await import("../src/content/cues.js");
@@ -71,7 +71,7 @@ test("a caption rebuilt mid-line keeps the moment the line began", async () => {
 
 test("the clip covers exactly the sentence the card will carry", async () => {
   // The card's sentence was chosen when the word was wrapped. Matching the audio
-  // to that text is the whole rule — no reasoning about punctuation, particles
+  // to that text is the whole rule: no reasoning about punctuation, particles
   // or pauses, and no way for the two to disagree.
   installDom("<div></div>");
   const { spanCovering } = await import("../src/content/cues.js");
@@ -88,7 +88,7 @@ test("the clip covers exactly the sentence the card will carry", async () => {
   assert.equal(split.endMs, 6_000);
   assert.equal(split.roomBeforeMs, 200, "silence available before the span");
 
-  // Whole sentence on one line: that line, and nothing either side of it — the
+  // Whole sentence on one line: that line, and nothing either side of it: the
   // case a rule about missing 。 used to get wrong.
   const alone = spanCovering(track, track[2], "新しい店に行ったよ。");
   assert.equal(alone.startMs, 4_100);
@@ -98,7 +98,7 @@ test("the clip covers exactly the sentence the card will carry", async () => {
   assert.equal(spanCovering(track, track[1], "昨日友達と").startMs, 2_200);
 
   // A sentence that runs *forwards* from the mined line is only found after
-  // reaching backwards past lines it never included — so the span has to shrink
+  // reaching backwards past lines it never included: so the span has to shrink
   // again, or the clip carries a line the card doesn't.
   const forward = spanCovering(track, track[1], "昨日友達と新しい店に行ったよ。");
   assert.equal(forward.startMs, 2_200, "no earlier line comes along for the ride");
@@ -161,7 +161,7 @@ test("logical scanner crosses inline links and ignores native ruby readings", as
 
 test("logical scanner inserts a boundary between block-level siblings", async () => {
   // The caret text is a direct child of the wrapping <div>, whose other child is
-  // a block <p>; a naive join glues them into 「日本語。猫」 — a word (and sentence)
+  // a block <p>; a naive join glues them into 「日本語。猫」: a word (and sentence)
   // that never existed.
   const window = installDom(`<div id="wrap">日本語。<p id="b">猫</p></div>`);
   const { logicalTextAt } = await import("../src/content/dom-text.js");
@@ -230,7 +230,7 @@ test("mapped parsing preserves inline elements while one word spans them", async
 test("a block that scrolls back mid-flight still parses once its batch settles", async () => {
   // The lazy path cancels a batch whose blocks all scroll off. If a block scrolls
   // BACK before that batch resolves, the intersection fires while the block is
-  // still pending — enterBlock ignores it — and IntersectionObserver will not fire
+  // still pending: enterBlock ignores it: and IntersectionObserver will not fire
   // again for a block that is already intersecting. Without a re-queue when the
   // batch settles, that paragraph stays permanently unparsed.
   const window = installDom("<div id='page'><p id='a'>日本語</p></div>");
@@ -320,7 +320,7 @@ test("mined sentence context spans quoted speech instead of breaking inside it",
     return wrapper.querySelector<HTMLElement>(".sb-word")?.dataset.sentence;
   };
 
-  // A terminator inside 「」 must not end the sentence — this used to mine the
+  // A terminator inside 「」 must not end the sentence: this used to mine the
   // fragment 」と彼は言った。 (stray quote, quoted speech lost) onto the card.
   assert.equal(sentenceFor("「行くぞ。」と彼は言った。", "言った"), "「行くぞ。」と彼は言った。");
   // A word inside the quotation mines the quoted utterance, without either quote.
@@ -369,7 +369,7 @@ test("streaming captions don't fold furigana readings back into the source", asy
     const stableWord = seg.querySelector(".sb-word[data-lemma='考える']");
     assert.ok(stableWord, "the kanji word rendered with furigana");
 
-    // YouTube grows the same segment by appending — this is where it used to compound.
+    // YouTube grows the same segment by appending: this is where it used to compound.
     seg.append("た");
     await parseCaptionElement(seg, true);
     seg.append("も");
@@ -378,7 +378,7 @@ test("streaming captions don't fold furigana readings back into the source", asy
     assert.equal(source(), "いつだったか考えたも", "reading never re-enters the source across streamed growth");
     assert.equal(seg.querySelectorAll(".sb-word[data-lemma='かんがえ']").length, 0, "no phantom kana word from a leaked reading");
     // The unchanged leading word keeps its exact DOM node across streamed updates,
-    // so its furigana never re-renders (the twitch) — only the growing tail does.
+    // so its furigana never re-renders (the twitch): only the growing tail does.
     assert.equal(seg.querySelector(".sb-word[data-lemma='考える']"), stableWord, "stable word is reconciled, not rebuilt");
   } finally {
     ext.runtime.sendMessage = original;
@@ -397,7 +397,7 @@ test("furigana renders only over kanji-bearing surfaces, never kana-only words",
   assert.equal(kanji.querySelector("rt")?.textContent, "にほんご");
 
   // Furigana sits over the kanji run only; okurigana stays plain text, not under
-  // a ruby — otherwise the reading floats over kana that already reads itself.
+  // a ruby: otherwise the reading floats over kana that already reads itself.
   const okurigana = renderToken(token("食べる", "たべる"), true) as HTMLElement;
   assert.equal(okurigana.querySelectorAll("ruby").length, 1, "one ruby, over 食 only");
   assert.equal(okurigana.querySelector("ruby")?.firstChild?.textContent, "食");
@@ -405,13 +405,13 @@ test("furigana renders only over kanji-bearing surfaces, never kana-only words",
   assert.equal(okurigana.textContent, "食たべる", "べる renders as plain okurigana beside the ruby");
 
   // An inflected surface (授けて) carries the dictionary reading (さずける). Furigana
-  // must sit over 授 as さず — the surface okurigana けて renders plain — not smear
+  // must sit over 授 as さず: the surface okurigana けて renders plain: not smear
   // the whole dictionary reading (with its own okurigana る) over the word.
   const inflected = renderToken({ ...token("授けて", "さずける"), lemma: "授ける" }, true) as HTMLElement;
   assert.equal(inflected.querySelector("rt")?.textContent, "さず", "furigana is the kanji-stem reading, not さずける");
   assert.equal(inflected.textContent, "授さずけて", "surface okurigana けて stays plain beside the ruby");
 
-  // 来る is irregular — its kanji reading changes by conjugation (来て=きて, not くて),
+  // 来る is irregular: its kanji reading changes by conjugation (来て=きて, not くて),
   // so an inflected form can't be aligned from the dictionary reading くる. Rather
   // than show a wrong reading, skip furigana and leave the kanji plain.
   const kuru = renderToken({ ...token("来て", "くる"), lemma: "来る" }, true) as HTMLElement;
@@ -421,7 +421,7 @@ test("furigana renders only over kanji-bearing surfaces, never kana-only words",
   const kuruDict = renderToken({ ...token("来る", "くる"), lemma: "来る" }, true) as HTMLElement;
   assert.equal(kuruDict.querySelector("rt")?.textContent, "く", "来る dictionary form keeps 来[く]る");
 
-  // Kana-only surfaces already read as their own reading — ruby is noise.
+  // Kana-only surfaces already read as their own reading: ruby is noise.
   for (const surface of ["この", "では", "アクセント"]) {
     const word = renderToken(token(surface, surface === "この" ? "この" : "よみ"), true) as HTMLElement;
     assert.equal(word.querySelector("ruby"), null, `${surface} has no furigana`);
@@ -492,7 +492,7 @@ test("a new word needs something to be read against before the block counts as i
   const options = { includesLearning: true, frequencyMax: 20_000 };
   const words = (id: string) => [...window.document.querySelectorAll<HTMLElement>(`#${id} .sb-word`)];
 
-  // 「紫陽花ですね」 is one unknown word and pure grammar around it — nothing the
+  // 「紫陽花ですね」 is one unknown word and pure grammar around it: nothing the
   // reader can lean on. A verb beside it makes the same word worth studying.
   assert.equal(isIPlusOne(words("bare"), options), false);
   assert.equal(isIPlusOne(words("context"), options), true);
@@ -542,7 +542,7 @@ test("the status bar counts every i+1 block on the page, not just the changed on
 
 test("the client reporter forwards our own errors and drops the host page's", async () => {
   // A content script shares the page's window, so a naive handler would ship the
-  // host page's JavaScript errors to our collector — noise at best, a privacy
+  // host page's JavaScript errors to our collector: noise at best, a privacy
   // leak at worst. The extension-origin gate is the whole defence.
   const window = installDom("");
   const extBase = "moz-extension://shirabe-test/";
@@ -588,7 +588,7 @@ test("the release host matrix resolves to maintained parsing paths", async () =>
   assert.equal(resolve("https://reader.mokuro.app/reader/1").rule?.custom, "mokuro");
   assert.equal(resolve("https://jisho.org/search/日本語").rule?.filter, ".furigana, .japanese_word__furigana_wrapper");
   assert.equal(resolve("https://news.example.jp/story").mode, "auto");
-  // Shirabe's own site is never parsed — it is the dictionary, not a reading surface.
+  // Shirabe's own site is never parsed: it is the dictionary, not a reading surface.
   assert.equal(resolve("https://shirabe.org/en/word/日本語").mode, "off");
   assert.equal(resolve("https://www.shirabe.org/").mode, "off");
   assert.equal(resolve("https://shirabe.localhost/en/word/日本語").mode, "off");
@@ -647,8 +647,8 @@ test("a reading the page already supplies is never parsed as text", async () => 
     ext.runtime.sendMessage = original;
   }
 
-  // Only the words themselves reach the parser. Native ruby is skipped whole —
-  // base and annotation — and the <rt> reading stays out even when it is wrapped
+  // Only the words themselves reach the parser. Native ruby is skipped whole :
+  // base and annotation: and the <rt> reading stays out even when it is wrapped
   // in markup of its own, which a parent-tag test used to let through.
   assert.deepEqual(seen.filter(Boolean), ["昨日", "すき", "焼", "き", "食べました", "これは", "です"]);
 });
@@ -772,7 +772,7 @@ test("a meaning that already has a card is marked saved, not offered again", asy
   applyStudyDetails(word, { state: "new", decks: [], savedWholeWord: true });
   assert.equal(word.dataset.savedSenses, "all");
 
-  // Nothing covered must clear it — a stale list would grey out a meaning that
+  // Nothing covered must clear it: a stale list would grey out a meaning that
   // is still saveable.
   applyStudyDetails(word, { state: "none", decks: [] });
   assert.equal(word.dataset.savedSenses, undefined);

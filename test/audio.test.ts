@@ -7,7 +7,7 @@ test("only https clips under cdn.shirabe.org/audio/ are fetchable", () => {
 
   // This guard is the security boundary that stops a compromised content script
   // making the privileged background worker fetch an arbitrary URL, so every
-  // part of it — scheme, host, path prefix — has to hold on its own.
+  // part of it: scheme, host, path prefix: has to hold on its own.
   assert.equal(isR2AudioUrl("https://evil.example.com/audio/clip.m4a"), false, "wrong host");
   assert.equal(isR2AudioUrl("https://cdn.shirabe.org.evil.example.com/audio/clip.m4a"), false, "the CDN host is a prefix, not a match");
   assert.equal(isR2AudioUrl("http://cdn.shirabe.org/audio/clip.m4a"), false, "plain http is not the CDN");

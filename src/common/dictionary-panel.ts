@@ -1,7 +1,7 @@
 import { sendDictionary } from "./dictionary-port.js";
 
 // The install/update/progress/diagnostics card, mounted by BOTH the toolbar
-// popup and the options page. It used to be copy-pasted into each — ~180 lines
+// popup and the options page. It used to be copy-pasted into each: ~180 lines
 // twice, which is how the two drifted (only one of them read the failure
 // `detail` the background sends). The markup stays in each page; this owns the
 // behaviour, and the surfaces differ only through the hooks below.
@@ -16,13 +16,13 @@ type DictionaryState = (typeof DICTIONARY_STATES)[number];
 export type DictionaryPanel = { refresh: () => Promise<void> };
 
 export type DictionaryPanelHooks = {
-  /** Where the pack manifest lives — read fresh each time, so a changed API base is picked up. */
+  /** Where the pack manifest lives: read fresh each time, so a changed API base is picked up. */
   apiBase: () => string;
   /** The surface's own status line. */
   status: (message: string) => void;
   /** Optional busy indicator (the toolbar popup shows a dot while installing). */
   onBusy?: (busy: boolean) => void;
-  /** Optional post-install refresh — the popup re-renders its page panel. */
+  /** Optional post-install refresh: the popup re-renders its page panel. */
   onInstalled?: () => void | Promise<void>;
 };
 
@@ -133,7 +133,7 @@ export function mountDictionaryPanel(hooks: DictionaryPanelHooks): DictionaryPan
   }
 
   // Answer "could this browser install at all, and is the pack even there?"
-  // before blaming the import — the failures we actually saw were a missing
+  // before blaming the import: the failures we actually saw were a missing
   // manifest and a browser without DecompressionStream, not a bad download.
   async function checkReachable(): Promise<{ ok: boolean; diagnostics: string }> {
     const apiBase = hooks.apiBase().replace(/\/$/, "");

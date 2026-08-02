@@ -1,4 +1,4 @@
-/* Shirabe Reader — injected on every page. Only the in-text word spans live in
+/* Shirabe Reader: injected on every page. Only the in-text word spans live in
    the host's light DOM (they must, to flow inline with the page's text); the
    hover popup is isolated in a shadow root (see content/popup.ts). All
    selectors are `sb-` prefixed and low-specificity so we colour our own words
@@ -21,7 +21,7 @@ html:not(.sb-reader-off) .player-timedtext-text-container {
 
 /* Raw-text scan highlight: snaps to exactly the matched term under the cursor on
    an unparsed page (CSS Custom Highlight API, registered in content/popup.ts).
-   A highlight pseudo — it paints over the text without touching the user's real
+   A highlight pseudo: it paints over the text without touching the user's real
    selection, and is a no-op where the browser lacks the API. */
 ::highlight(sb-scan) {
   background-color: rgba(14, 165, 233, 0.28);
@@ -29,7 +29,7 @@ html:not(.sb-reader-off) .player-timedtext-text-container {
 
 /* Caption pills (YouTube / Netflix / asbplayer). Word cues are NOT redefined
    here: a caption shows exactly what a paragraph shows, drawn by the same rules
-   below. What is genuinely different is legibility over moving picture — room for
+   below. What is genuinely different is legibility over moving picture: room for
    furigana, an outline on it, and a hover wash that reads on a dark pill. The
    host keeps its own pill (background/color/font); we only wrap the segment that
    owns those styles, so we never re-paint the whole cue. */
@@ -43,7 +43,7 @@ html:not(.sb-reader-off) :is(
   padding-bottom: 0.35em;
   /* Reserve the furigana band inside every line box, before we ever wrap a word.
      Furigana stays in flow (ruby-position: over) so it reserves its own space per
-     line and can't overlap the line above when a cue wraps — but a line-height
+     line and can't overlap the line above when a cue wraps: but a line-height
      roomy enough to contain the annotation means a raw line and a furigana line
      are the same height, so parsing or revealing a reading never jumps the cue. */
   line-height: 1.9;
@@ -57,7 +57,7 @@ html:not(.sb-reader-off) :is(
   .asbplayer-offscreen
 ) {
   .sb-word:hover {
-    /* Light wash on dark pill — the page's tint is muddy over video. */
+    /* Light wash on dark pill: the page's tint is muddy over video. */
     background-color: rgba(255, 255, 255, 0.14);
   }
 
@@ -88,8 +88,8 @@ html:not(.sb-reader-off) :is(
 }
 
 /* Furigana shouldn't blow up line height when readings are shown. It takes the
-   colour of the text it annotates — like print furigana, and like the caption
-   rule above — so it stays legible on any page instead of holding one fixed blue
+   colour of the text it annotates: like print furigana, and like the caption
+   rule above: so it stays legible on any page instead of holding one fixed blue
    that a dark theme, a coloured heading, or a link would fight. Declared rather
    than left to inheritance so a host page's own `rt` colour can't claim it. */
 .sb-word ruby rt {
@@ -98,10 +98,10 @@ html:not(.sb-reader-off) :is(
   user-select: none;
 }
 /* Reserve the furigana row even when a reading is hidden, so revealing one on
-   hover — or a cue changing which words are known — never reflows the caption:
+   hover: or a cue changing which words are known: never reflows the caption:
    the classic furigana "twitch". visibility keeps the ruby box in layout (only
    its paint toggles); display:none would collapse the row and jump the line.
-   A full "off" still collapses it — off never reveals on hover, so it can't
+   A full "off" still collapses it: off never reveals on hover, so it can't
    twitch. */
 .sb-furigana-unknown .sb-word:not(.sb-none) ruby rt,
 .sb-furigana-hover .sb-word ruby rt { visibility: hidden; }
@@ -124,7 +124,7 @@ html:not(.sb-reader-off) :is(
 .sb-reader-off .sb-word ruby rt { display: none !important; }
 .sb-reader-off .sb-i-plus-one { background: none !important; box-shadow: none !important; }
 
-/* One cue for every word, everywhere — a paragraph, a subtitle, an OCR box. Drawn
+/* One cue for every word, everywhere: a paragraph, a subtitle, an OCR box. Drawn
    with text-decoration rather than a border because a caption can't afford a box
    that changes size, and because a decoration follows the text through line wraps
    and inline markup instead of boxing each fragment. Colour and line style come
@@ -143,22 +143,22 @@ html:not(.sb-reader-off) :is(
   text-decoration-skip-ink: none;
 }
 
-/* State coloring — a left-to-right cue from "learn this" to "got it". */
+/* State coloring: a left-to-right cue from "learn this" to "got it". */
 .sb-new { --sb-cue: #0369a1; }
 .sb-learning { --sb-cue: #f59e0b; }
 .sb-due { --sb-cue: #ef4444; }
 .sb-retired { --sb-cue: transparent; }
-/* Not yet tracked — a faint dotted hint that it's interactive. */
+/* Not yet tracked: a faint dotted hint that it's interactive. */
 .sb-none { --sb-cue: rgba(3, 105, 161, 0.5); --sb-cue-style: dotted; }
 
-/* Part-of-speech colouring — the same groups and hues as the site's phrase
+/* Part-of-speech colouring: the same groups and hues as the site's phrase
    breakdown (TokensHelper::POS_COLORS), so a word reads the same here as it does
    in a search result: nouns blue, verbs green, adjectives orange, adverbs and
    expressions purple, particles pink, copula and auxiliaries cyan. Grammatical
    glue keeps its own hue; anything unclassified keeps the page's ink.
 
    Each code resolves to `--sb-pos` once, and a mode then spends it on either the
-   text or the underline — one grouping to maintain instead of two. Following the
+   text or the underline: one grouping to maintain instead of two. Following the
    OS theme (not the page's) matches how the rest of the extension's chrome picks
    its colours; a page that opposes the OS still reads, because these sit on the
    word itself rather than on a surface of ours. */
@@ -192,7 +192,7 @@ html:not(.sb-reader-off) :is(
 /* Tinting the word leaves the cue free, so a page says what a word IS and how well
    you know it at the same time. */
 [data-sb-pos-coloring="text"] .sb-word[data-pos] { color: var(--sb-pos, inherit); }
-/* Giving the cue to the part of speech takes it from the study state — two
+/* Giving the cue to the part of speech takes it from the study state: two
    meanings can't share one line, and this is the mode that says so. Solid, so a
    `.sb-none` word doesn't keep the dotted "untracked" line while showing a part
    of speech. */
@@ -207,9 +207,9 @@ html:not(.sb-reader-off) :is(
    and a plain inline value there would otherwise reveal the card mid-capture. */
 .sb-capturing { visibility: hidden !important; }
 
-/* i+1 — a block you can read except for one word, the sentences worth studying.
+/* i+1: a block you can read except for one word, the sentences worth studying.
    Marked with paint alone: a tint plus an inset bar, so a cued block occupies
-   exactly the same box as an uncued one. Every alternative moved the page — an
+   exactly the same box as an uncued one. Every alternative moved the page: an
    offset outline let adjacent blocks merge into one stray rectangle, and a
    `::after` badge became a flex/grid *item* on any block that lays its children
    out (a `<li class="grid">` gained a whole implicit row for it). The status bar
@@ -218,7 +218,7 @@ html:not(.sb-reader-off) :is(
   background: rgba(3, 105, 161, 0.08);
   box-shadow: inset 3px 0 0 rgba(3, 105, 161, 0.85);
 }
-/* The one word that block would teach — gold, so it's findable at a glance
+/* The one word that block would teach: gold, so it's findable at a glance
    without reading the sentence. Paint only, like the block cue, and specific
    enough to outrank `.sb-word:hover` so it doesn't blink out under the pointer. */
 .sb-word.sb-i-plus-one-word { background-color: rgba(217, 119, 6, 0.32); }
@@ -230,13 +230,13 @@ html:not(.sb-reader-off) :is(
 @media (forced-colors: active) {
   .sb-word { forced-color-adjust: auto; }
   /* Forced colors replaces our hues with system ones, so state and part of speech
-     both collapse to LinkText — the line STYLE is what still separates them. */
+     both collapse to LinkText: the line STYLE is what still separates them. */
   .sb-new { --sb-cue: LinkText; --sb-cue-style: double; }
   .sb-learning { --sb-cue: LinkText; --sb-cue-style: dashed; }
   .sb-due { --sb-cue: LinkText; --sb-cue-style: dotted; }
   [data-sb-pos-coloring="underline"] .sb-word[data-pos] { --sb-cue: LinkText; --sb-cue-style: solid; }
   /* Forced colors drops background and box-shadow, so the i+1 block cue would
-     vanish. An inset outline survives it and still costs no layout — drawn
+     vanish. An inset outline survives it and still costs no layout: drawn
      inside the border box, it can't merge with the block above either. */
   .sb-i-plus-one { outline: 2px solid LinkText; outline-offset: -2px; }
   .sb-word.sb-i-plus-one-word { outline: 2px solid Highlight; outline-offset: -1px; }

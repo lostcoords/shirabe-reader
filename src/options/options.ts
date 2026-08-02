@@ -97,7 +97,7 @@ const { refresh: refreshAccount } = mountAccountPanel({
 });
 
 // ── Offline dictionary ───────────────────────────────────────────────────────
-// Shared with the toolbar popup (common/dictionary-panel.ts) — the same card,
+// Shared with the toolbar popup (common/dictionary-panel.ts): the same card,
 // one implementation.
 const { refresh: refreshDictionary } = mountDictionaryPanel({
   apiBase: () => config?.apiBase || DEFAULTS.apiBase,

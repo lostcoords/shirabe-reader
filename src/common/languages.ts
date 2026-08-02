@@ -1,4 +1,4 @@
-// Gloss languages and their order — the extension's copy of the server's
+// Gloss languages and their order: the extension's copy of the server's
 // Locales module. Kept free of browser/storage imports so the dictionary engine
 // (and its tests) can use it without a WebExtension environment.
 

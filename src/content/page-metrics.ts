@@ -107,7 +107,7 @@ export function measurePageWords(words: HTMLElement[]): WordMetrics {
 }
 
 // Function words carry grammar, not meaning. A block whose only other word is a
-// copula or a particle — 「Xです」, 「Xか」 — leaves the new word with nothing to be
+// copula or a particle, 「Xです」, 「Xか」, leaves the new word with nothing to be
 // read against, so it teaches nothing however few unknowns it holds. Everything
 // else counts as context, including tokens the tokenizer left unlabelled: an
 // unknown part of speech is far more often a real word than a particle.
@@ -119,7 +119,7 @@ const carriesMeaning = (word: HTMLElement): boolean => !FUNCTION_WORD_POS.has(wo
 
 // What a block would teach: every occurrence of its single unknown lemma, or
 // nothing when the block isn't a candidate. One pass answers both questions the
-// caller has — whether to cue the block, and which word to point at inside it.
+// caller has: whether to cue the block, and which word to point at inside it.
 export function iPlusOneTargets(words: HTMLElement[], options: IPlusOneOptions): HTMLElement[] {
   const unknown = new Map<string, HTMLElement[]>();
   let context = 0;
@@ -171,7 +171,7 @@ function replaceUnique(counts: StateCounts, prior?: WordState, next?: WordState)
 }
 
 function count(counts: StateCounts, state: WordState, by = 1): void {
-  // `counts.known` is the page aggregate — everything the reader knows, which is
+  // `counts.known` is the page aggregate: everything the reader knows, which is
   // the retired tier PLUS the words they are actively reviewing.
   if (state === "retired") counts.known += by;
   else if (state === "due") { counts.known += by; counts.due += by; }

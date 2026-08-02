@@ -23,7 +23,7 @@ declare const __EXTENSION_VERSION__: string;
 const FLUSH_DELAY_MS = 4000;
 const FLUSH_AT = 20; // flush immediately once this many signals are queued
 const MAX_QUEUE = 200; // hard cap so a failing collector can't grow memory unbounded
-const SESSION_KEY = "telemetrySession"; // storage.local — one stable id across SW restarts
+const SESSION_KEY = "telemetrySession"; // storage.local: one stable id across SW restarts
 
 const queue: TelemetrySignal[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -129,7 +129,7 @@ export function ingestClientReport(report: ClientReport): void {
   enqueue(...report.signals.map((signal) => ({ ...signal, context })));
 }
 
-// Global crash handlers for the service worker itself — every unhandled error
+// Global crash handlers for the service worker itself: every unhandled error
 // or rejection in the background becomes an exception signal.
 export function installBackgroundErrorHandlers(): void {
   void loadSession(); // warm the persisted id so the first flush doesn't wait on storage

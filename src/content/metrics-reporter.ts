@@ -4,10 +4,10 @@ import { EMPTY_METRICS, iPlusOneTargets, PageMetricIndex, type IPlusOneOptions }
 // How much of the open page the reader can already read. Nothing here draws:
 // the numbers go to the background, which puts the coverage percentage on the
 // toolbar badge and hands the detail to the action popup. What this module does
-// paint is the i+1 cue — the sentences one new word away from being readable.
+// paint is the i+1 cue: the sentences one new word away from being readable.
 //
 // There used to be an on-page bar showing the same counts inline (and Pause /
-// Reparse / Revert buttons beside them). It's parked, not deleted — see
+// Reparse / Revert buttons beside them). It's parked, not deleted: see
 // docs/specs/browser-extension.md § Post-MVP.
 let running = false;
 let timer: number | undefined;
@@ -68,7 +68,7 @@ function clearIPlusOne(): void {
 }
 
 // Toggles the cue on changed blocks, then counts every marked block on the page
-// — a whole-page count stays right no matter which blocks this pass touched.
+//: a whole-page count stays right no matter which blocks this pass touched.
 function markIPlusOne(): number {
   const blocks = dirtyBlocks.size
     ? [...dirtyBlocks]
@@ -77,8 +77,8 @@ function markIPlusOne(): number {
   for (const block of blocks) {
     if (!block.isConnected) continue;
     // Only the words this block owns. `querySelectorAll` is a deep query, so a
-    // `<blockquote><p>` pair would otherwise both see the same sentence — two
-    // cues and a doubled count — and `markDirty` only ever reaches the inner
+    // `<blockquote><p>` pair would otherwise both see the same sentence: two
+    // cues and a doubled count: and `markDirty` only ever reaches the inner
     // one, so the outer cue would never be cleared again. Matching on the
     // word's own closest block also keeps a blockquote that mixes direct text
     // with a nested paragraph counting its own half.
@@ -91,7 +91,7 @@ function markIPlusOne(): number {
     const targets = iPlusOneTargets(words, options);
     block.classList.toggle("sb-i-plus-one", targets.length > 0);
     // A word split across inline markup renders as several spans, and only the
-    // head is a target — cue by lemma so the highlight covers the whole word.
+    // head is a target: cue by lemma so the highlight covers the whole word.
     const lemma = targets[0]?.dataset.lemma;
     for (const word of owned) word.classList.toggle("sb-i-plus-one-word", lemma != null && word.dataset.lemma === lemma);
   }
@@ -109,7 +109,7 @@ function startMetricIndex(): void {
         // Only our own words. Plenty of component libraries drive their widgets
         // with `data-state="open"`, and the removal path below is `.sb-word`-only,
         // so anything else counted as a phantom unknown word and never left the
-        // index — inflating the totals and retaining the detached node with it.
+        // index: inflating the totals and retaining the detached node with it.
         if (!record.target.matches(WORD_SELECTOR)) continue;
         metricIndex.update(record.target);
         markDirty(record.target);

@@ -11,11 +11,11 @@ import { installDictionary, lookupVariants, parseOffline, removeDictionary } fro
 
 // The extension half of the cross-engine contract. The corpus lives outside the
 // extension (test/tokenizer_eval/cross_engine.yml) because the Rails tokenizer
-// answers the same file via `bin/rails tokenizer_eval:cross_engine` — one source
+// answers the same file via `bin/rails tokenizer_eval:cross_engine`: one source
 // of truth, so a fix on one side cannot silently regress the other.
 //
 // Needs the real dictionary (the contract is about real JMdict behaviour), so it
-// reports as skipped — never as a pass — when no pack is built locally, and fails
+// reports as skipped: never as a pass: when no pack is built locally, and fails
 // outright when SHIRABE_REQUIRE_PACK demands the real run.
 
 type CrossCase = {
@@ -55,7 +55,7 @@ function* packLines(path: string): Generator<string> {
 
 // Same subset trick as the golden corpus: keep every entry that could compete for
 // a span, including the dictionary forms the spans deinflect to and the spellings
-// the text processors produce — otherwise the parser is starved and looks broken.
+// the text processors produce: otherwise the parser is starved and looks broken.
 function subsetFromRealPack(path: string, sentences: string[]): string[] {
   const keys = new Set<string>();
   for (const sentence of sentences) {
@@ -89,9 +89,9 @@ test("cross-engine tokenization contract (extension side)", async (context) => {
     // and CI sets SHIRABE_REQUIRE_PACK=1 to demand the real run.
     assert.ok(
       !process.env.SHIRABE_REQUIRE_PACK,
-      "SHIRABE_REQUIRE_PACK is set but no dictionary pack is installed — build one with `npm run prepare:dev-pack`",
+      "SHIRABE_REQUIRE_PACK is set but no dictionary pack is installed: build one with `npm run prepare:dev-pack`",
     );
-    context.skip("no local dictionary pack — build one with `npm run prepare:dev-pack`");
+    context.skip("no local dictionary pack: build one with `npm run prepare:dev-pack`");
     return;
   }
 
@@ -119,16 +119,16 @@ test("cross-engine tokenization contract (extension side)", async (context) => {
     const shown = surfaces.join(" | ");
 
     for (const surface of entry.merges ?? []) {
-      assert.ok(surfaces.includes(surface), `[${entry.name}] "${surface}" must be ONE token — got ${shown}`);
+      assert.ok(surfaces.includes(surface), `[${entry.name}] "${surface}" must be ONE token: got ${shown}`);
     }
     for (const surface of entry.splits ?? []) {
-      assert.ok(!surfaces.includes(surface), `[${entry.name}] "${surface}" must NOT be one token — got ${shown}`);
+      assert.ok(!surfaces.includes(surface), `[${entry.name}] "${surface}" must NOT be one token: got ${shown}`);
     }
     for (const [surface, lemma] of Object.entries(entry.lemmas ?? {})) {
       const token = tokens.find((item) => item.surface === surface);
-      assert.ok(token, `[${entry.name}] expected a token "${surface}" to check its lemma — got ${shown}`);
+      assert.ok(token, `[${entry.name}] expected a token "${surface}" to check its lemma: got ${shown}`);
       assert.equal(token.lemma, lemma,
-        `[${entry.name}] "${surface}" must resolve to ${lemma} in BOTH engines — a lemma that disagrees with the web forks the SRS card`);
+        `[${entry.name}] "${surface}" must resolve to ${lemma} in BOTH engines: a lemma that disagrees with the web forks the SRS card`);
     }
   }
 

@@ -15,7 +15,7 @@ declare const __EXTENSION_VERSION__: string;
 const DB_NAME = "shirabe-offline-dictionary-v4";
 const DB_VERSION = 2;
 const SUPPORTED_SCHEMA = 4;
-// Longest term the greedy longest-match will probe from any position — the
+// Longest term the greedy longest-match will probe from any position: the
 // scanner's caret window (dom-text.ts `maxChars`) mirrors it. Covers long
 // compounds/expressions; unknown katakana runs are coalesced (`unknownRun`)
 // rather than probed char-by-char, so raising this doesn't add per-run cost.
@@ -40,8 +40,8 @@ export type PackManifest = {
   sources: Array<{ name: string; url: string; license: string; licenseUrl?: string }>;
   downloadUrl: string;
   // How to NAME a pronunciation clip. The pack used to carry a pre-hashed URL on
-  // every pitch row — 40% of the download, and random hex compresses to nothing —
-  // so it now ships the recipe once and we hash the same input the server does
+  // every pitch row, 40% of the download, and random hex compresses to nothing.
+  // So it now ships the recipe once and we hash the same input the server does
   // (`Audio::Clip#digest`): reading · accent · speaker · engine · salt. None of it
   // is secret (the pack published every URL it named, against a public-read
   // bucket), and it arrives as data so a change is a pack rebuild, not a release.
@@ -412,7 +412,7 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
   const tokens: ParsedToken[] = [];
   let position = 0;
   // JMdict marks the nouns that verb with する (`vs`: 勉強, 電話, 日焼け). The very
-  // next span is then almost certainly a form of する — and left to itself the
+  // next span is then almost certainly a form of する: and left to itself the
   // parser reads 下 (below) or 舌 (tongue) out of した, because an exact common
   // noun outranks a deinflected verb of the same length. One bit of context is
   // enough to settle it, and it is the bit Sudachi's POS bigrams carry.
@@ -442,7 +442,7 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
     // long cylindrical things", 六人 "six people") but not others (三匹 is a name
     // only), so matching the dictionary literally is inconsistent AND hides the
     // counter the learner actually needs. Emit the numeral and let the counter
-    // match on the next pass, so 七本 reads 七 · 本 like 三匹 already does — the
+    // match on the next pass, so 七本 reads 七 · 本 like 三匹 already does: the
     // extension's equivalent of the web's counter parts (tracker 2026-07-14).
     const numeral = counterNumeralLength(surface);
     if (numeral && await isCounter(db, generation, surface.slice(numeral))) {
@@ -477,20 +477,20 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
 // Port of Tokenizer#merge_expressions. Cheapest-path segmentation and JMdict's
 // frequency lists disagree about grammar: それは is ranked 41,784 and んだ 21, so
 // pricing them as words splits both into particles that are individually far
-// commoner than the phrase they spell. The web hits this too — Sudachi emits
-// morphemes — and answers it the same way, with a second pass that re-fuses a run
+// commoner than the phrase they spell. The web hits this too: Sudachi emits
+// morphemes. Answers it the same way, with a second pass that re-fuses a run
 // the dictionary lists as one `exp`/`conj` entry. Frequency has no vote here: the
 // dictionary saying "this is a grammatical unit" IS the evidence.
 const GRAMMAR_POS = [ "exp", "conj" ];
 // Sudachi's 格助詞. で in 本では binds the noun before it, so で+は is the
-// compositional "as for, with" and not the connective では — the web declines that
+// compositional "as for, with" and not the connective では: the web declines that
 // merge unless the run carries a content word (について has a verb in it), and the
 // measured web output agrees: it keeps では/には/とは apart 44/59/21 times and
 // merges them twice. Not の: as a nominaliser it leads のです, のだ, のに.
 const CASE_PARTICLES = new Set([ "が", "を", "に", "で", "と", "へ", "から", "より" ]);
 const BARE_PARTICLES = new Set([ ...CASE_PARTICLES, "は", "も", "の", "や", "か", "ね", "よ", "ぞ", "な", "ば" ]);
 // Tokenizer#content_word?, from the other side: this pass repairs a grammar tail
-// the path scorer priced apart, so only the HEAD of a run may be a word — the rest
+// the path scorer priced apart, so only the HEAD of a run may be a word: the rest
 // have to be particles or the copula. Told by surface, not by part of speech,
 // because JMdict answers は with the noun 葉 and も with 藻; a kana particle looked
 // up on its own is a homograph of something.
@@ -544,7 +544,8 @@ async function grammarEntry(db: IDBDatabase, generation: string, run: ParsedToke
 
 const KATAKANA = /[ァ-ヶ]/;
 const HAS_KANJI = /[\p{Script=Han}]/u;
-const EMPHATIC = new Set([0x3063, 0x30c3, 0x30fc]); // っ ッ ー — the elongation marks
+const HONORIFIC_PREFIX = /^[おご御]/;
+const EMPHATIC = new Set([0x3063, 0x30c3, 0x30fc]); // っ ッ ー: the elongation marks
 const HAS_EMPHATIC = /[っッー]/;
 
 const katakanaToHiragana = (text: string): string =>
@@ -570,7 +571,7 @@ function collapseEmphatic(text: string): string {
 // or 0 when the surface does not start with a number. Kanji numerals and digits
 // both count; 十/百/千 appear inside larger numbers (三十本) so they are included.
 const COUNTER_NUMERAL = /^[0-9０-９一二三四五六七八九十百千万億兆]+/;
-// A token's part of speech is the raw JMdict code — `v5b`, `adj-i`, `prt` — not
+// A token's part of speech is the raw JMdict code: `v5b`, `adj-i`, `prt`, not
 // the label the popup prints. Everything that consumes it matches on codes:
 // the underline hues (content.css), the i+1 function-word test, counters. A
 // definition is built for display, so its `partsOfSpeech` are already labels
@@ -579,7 +580,7 @@ const COUNTER_NUMERAL = /^[0-9０-９一二三四五六七八九十百千万億�
 // JMdict also marks a part of speech on the sense that introduces it and lets
 // later senses inherit, so reading only sense[0] leaves some words unlabelled.
 // JMdict's suru-noun classes. `vs` is the plain one (勉強する); `vs-s`/`vs-i` are
-// the irregulars (察する, 愛する) — all three mean "する may follow this word".
+// the irregulars (察する, 愛する): all three mean "する may follow this word".
 const SURU_POS = new Set(["vs", "vs-s", "vs-i"]);
 function takesSuru(definition: Definition): boolean {
   return definition.senses.some((sense) => sense.posCodes?.some((code) => SURU_POS.has(code)));
@@ -614,14 +615,14 @@ async function isCounter(db: IDBDatabase, generation: string, text: string): Pro
   return hits.some((hit) => hit.term.senses.some((sense) => sense.partsOfSpeech.includes("ctr")));
 }
 
-// JMdict lists the に/な form of a word as an entry of its own — ように, ような,
-// そんなに, 確かに are all real headwords — but Sudachi reads them as the head plus
+// JMdict lists the に/な form of a word as an entry of its own: ように, ような,
+// そんなに, 確かに are all real headwords. But Sudachi reads them as the head plus
 // the adverbial copula and lemmatises to the head. Measured against the web's own
 // output over 1,500 sentences, it strips the に/な exactly when the head is a
 // na-adjective or a pre-noun adjectival (確かに→確か, そんなに→そんな, 好きな→好き)
 // and keeps it when the head is a plain noun (ために, なしに) or nothing at all
-// (さらに, すでに). So: keep the boundary — the phrase is what the reader saw and
-// what the popup explains — and lemmatise the same way the site does, or a card
+// (さらに, すでに). So: keep the boundary: the phrase is what the reader saw and
+// what the popup explains. Lemmatise the same way the site does, or a card
 // minted here can never meet the one the site makes from the same sentence.
 const COPULA_STEM_POS = [ "adj-na", "adj-pn" ];
 // よう is the one head Sudachi splits off that JMdict does not class as either:
@@ -642,8 +643,8 @@ async function copulaHead(db: IDBDatabase, generation: string, definition: Defin
   // as そん (損, a na-adjective meaning "loss") and さらに as さら (新, "brand new"):
   // a lexicalised adverb whose first characters happen to spell a rare homograph.
   // Where Sudachi really does strip a copula the head is the everyday word and the
-  // に/な form the derived one — 確か 274 against 確かに 461, そんな 40 against
-  // そんなに 2,099 — so requiring that ordering keeps exactly the cases it should.
+  // に/な form the derived one: 確か 274 against 確かに 461, そんな 40 against
+  // そんなに 2,099. So requiring that ordering keeps exactly the cases it should.
   const headRank = frequencyForHit(head);
   return headRank !== null && headRank < (definition.frequency ?? UNRANKED) ? stem : null;
 }
@@ -665,13 +666,22 @@ export function lookupVariants(prefix: string): Array<{ text: string; processing
     if (!text || variants.some((variant) => variant.text === text)) return;
     variants.push({ text, processingCost: cost });
   };
-  // Old/variant kanji (旧字体・異体字) standardize to the modern form — 萬→万, 國→国 —
+  // Old/variant kanji (旧字体・異体字) standardize to the modern form: 萬→万, 國→国,
   // which NFKC does not do (they are distinct unified ideographs). Safe at any
   // length: it only rewrites kanji, so it can't invent a kana word.
   if (HAS_KANJI.test(prefix)) add(convertVariants(prefix), 1);
   // A single mora is never an emphasis (スゴイ) or stretched (すっごい) form, but a
-  // lone katakana ミ would fold to み and deinflect to 見る — so only vary length ≥ 2.
-  if ([...prefix].length < 2) return variants;
+  // lone katakana ミ would fold to み and deinflect to 見る: so only vary length ≥ 2.
+  const chars = [...prefix];
+  if (chars.length < 2) return variants;
+  // Honorific お/ご is productive, but JMdict only lists some of what it forms:
+  // ご連絡 is an entry, ご配慮 is not. Without the stripped variant the reader gets
+  // the bare prefix as its own lookup and the noun as another, so the same
+  // construction reads two different ways depending on dictionary coverage.
+  // Only before a kanji stem: お/ご before kana far more often opens an ordinary
+  // word (おもう, およそ, ごはん) than an honorific. Listed forms are unaffected
+  // either way: they match verbatim at cost 0 and outrank this by `processing`.
+  if (HONORIFIC_PREFIX.test(prefix) && HAS_KANJI.test(chars[1])) add(chars.slice(1).join(""), 1);
   if (KATAKANA.test(prefix)) add(katakanaToHiragana(prefix), 1);
   const collapsed = collapseEmphatic(prefix);
   if (collapsed !== prefix) {
@@ -682,14 +692,14 @@ export function lookupVariants(prefix: string): Array<{ text: string; processing
 }
 
 // Common auxiliary verbs that attach to a te-form (授けて+いただく, 読んで+しまう).
-// They are separate verbs, not inflections, so the deinflector cannot reach them —
+// They are separate verbs, not inflections, so the deinflector cannot reach them:
 // but a long inflection chain CAN eat into their head (授けていた steals the い from
 // いただく), which is where a purely greedy longest match goes wrong.
 const TE_AUXILIARIES = ["いただく", "いただける", "くださる", "ください", "もらう", "もらえる", "くれる", "あげる", "やる", "しまう", "おく", "みる", "いく", "くる", "ある", "いる"];
 
 // An auxiliary carries the predicate's tense, so it rarely stands in its
 // dictionary spelling: ていった is て + いく in the past. So how many characters of
-// `rest` spell one has to be answered by DEINFLECTING it — reading the plain
+// `rest` spell one has to be answered by DEINFLECTING it: reading the plain
 // spelling alone missed exactly the case that hurts. In 変わっていった, いった went
 // unrecognised, so 変わってい took the span as the entry 変わっている ("to be
 // eccentric") and stranded った. Longest first: ていった is いった (いく), not い (いる).
@@ -714,8 +724,8 @@ function auxiliaryLength(rest: string): number {
 //
 // So when the best match is followed by a te-form auxiliary that it has bitten
 // into, prefer the shorter match that leaves the auxiliary whole. This is a
-// deliberately narrow rule — it only fires when a shorter alternative ends at a
-// て/で boundary AND the remainder then spells a known auxiliary — rather
+// deliberately narrow rule: it only fires when a shorter alternative ends at a
+// て/で boundary AND the remainder then spells a known auxiliary, rather
 // than general lattice scoring, which is what Sudachi does and we cannot afford.
 async function bestWithLookahead(
   db: IDBDatabase, generation: string, rest: string,
@@ -732,17 +742,17 @@ async function bestWithLookahead(
   const matched = best?.sourceForm;
   if (!matched) return best;
 
-  // Fire only when the winning span ends STRICTLY INSIDE a following auxiliary —
+  // Fire only when the winning span ends STRICTLY INSIDE a following auxiliary:
   // that is the "bitten into it" case. 授けていただく: cutting at 授けて leaves
-  // いただく (3→7) while the match ends at 5, inside it — so it bit in, and the
+  // いただく (3→7) while the match ends at 5, inside it: so it bit in, and the
   // shorter reading wins. 書いている: cutting at 書いて leaves いる (3→5) and the
-  // match ends at exactly 5, consuming the auxiliary cleanly — that is the
+  // match ends at exactly 5, consuming the auxiliary cleanly: that is the
   // progressive, one token, and must be left alone.
   for (let cut = matched.length - 1; cut >= 2 && matched.length >= 3; cut -= 1) {
     if (matched[cut - 1] !== "て" && matched[cut - 1] !== "で") continue;
     const auxiliary = auxiliaryLength(rest.slice(cut));
     if (!auxiliary) continue;
-    if (matched.length >= cut + auxiliary) continue; // consumed it whole — leave it
+    if (matched.length >= cut + auxiliary) continue; // consumed it whole: leave it
     const shorter = await lookupInDatabase(db, generation, matched.slice(0, cut), languages, apiBase, true);
     // Only take the shorter reading if it actually covers the te-form span.
     if (shorter?.sourceForm?.length === cut) return shorter;
@@ -755,17 +765,17 @@ async function bestWithLookahead(
   // of common words and the other of rare ones.
   //
   // So price the two readings as PATHS and take the cheaper. Cost is corpus rank,
-  // logged — Sudachi minimises a connection cost over a full lattice, and this is
+  // logged: Sudachi minimises a connection cost over a full lattice, and this is
   // the two-token slice of that we can afford. Ranks ride in the pack already.
   return pathAdjusted(db, generation, rest, languages, apiBase, best, candidates);
 }
 
-// Every reading of this position the contextual gate trusts, best first — the
+// Every reading of this position the contextual gate trusts, best first: the
 // same list `lookupInDatabase` picks its winner from, returned rather than
 // rebuilt, so the scorer sees the runners-up greed threw away.
 // The kana する actually inflects through (する・します・した・して・される・させる…).
-// Its potential is suppletive — spelled できる, which JMdict carries as its own
-// entry 出来る — so 長居できない is a form of できる, not of する, and the promotion
+// Its potential is suppletive: spelled できる, which JMdict carries as its own
+// entry 出来る: so 長居できない is a form of できる, not of する, and the promotion
 // below must not drag it across. The web reads it the same way.
 const SURU_STEM = /^[しすさせ]/;
 
@@ -783,7 +793,7 @@ async function contextualCandidates(db: IDBDatabase, generation: string, source:
 }
 
 // The scorer looks one token ahead, which is the very span the parser reads on
-// its next step — so the work lands in the cache above rather than being redone.
+// its next step: so the work lands in the cache above rather than being redone.
 async function gatherCandidates(db: IDBDatabase, generation: string, source: string, afterSuruNoun = false): Promise<LookupHit[]> {
   const prefixes = prefixesLongestFirst(source);
   const exactHits = await hitsForCandidates(db, generation, prefixes.flatMap((prefix) =>
@@ -793,10 +803,10 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
   // Only a VERBATIM match may suppress deinflecting its own span. A folded one is
   // a guess about the spelling (あった → collapse the sokuon → あた, an obscure old
   // unit of length), and letting the guess stand in for the span meant あった never
-  // reached ある at all — the same shape as あったまる losing to 頭.
+  // reached ある at all: the same shape as あったまる losing to 頭.
   // Every span is deinflected, even one an exact match already covers. The old
-  // optimisation — only deinflect prefixes LONGER than the longest exact hit —
-  // saved work by assuming an exact match is the better reading of its own span,
+  // optimisation: only deinflect prefixes LONGER than the longest exact hit.
+  // Saved work by assuming an exact match is the better reading of its own span,
   // and that assumption hides an inflected verb behind every homograph: います is
   // an exact hit on 在す (archaic, rank 40,743) and so never reached いる (rank 38);
   // した is 下 and never reached する. The ranking below can only choose between
@@ -810,7 +820,7 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
       })))), false);
   const hits = [...deinflectedHits, ...exactHits];
   const confident = hits.filter(contextuallyConfident);
-  // Nothing cleared the gate — so fall back to what the parser is underneath, a
+  // Nothing cleared the gate: so fall back to what the parser is underneath, a
   // longest match. The gate exists to let a *confident shorter* word beat a long
   // unconfident one; with nothing confident it has no opinion, and dropping to
   // per-word score shattered 全く (adverb, common, but usually-kana so never
@@ -827,7 +837,7 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
   // is not a tie the inflection count should be settling.
   // …but only against a leader that is nobody's idea of a common word. JMdict
   // marks 出来る common (rank 1,094) and it is still ~9 bits rarer than する, which
-  // it is the potential form of — so the gap alone handed every 出来る on the page
+  // it is the potential form of: so the gap alone handed every 出来る on the page
   // to する. The rule is for the archaic homographs (在す is common nowhere); a
   // writing the dictionary itself calls common is not the accident it aims at.
   const leader = confident[0];
@@ -836,8 +846,8 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
       && rankCost(hit) + MUCH_COMMONER <= rankCost(leader));
     if (rival) confident.unshift(...confident.splice(confident.indexOf(rival), 1));
   }
-  // JMdict lists plenty of inflected forms as entries in their own right — 知らない
-  // and ならない as adjectives, ください and なさい as expressions, した as a noun — and
+  // JMdict lists plenty of inflected forms as entries in their own right: 知らない
+  // and ならない as adjectives, ください and なさい as expressions, した as a noun. And
   // an exact match on one of those beats the deinflection that reaches the verb,
   // for the sole reason that it took no steps to get there. The web reads them as
   // forms and lemmas them to the verb, and the verb is what a card wants on its
@@ -846,7 +856,7 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
   //
   // A form entry is itself conjugable, so the rule cannot ask that the leader be
   // an EXACT match: 変わっていた is the past of the entry 変わっている ("to be
-  // eccentric") — one step — where the verb behind it takes three, and requiring a
+  // eccentric"): one step. Where the verb behind it takes three, and requiring a
   // stepless leader is the whole reason it stood. What actually marks the rival as
   // the same reading carried further is that it walks the leader's chain and keeps
   // going (`extendsChain`); with a stepless leader that is every chain, which is
@@ -858,13 +868,13 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
       && VERBAL_POS.test(firstSensePos(hit))
       && hit.candidate.reasons.every((reason) => PREDICATE_FORMS.has(reason))
       // …and the verb has to be the commoner reading of the two. それ is the
-      // imperative of 剃る and たくさん the negative of 託す — real rules, firing on
+      // imperative of 剃る and たくさん the negative of 託す: real rules, firing on
       // the commonest pronouns there are. A form beats its own dictionary entry
       // only when the word behind it is the one people actually write.
       && rankCost(hit) < rankCost(leader));
     if (form > 0) confident.unshift(...confident.splice(form, 1));
   }
-  // After a suru-noun, a form of する is the reading — 日焼け + した is not 日焼け
+  // After a suru-noun, a form of する is the reading: 日焼け + した is not 日焼け
   // followed by a tongue. Only ever promotes an inflected する that the sort had
   // already accepted; it never invents one.
   if (afterSuruNoun) {
@@ -876,7 +886,7 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
 }
 
 // A token's price: how rare it is, logged so the difference between rank 2 and
-// rank 400 does not swamp everything else. An unranked entry is not free — it is
+// rank 400 does not swamp everything else. An unranked entry is not free: it is
 // the expensive case, because "a word nobody uses" is exactly what a greedy match
 // hallucinates out of two neighbouring words.
 const UNRANKED = 300_000;
@@ -897,7 +907,7 @@ function tokenCost(hit: LookupHit | null | undefined): number {
 }
 
 // How a reading is priced: the cheapest way to explain the text AFTER it, over a
-// short window. This is the slice of Sudachi's lattice we can afford — Sudachi
+// short window. This is the slice of Sudachi's lattice we can afford: Sudachi
 // minimises a connection cost over the whole sentence; this minimises rank cost
 // over the next few characters, which is where the greedy mistakes live.
 //
@@ -951,7 +961,7 @@ async function pathAdjusted(
   candidates: LookupHit[],
 ): Promise<Definition | null> {
   const winner = candidates[0];
-  // At the end of the text there is no path to compare — the winner explains
+  // At the end of the text there is no path to compare: the winner explains
   // everything that is left.
   if (!winner || winner.prefixLength >= rest.length) return best;
 
@@ -992,10 +1002,10 @@ async function lookupInDatabase(db: IDBDatabase, generation: string, source: str
   // Deinflecting only when nothing matched exactly loses to any shorter entry
   // that happens to be a real word: 読みませんでした matched the noun 読み and never
   // reached 読む; 高くなかった matched 高 instead of 高い. Only a prefix longer than
-  // the exact match can improve on it, so deinflect just those — keeping
+  // the exact match can improve on it, so deinflect just those: keeping
   // longest-match semantics without paying for deinflection on every lookup.
   // Measure the exact match against hits we would actually USE. A spurious exact
-  // match — 有益, a name read あります — is not contextually confident, but counting
+  // match: 有益, a name read あります, is not contextually confident, but counting
   // it here made the span look covered and skipped deinflecting あります → ある, so
   // the sentence fell back to あり + ます. Only a hit that could win may suppress
   // deinflection of its own span.
@@ -1025,7 +1035,7 @@ async function lookupInDatabase(db: IDBDatabase, generation: string, source: str
   // Rank both sets together rather than letting a deinflection displace an exact
   // match outright. 全く is an adverb the page literally spells that way, but
   // JMdict marks the word usually-kana (まったく), so the contextual gate declines
-  // it — and with exact hits discarded the only reading left was 全い, a rare
+  // it: and with exact hits discarded the only reading left was 全い, a rare
   // adjective it is the ku-form of. `score` already weights span length above
   // everything, so the case that rule protected (読みませんでした reaching 読む, not
   // the noun 読み) still holds: the longer deinflected span outscores the short
@@ -1035,7 +1045,7 @@ async function lookupInDatabase(db: IDBDatabase, generation: string, source: str
   return hits[0] ? termDefinition(hits[0], languages, apiBase) : null;
 }
 
-// Kanji are a separate corpus, never a word-search result — the server draws the
+// Kanji are a separate corpus, never a word-search result: the server draws the
 // same line by whitelisting `kind: definition/name/encyclopedia` out of search
 // (searches_controller.rb) and reaching KANJIDIC only from an explicit kanji
 // page or an in-card breakdown. This is that explicit path: the popup's kanji
@@ -1062,7 +1072,7 @@ async function hitsForCandidates(
   // candidate. The multiEntry index answers with the term records themselves, so
   // a probe is one query rather than a key lookup followed by a fetch per id.
   // Page text reaches parseOffline unnormalized and its token offsets are
-  // measured against that raw text, so normalize the probe only — `prefix` stays
+  // measured against that raw text, so normalize the probe only: `prefix` stays
   // the on-page surface.
   const keys = db.transaction("terms").objectStore("terms").index("lookupKeys");
   const resolved = await Promise.all(probes.map(async (probe) => ({
@@ -1078,8 +1088,8 @@ async function hitsForCandidates(
     .flatMap((probe) => probe.terms.flatMap((term) => {
       // Keyed by the CANDIDATE too, not just the prefix: a text-processor variant
       // often resolves to the same term as the verbatim spelling (學校/学校,
-      // すごーい/すごい). Deduping on prefix alone kept only the verbatim probe —
-      // and when that one matched a rare/search-only spelling the confidence gate
+      // すごーい/すごい). Deduping on prefix alone kept only the verbatim probe.
+      // And when that one matched a rare/search-only spelling the confidence gate
       // dropped it, losing the whole span. Keeping both lets the confident one
       // survive; `contextualCompare` still prefers the verbatim when both pass.
       const key = longestOnly ? term.id : `${probe.prefix}\0${probe.candidate.text}\0${term.id}`;
@@ -1097,7 +1107,7 @@ const CONTEXTUAL_FREQUENCY_LIMIT = 50_000;
 // A deinflected candidate must land on a term whose part-of-speech can actually
 // take that inflection: いつだった → いつだつ (godan った→つ, conditions v5) must not
 // match 逸脱 (a noun/suru-verb). Exact candidates carry no conditions and always
-// pass — only deinflections are gated, and like Yomitan an entry with no matching
+// pass: only deinflections are gated, and like Yomitan an entry with no matching
 // conjugating class simply doesn't match (a noun has no verb rules to fire).
 function posSatisfiesInflection(term: Stored<OfflineTerm>, candidate: Candidate): boolean {
   const required = candidate.conditions ?? 0;
@@ -1110,7 +1120,7 @@ function matchingExpression(hit: LookupHit) {
   return hit.term.expressions.find((expression) => normalize(expression.text) === normalized);
 }
 
-// The kana that spells the form the surface matched — mirrors WordCard#reading_for.
+// The kana that spells the form the surface matched: mirrors WordCard#reading_for.
 // A kana form reads as itself; a written form takes the first reading JMdict says
 // applies to it, so 良い天気 reads よいてんき while いい天気 reads いいてんき. Pairing a
 // form with a reading it doesn't own leaves the two unalignable, and furigana
@@ -1124,7 +1134,7 @@ function readingFor(term: Stored<OfflineTerm>, matched: string | undefined): str
   return (applicable ?? kana[0] ?? term.readings[0])?.text ?? null;
 }
 
-// The form to LEAD the card with — mirrors WordCard#headword / #canonical_headword.
+// The form to LEAD the card with: mirrors WordCard#headword / #canonical_headword.
 // A specific written form the surface matched leads (look up 狗 → 狗, not 犬); a
 // usually-kana word otherwise leads with its kana (いつ, not 何時), matching the
 // site so the offline popup and the page read the word the same way.
@@ -1138,7 +1148,7 @@ function displayHeadword(hit: LookupHit, reading: string | null): string {
 // WordCard/Entry#usually_kana?: JMdict `uk`, or every kanji writing is rare
 // (rK/oK), or the word is kana-only. Such a word's kana IS its normal spelling.
 function isUsuallyKana(term: Stored<OfflineTerm>): boolean {
-  // Primary sense only — the backend reads `facets.first` (Entry#usually_kana?),
+  // Primary sense only: the backend reads `facets.first` (Entry#usually_kana?),
   // not "any facet", so a `uk` annotation on a minor later sense must not flip the
   // whole entry to kana. The pack writes senses in facet order, so senses[0] is
   // that primary facet (the exporter drops only facets with no glosses at all).
@@ -1162,7 +1172,7 @@ function contextuallyConfident(hit: LookupHit): boolean {
   // JMdict says about では (rank 80) or には (rank 30): で in 本では binds the noun
   // in front of it, so the reader is looking at で + は. Tokenizer#mergeable_expression?
   // declines exactly this merge from the other side, and the web's output over
-  // 1,500 sentences bears it out — では/には/とは/でも come out apart 44/59/21/27
+  // 1,500 sentences bears it out: では/には/とは/でも come out apart 44/59/21/27
   // times against 2/2/0/2 merged. A deliberate lookup of では still finds the
   // entry; this is a rule about reading a sentence, not about the dictionary.
   if (particleCluster(hit.surface)) return false;
@@ -1172,7 +1182,7 @@ function contextuallyConfident(hit: LookupHit): boolean {
   if (!expression) {
     // The surface matched a reading, not a writing form. For a usually-kana word
     // (について, こと, など) the kana IS the normal spelling, so a kana surface is as
-    // confident as a common expression — otherwise the multi-kana word loses to a
+    // confident as a common expression: otherwise the multi-kana word loses to a
     // bare particle prefix and について is split into に + つい + て.
     return usuallyKana && matchingReading(hit);
   }
@@ -1186,7 +1196,7 @@ function contextuallyConfident(hit: LookupHit): boolean {
   // the word however it spells it, and the dictionary form we landed on is not a
   // spelling choice the reader made.
   // …nor to a kanji spelling JMdict itself marks common. `uk` says the word is
-  // usually written in kana, not that this writing is rare — 全く is `uk` (まったく)
+  // usually written in kana, not that this writing is rare: 全く is `uk` (まったく)
   // and *also* a common writing ranked 1,119, and demoting it left the adverb on
   // the page with no confident reading at all, shattered into 全 + く.
   const rareKanji = !inflected && expression.script !== "kana" && !expression.common
@@ -1195,8 +1205,8 @@ function contextuallyConfident(hit: LookupHit): boolean {
   // An inflected reading used to be trusted outright, on the assumption that it
   // could only ever be LONGER than the exact match it competed with. It can be the
   // same length, and then the assumption inverts: 全く (adverb, common, rank 1,119)
-  // lost its own span to 全い — a rare adjective it happens to be the ku-form of —
-  // because nobody asked how rare 全い was. So an inflected reading clears the same
+  // lost its own span to 全い, a rare adjective it happens to be the ku-form of.
+  // Because nobody asked how rare 全い was. So an inflected reading clears the same
   // bar as any other: a word people actually use.
   const frequency = frequencyForHit(hit);
   return expression.common || (frequency !== null && frequency <= CONTEXTUAL_FREQUENCY_LIMIT);
@@ -1212,23 +1222,23 @@ const VERBAL_POS = /^(v[0-9a-z-]+|adj-i)$/;
 // The rules this promotion trusts, named exactly as `inflectionLabel` renders them.
 // A whitelist, not a blacklist, and the blacklist that came first is why: the
 // deinflector also has slang and dialect rules, and through those これ is the
-// imperative of 凝る, たくさん of 託す and みんな of 見る — all common verbs, so every
+// imperative of 凝る, たくさん of 託す and みんな of 見る: all common verbs, so every
 // pronoun in the corpus lemma'd to a verb nobody wrote. What belongs here is the
 // plain predicate endings, where the verb IS the word and the ending is grammar.
 // Not `potential`: できる is listed as its own word and JMdict is right that it is
 // one, so promoting there just re-opens 出来る → する. Not `continuative` or the
-// noun-forming rules either — 帰り and 読み are the words the sentence means.
+// noun-forming rules either: 帰り and 読み are the words the sentence means.
 const PREDICATE_FORMS = new Set([ "negative", "past", "polite", "te-form", "progressive",
   "passive", "causative", "short causative", "volitional", "imperative",
   "desiderative (-tai)", "polite imperative (-nasai)", "negative (-naide)",
   "negative (-zu)", "negative (-nu)", "negative (-n)", "negative conditional (-neba)" ]);
 
-// Is `rival` the same analysis taken further — the leader's own chain, then more?
+// Is `rival` the same analysis taken further: the leader's own chain, then more?
 // Chains read surface → dictionary form, so "one reading is a continuation of the
 // other" is literally a prefix test: 変わっていた is [past] to 変わっている and
 // [past, progressive, te-form] to 変わる, which is that same past plus the two steps
-// the form entry stops at. Two chains that merely SHARE a length say nothing —
-// they can be different readings of the span — so nothing but an extension counts.
+// the form entry stops at. Two chains that merely SHARE a length say nothing:
+// they can be different readings of the span. So nothing but an extension counts.
 const extendsChain = (leader: readonly string[], rival: readonly string[]): boolean =>
   rival.length > leader.length && leader.every((reason, index) => rival[index] === reason);
 
@@ -1261,7 +1271,7 @@ function contextualCompare(a: LookupHit, b: LookupHit): number {
   return aFrequency - bFrequency || score(b, b.surface) - score(a, a.surface) || a.term.id.localeCompare(b.term.id);
 }
 
-// Corpus rank for this hit — the applicable [text, reading] pair first, with a
+// Corpus rank for this hit: the applicable [text, reading] pair first, with a
 // text-only floor as fallback. Mirrors Entry.contextual_matches:
 // `frequency[[text, reading]] || text_frequency[text]`.
 //
@@ -1298,7 +1308,7 @@ async function performInstall(apiBase: string, signal: AbortSignal): Promise<Pac
   validateManifest(manifest);
 
   reportInstallProgress(installProgress, "Checking offline dictionary storage");
-  // Avoid re-entering snapshot/installing flags via dictionaryStatus during install —
+  // Avoid re-entering snapshot/installing flags via dictionaryStatus during install:
   // only need the active revision comparison.
   const dbForCheck = await openDatabase();
   const activeRevision = await meta<string>(dbForCheck, "activeGeneration");
@@ -1457,7 +1467,7 @@ async function writeBatch(db: IDBDatabase, generation: string, records: Array<Of
 }
 
 // The keys a term answers to, for the multiEntry index. Normalized, because
-// every probe arrives normalized — a raw key like "Ｔシャツ" would be unreachable
+// every probe arrives normalized: a raw key like "Ｔシャツ" would be unreachable
 // once a query becomes "Tシャツ". Generation-prefixed so one index spans the
 // staged and active generations without them colliding.
 function lookupKeysFor(record: OfflineTerm, generation: string): string[] {
@@ -1484,8 +1494,8 @@ function openDatabase(): Promise<IDBDatabase> {
         const terms = ensureStore(db, transaction, "terms", "pk");
         ensureIndex(terms, "generation", "generation");
         // Every writing/reading a term answers to, indexed straight off the
-        // record. A separate lookups table cost a row per key — 1.9M extra puts
-        // on the full pack, ~2 of every 3 writes during install — and forced
+        // record. A separate lookups table cost a row per key: 1.9M extra puts
+        // on the full pack, ~2 of every 3 writes during install. And forced
         // each probe into two queries (keys → ids → records). multiEntry is the
         // same join, maintained by the engine, and returns the record itself.
         ensureIndex(terms, "lookupKeys", "keys", { multiEntry: true });
@@ -1563,7 +1573,7 @@ async function audioRecipe(db: IDBDatabase): Promise<PackManifest["audio"] | nul
   return audioRecipeCache;
 }
 
-// The clip for a reading at one accent — the same digest `Audio::Clip#digest`
+// The clip for a reading at one accent: the same digest `Audio::Clip#digest`
 // computes, so the file both sides name is the same one on the CDN. Cached
 // because a page repeats its common words, and hashing is the only work here.
 const clipUrlCache = new BoundedCache<string>(2_000);
@@ -1573,7 +1583,7 @@ async function clipUrl(recipe: PackManifest["audio"], reading: string, downstep:
   const cached = clipUrlCache.get(key);
   if (cached) return cached;
   // Content scripts on an http: page have no SubtleCrypto (it needs a secure
-  // context). Lookups run in the worker, which always has one — but a missing
+  // context). Lookups run in the worker, which always has one: but a missing
   // digest must read as "no clip", never as a broken URL.
   const subtle = globalThis.crypto?.subtle;
   if (!subtle) return null;
@@ -1610,7 +1620,7 @@ async function clipUrlsFor(db: IDBDatabase, definition: PendingDefinition): Prom
   )));
 }
 
-// The term cites its examples by id — one Tatoeba line illustrates dozens of
+// The term cites its examples by id: one Tatoeba line illustrates dozens of
 // words, so the pack stores each once.
 async function examplesFor(
   db: IDBDatabase, generation: string, definition: PendingDefinition, languages: readonly GlossLanguage[],
@@ -1713,7 +1723,7 @@ function validateManifest(manifest: PackManifest): void {
 
 // The recipe names files in OUR bucket and nowhere else: `baseUrl` faces the same
 // guard the background fetch does (`isR2AudioUrl`), and the rest of the URL is a
-// hex digest we compute plus a path segment with no separators — so a tampered
+// hex digest we compute plus a path segment with no separators: so a tampered
 // manifest cannot turn a play button into a request to somebody else's host.
 function validAudioRecipe(value: unknown): value is PackManifest["audio"] {
   if (!value || typeof value !== "object" || !exactKeys(value, ["baseUrl", "path", "extension", "separator", "engineVersion", "salt", "defaultVoice", "voices"])) return false;
@@ -1810,8 +1820,8 @@ function exactKeys(value: object, allowed: string[]): boolean {
 }
 
 // `url(` and `on…=` must only match a real CSS/HTML construct. Without a leading
-// word boundary they also match ordinary glosses — "to hurl (at)" and "to curl
-// (hair)" both contain "url (" — which aborted the whole install on four real
+// word boundary they also match ordinary glosses: "to hurl (at)" and "to curl
+// (hair)" both contain "url (": which aborted the whole install on four real
 // JMdict entries.
 const UNSAFE_STRUCTURED_CONTENT = /<\/?[a-z][^>]*>|\bon\w+\s*=|javascript:|data:text\/html|@import\b|\burl\s*\(/i;
 
@@ -1857,7 +1867,7 @@ function score(hit: LookupHit, source: string): number {
   return exact + common + frequency + hit.prefixLength * 10 - hit.candidate.reasons.length - processing;
 }
 
-// One meaning block per language, in the reader's order — the same walk as the
+// One meaning block per language, in the reader's order: the same walk as the
 // web's WordCard#build_meanings over Locales.source_stack_for. Within a block a
 // sense with no gloss in that language falls back to the languages after it,
 // English last (Locales.with_english_fallback), so a block never renders blank.
@@ -1872,7 +1882,7 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
   const senses: Sense[] = blocks.flatMap((language, index) => {
     // Exactly WordCard#fallback_db_langs_after: the languages *after* this one
     // in the reader's stack, English last, minus this block's own language. The
-    // fallback fills a sense inside the block — it never adds a block, which is
+    // fallback fills a sense inside the block: it never adds a block, which is
     // why one language stays one language.
     const fallbacks = withEnglishFallback(blocks.slice(index + 1)).filter((code) => code !== language);
     return applicable.flatMap((sense) => {
@@ -1894,14 +1904,14 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
   });
   const reading = readingFor(term, matchingExpression(hit)?.text);
   const headword = displayHeadword(hit, reading);
-  // A pattern is a property of the READING — its clip is literally
-  // Audio::Clip.word(reading, accent) — so a row filed under a sibling writing of
+  // A pattern is a property of the READING: its clip is literally
+  // Audio::Clip.word(reading, accent): so a row filed under a sibling writing of
   // the same reading describes this form too. The row for the exact spelling wins
   // when there is one; otherwise any row for the reading we are DISPLAYING does.
   // Without that fallback every kana-led word went silent offline: the pack files
   // 松's pattern under (松, まつ), the popup leads a usually-kana hit with まつ, and
   // an exact (まつ, まつ) row exists for almost nothing. Rows for the entry's OTHER
-  // readings stay excluded — あした's accent must never be shown against あす.
+  // readings stay excluded: あした's accent must never be shown against あす.
   const pitchRows = term.pitch ?? [];
   const exactPitch = pitchRows.filter((item) => item.text === headword && item.reading === reading);
   // One graph per accent. 温まる and 暖まる both file あったまる at [4]; they are the
@@ -1916,7 +1926,7 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
     common: term.expressions.some((item) => item.common),
     jlpt: term.jlpt ? `N${term.jlpt}` : null,
     frequency: frequencyForHit(hit),
-    // `audioUrl` and `examples` are filled in by `forPopup` — the pack stores a
+    // `audioUrl` and `examples` are filled in by `forPopup`: the pack stores a
     // pattern rather than a link to its clip, and cites its sentences by id.
     pitch: displayedPitch.map((item) => ({ downstep: item.downstep, audioUrl: null })),
     senses,
@@ -1930,7 +1940,7 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
 
 // KANJIDIC ships pinyin, Korean and Vietnamese readings alongside the Japanese
 // ones, and lists them first. Taking whatever came first showed 猫 as "mao1"
-// rather than ビョウ — a Chinese reading on 96% of the pack's kanji. Only on/kun
+// rather than ビョウ: a Chinese reading on 96% of the pack's kanji. Only on/kun
 // are Japanese; kun carries okurigana after a dot (た.べる), which is not part of
 // the character's own reading.
 function kanjiReading(readings: OfflineKanji["readings"]): string | null {
@@ -1968,8 +1978,8 @@ const JAPANESE_HEAD = new RegExp(`^[${JAPANESE_CHARS}]`, "u");
 const NOT_JAPANESE_RUN = new RegExp(`^[^${JAPANESE_CHARS}]+`, "u");
 
 // On a lookup miss, a run of katakana (incl. the prolonged sound mark ー, which
-// is script-neutral) or full-width alphanumerics is reliably a single unit — a
-// loanword, name, or number the pack doesn't carry — so `unknownRun` consumes
+// is script-neutral) or full-width alphanumerics is reliably a single unit: a
+// loanword, name, or number the pack doesn't carry: so `unknownRun` consumes
 // the whole run instead of emitting one code point at a time, which shattered
 // ミュンヘン into ミ・ュ・ン・ヘ・ン. It stops at the script boundary, so a following
 // particle or kanji word still tokenizes on its own. A kanji/hiragana miss

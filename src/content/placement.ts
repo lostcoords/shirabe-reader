@@ -1,8 +1,8 @@
 // Where the lookup card sits relative to the word under the cursor.
 //
 // The one rule: never sit in the reading flow. A card beside a word in
-// horizontal text covers the rest of the sentence — the words the reader is
-// heading towards — so horizontal lookups go below (or above), and vertical
+// horizontal text covers the rest of the sentence: the words the reader is
+// heading towards. So horizontal lookups go below (or above), and vertical
 // ones go beside the column. Pure geometry, so it can be tested without a
 // layout engine; `popup.ts` does the measuring and the style writing.
 
@@ -15,7 +15,7 @@ export type Placement = { left: number; top: number; maxHeight: number | null };
 const MIN_HEIGHT = 160;
 
 export function placeCard(opts: {
-  rect: Rect; // the word itself — what we align to
+  rect: Rect; // the word itself: what we align to
   avoid: Rect; // what we must clear: the word, or the whole caption line
   size: Size; // the card's natural size
   view: Size; // the viewport

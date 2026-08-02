@@ -60,7 +60,7 @@ const watchLock = join(root, ".web-ext-profile", `${target}.watch.lock`);
 
 // Self-reload for a watcher without --serve: the extension subscribes to this
 // local event stream and reloads itself after every build, so you can develop a
-// temporary add-on in your everyday Firefox. Firefox only — Chrome's MV3
+// temporary add-on in your everyday Firefox. Firefox only: Chrome's MV3
 // background is a service worker, which has no EventSource.
 const RELOAD_PORT = 8473;
 const devReload = watch && !serve && target === "firefox";
@@ -94,7 +94,7 @@ const buildOptions = {
     __SHIRABE_OFF_HOSTS__: JSON.stringify(watch ? DEV_OFF_HOSTS : RELEASE_OFF_HOSTS),
     __EXTENSION_VERSION__: JSON.stringify(baseManifest.version),
     // Which build is actually loaded. The version alone can't answer that during
-    // development — it doesn't move between rebuilds, so a stale copy of the
+    // development: it doesn't move between rebuilds, so a stale copy of the
     // extension looks identical to a fresh one in the console.
     __BUILD_ID__: JSON.stringify(new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)),
     // Telemetry ships to the same self-hosted Grafana Faro receiver as the web
@@ -163,7 +163,7 @@ async function copyStatic() {
   await copyFile(join(root, "node_modules/@noble/hashes/LICENSE"), join(outdir, "licenses/noble-hashes-MIT.txt"));
   // The extension is GPL-3.0 (Yomitan-derived deinflection); ship its terms and
   // attribution with the package rather than only in the repository. These files
-  // ARE the compliance — GPL-3.0 §4 wants a copy of the licence conveyed with the
+  // ARE the compliance: GPL-3.0 §4 wants a copy of the licence conveyed with the
   // program, and MIT wants its notice kept in copies. There is no in-product page
   // rendering them: shirabe.org/credits is the readable home, and the packaged
   // text is what has to travel.
@@ -176,7 +176,7 @@ async function buildAll() {
   if (watch) await acquireWatchLock();
   // A temporary add-on loaded from about:debugging keeps reading THIS directory,
   // so deleting it pulls the extension out from under a browser that already has
-  // it loaded — restarting the watcher would leave a dead add-on and a blank
+  // it loaded: restarting the watcher would leave a dead add-on and a blank
   // popup. Watch builds overwrite in place instead (as copyStatic already does,
   // for the same reason); one-shot builds still start from a clean directory so
   // a package can never inherit a stale file.
@@ -223,7 +223,7 @@ function startReloadServer() {
     request.on("close", () => reloadClients.delete(response));
   });
   server.on("error", (error) => {
-    console.error(`✗ self-reload disabled — port ${RELOAD_PORT}: ${error.code ?? error.message}`);
+    console.error(`✗ self-reload disabled: port ${RELOAD_PORT}: ${error.code ?? error.message}`);
   });
   // Never a reason to keep the watcher alive by itself.
   server.unref();
@@ -273,8 +273,8 @@ function processAlive(pid) {
   }
 }
 
-// esbuild only watches the TS graph, so re-sync everything else — CSS, popup
-// HTML, icons, and the generated manifest — when it changes. web-ext then sees
+// esbuild only watches the TS graph, so re-sync everything else: CSS, popup
+// HTML, icons, and the generated manifest: when it changes. web-ext then sees
 // the updated `outdir` and reloads, so editing those hot-reloads without a
 // restart too.
 function watchStatic() {
@@ -322,7 +322,7 @@ async function startWebExt() {
   ];
 
   if (target === "firefox") {
-    // Firefox uses its own cert store — not the OS keychain — so it won't trust
+    // Firefox uses its own cert store: not the OS keychain: so it won't trust
     // the rb-portless dev CA and every https://shirabe.localhost request fails.
     // Enterprise-roots pulls in the OS trust store (where `rb-portless trust` put
     // the CA). Chrome uses the keychain already, so this is Firefox-only.

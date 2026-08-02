@@ -10,13 +10,13 @@ type ParseTarget = (root: HTMLElement, showFurigana: boolean) => Promise<number>
 // pointless for text that's already on screen and about to be replaced).
 //
 // Progressive/auto captions often grow a line in nested spans. We never skip a
-// segment just because it already has a word wrap — `parseCaptionElement`
+// segment just because it already has a word wrap: `parseCaptionElement`
 // re-tokenizes the full flattened text whenever bare Japanese remains.
 //
 // Parse only `.ytp-caption-segment` when present. That node owns YouTube's
 // inline styles (dark pill, white ink, font size). Also matching the parent
 // `.caption-visual-line` and calling replaceChildren on it wiped the segment
-// and left white text with no background — unreadable on light frames.
+// and left white text with no background: unreadable on light frames.
 const PLAYER = ".html5-video-player";
 const CONTAINER = ".ytp-caption-window-container, .caption-window";
 const SEGMENT = ".ytp-caption-segment";

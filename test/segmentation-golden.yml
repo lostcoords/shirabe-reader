@@ -1,4 +1,4 @@
-# Golden segmentation corpus — the ratchet for the offline parser.
+# Golden segmentation corpus: the ratchet for the offline parser.
 #
 # Each case pins the CONTENT words a sentence must produce, in order, as
 # `surface[=lemma]`. Only content tokens are listed. `=lemma` is checked only when
@@ -7,7 +7,7 @@
 # non-content run is the whole point.
 #
 # `expect` records what the parser does TODAY, so any change shows up as a failure.
-# Where today's answer is wrong, `todo:` states the answer we actually want — the
+# Where today's answer is wrong, `todo:` states the answer we actually want: the
 # case still asserts current behaviour (so it is a real ratchet) while naming the
 # gap. Fix the parser, then move the `todo:` value into `expect:`.
 #
@@ -15,7 +15,7 @@
 # (storage/dictionary_packs/current, or $SHIRABE_PACK), which is the only way a
 # JMdict refresh can be caught; otherwise it falls back to the small bundled
 # fixture and skips `pack: full` cases. Expectations below are the REAL-pack
-# answers — the fixture is a much smaller competitive field.
+# answers: the fixture is a much smaller competitive field.
 
 - name: itsu-datta-not-itsudatsu
   text: いつだったか
@@ -25,7 +25,7 @@
     いつだった must not collapse into the noun/suru-verb 逸脱 via the godan past
     rule った→つ. Guarded by the part-of-speech gate on deinflected candidates.
     Pinned as a boundary rather than a full expectation so it runs against the
-    bundled fixture too — 逸脱 and 何時 are in there precisely for this trap, and
+    bundled fixture too, 逸脱 and 何時 are in there precisely for this trap, and
     the fixture has no copula or question particle to finish the sentence with.
 
 - name: itsu-datta-full-segmentation
@@ -68,7 +68,7 @@
   tokens: [ミュンヘン, に]
   merges: [ミュンヘン]
   why: >
-    A katakana run stays ONE token rather than shredding — a lone mora must never
+    A katakana run stays ONE token rather than shredding, a lone mora must never
     fold (ミ → み → 見る), which is what used to shred it. Pinned as a boundary
     because the *content-word* answer legitimately differs by pack, which the
     full-segmentation case below asserts instead.
@@ -151,7 +151,7 @@
   pack: full
   why: >
     Old-form kanji standardise across the whole span (學校 → 学校). JMdict lists
-    學校 itself as a rare spelling, so the verbatim probe is demoted — the
+    學校 itself as a rare spelling, so the verbatim probe is demoted, the
     standardised variant must survive dedup to carry the span.
 
 - name: polite-form-over-spurious-exact
@@ -163,14 +163,14 @@
     あります must deinflect to ある. It nearly cannot: 有益 is a name entry read
     あります, so an exact match covered the span and suppressed deinflection of it,
     leaving あり + ます. Only a CONTEXTUALLY CONFIDENT exact match may suppress
-    deinflection of its own span — a spurious one must not.
+    deinflection of its own span, a spurious one must not.
 
 - name: te-progressive-vs-auxiliary
   text: 手紙を書いている。
   merges: [書いている]
   pack: full
   why: >
-    ている is an inflection and stays merged — the guard that the te-auxiliary
+    ている is an inflection and stays merged, the guard that the te-auxiliary
     lookahead (which splits 授けて + いただく) does not over-fire here.
 
 - name: counter-splits-into-parts
@@ -180,7 +180,7 @@
   pack: full
   why: >
     Number + counter splits into its parts so the counter word itself is
-    clickable and counts toward coverage — the web's 2026-07-14 decision
+    clickable and counts toward coverage, the web's 2026-07-14 decision
     (三匹 → 三 · 匹). JMdict is inconsistent here (it lists 七本 and 六人 as nouns
     but not 三匹), so matching it literally hid 本/人 behind "seven long
     cylindrical things". The counter is confirmed against the pack's `ctr` POS
@@ -199,7 +199,7 @@
   pack: full
   why: >
     The counter split must not fire on a numeral-led word that is not a counter
-    compound — 一石二鳥 stays one yoji expression.
+    compound, 一石二鳥 stays one yoji expression.
 
 - name: old-kanji-rescue
   text: 鐵道
@@ -209,7 +209,7 @@
     The case that justifies the kanji-processor dependency: 鐵道 (old form of
     鉄道, railway) is NOT a JMdict spelling, so only standardising the kanji
     reaches the entry. Most old forms (學校, 國家, 會社…) ARE listed by JMdict and
-    need no rescue — this one measures the part that actually pays.
+    need no rescue, this one measures the part that actually pays.
 
 - name: caption-line-kangaeta
   text: いつだったか考えたことがある。
@@ -234,7 +234,7 @@
     た) and strands だく. One step of lookahead fixes it: the match ended STRICTLY
     INSIDE the following te-auxiliary いただく, so the shorter reading that leaves
     the auxiliary whole wins. The Rails tokenizer merges the whole predicate into
-    one chip (授けていただく) — recorded as a divergence in
+    one chip (授けていただく), recorded as a divergence in
     test/tokenizer_eval/cross_engine.yml; both agree the verb is 授ける.
 
 - name: de-particle-eaten-by-dearu
@@ -246,7 +246,7 @@
     で + あったまる and shreds the verb. Fixed by path scoring (2026-07-27): the two
     readings are priced by corpus rank over the span they explain, and
     である(186) + まる(11,270) is a more expensive sentence than で(7) +
-    あったまる(18,919). This is the case that motivated it — the pack has to carry
+    あったまる(18,919). This is the case that motivated it, the pack has to carry
     あったまる's rank for the comparison to be possible at all (recipe 7).
 
 # The three failures the plan listed as the path-scoring gap, all of the same
@@ -257,8 +257,8 @@
   pack: full
   why: >
     はと (鳩, rank 23,198) + ても (14,045) explains the same four characters as
-    は (2) + とても (443). Coverage cannot separate them — which is why the earlier
-    coverage-based attempt was reverted — but cost can.
+    は (2) + とても (443). Coverage cannot separate them, which is why the earlier
+    coverage-based attempt was reverted, but cost can.
 
 - name: path-gai-vs-imasu
   text: 兄がいます
@@ -271,11 +271,11 @@
   expect: [友達, が, たくさん, いる]
   pack: full
   why: >
-    がたく and さんい have no corpus rank at all — the unranked case, which is
+    がたく and さんい have no corpus rank at all, the unranked case, which is
     exactly what a greedy match hallucinates out of two neighbouring words.
 
 # JMdict lists inflected forms as entries in their own right, and a form entry is
-# itself conjugable — so the promotion that lemmas 知らない to 知る has to survive
+# itself conjugable: so the promotion that lemmas 知らない to 知る has to survive
 # the form arriving inflected.
 - name: form-entry-inflected-loses-to-its-verb
   text: 町の様子が変わっていた。
@@ -283,13 +283,13 @@
   pack: full
   why: >
     変わっていた is the past of the entry 変わっている ("to be eccentric", rank 9,576)
-    in one step, and 変わる (rank 233) in three — so the fewer-steps sort led with
+    in one step, and 変わる (rank 233) in three, so the fewer-steps sort led with
     the form entry, and the promotion behind 知らない → 知る skipped it for having an
     INFLECTED leader. Rarity alone could not save it either: 5.35 bits apart, just
     inside MUCH_COMMONER. The rival is the same reading carried further (its chain
     walks the leader's, then keeps going), which is what the rule now asks for.
     Bare 変わっている already lemma'd to 変わる, so this is the parser agreeing with
-    itself — and with Sudachi, which reads 変わっていた as 変わる too.
+    itself, and with Sudachi, which reads 変わっていた as 変わる too.
 
 - name: form-entry-inflected-negative
   text: 彼は変わっていない。
@@ -297,8 +297,8 @@
   pack: full
   why: >
     The same promotion through a longer chain (negative + progressive + te-form).
-    Both readings are real Japanese — "he hasn't changed" and "he isn't eccentric"
-    — and no context in the span separates them; the card front follows the verb,
+    Both readings are real Japanese, "he hasn't changed" and "he isn't eccentric",
+    and no context in the span separates them; the card front follows the verb,
     and the sources modal offers the swap (docs/specs/srs.md §1.1).
 
 - name: form-entry-vs-te-auxiliary
@@ -307,6 +307,6 @@
   pack: full
   why: >
     The boundary guard for the two rules above. いった is a form of いく, which the
-    te-auxiliary lookahead has to recognise through its own inflection — otherwise
+    te-auxiliary lookahead has to recognise through its own inflection, otherwise
     変わってい takes the span as 変わっている and strands った. Promotion must not
     paper over that: the answer here is a SPLIT, not a longer merge.

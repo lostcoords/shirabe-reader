@@ -44,7 +44,7 @@ test("deinflects the negative te-form 〜ないで (daidai extension beyond Yomi
 });
 
 // Chains and their names must match daidai's, because the website renders those
-// labels (tokens_helper.rb → Daidai.deinflect) — the same word has to read the
+// labels (tokens_helper.rb → Daidai.deinflect): the same word has to read the
 // same way in the popup and on the page. Expectations are daidai's own test
 // cases (test/deinflector_test.rb), through its LABELS map.
 const chain = (surface: string, lemma: string) =>

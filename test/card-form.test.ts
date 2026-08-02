@@ -22,7 +22,7 @@ async function mountForm(options: {
     chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
   });
   // `ext` binds to whichever WebExtension global existed when browser.ts was
-  // first imported — the bundle shares one — so answer through that object
+  // first imported: the bundle shares one: so answer through that object
   // rather than swapping the global out from under it.
   const { ext } = await import("../src/common/browser.js");
   ext.runtime.sendMessage = (async (message: Request) => {
@@ -68,7 +68,7 @@ test("the form saves into the preferred deck, or a deck it creates by name", asy
   const select = host.querySelector("select") as HTMLSelectElement;
   assert.equal(select.value, "9", "the deck the reader picked in settings is preselected");
 
-  // A typed name wins over the picker — a card can arrive with its own deck.
+  // A typed name wins over the picker: a card can arrive with its own deck.
   const name = host.querySelector("input[type='text']") as HTMLInputElement;
   name.value = "  Immersion  ";
   name.hidden = false;
@@ -79,7 +79,7 @@ test("the form saves into the preferred deck, or a deck it creates by name", asy
 
 test("the card carries the entry the reader was reading, so it lands linked", async () => {
   // An orphan card is free text: no enrichment, no drift-tracking, and the
-  // learner has to relink it by hand. The definition already names its entry —
+  // learner has to relink it by hand. The definition already names its entry :
   // sending that handle is the whole difference (docs/specs/srs.md §1.1).
   const { saveRequest } = await mountForm({ senses: [{ glosses: ["expensive"] }] });
   assert.equal((await saveRequest()).entry, "jmdict:1200430");
@@ -93,7 +93,7 @@ test("ticking every meaning saves the whole word, not a scoped card", async () =
   const boxes = [...host.querySelectorAll("input[type='checkbox']")] as HTMLInputElement[];
   assert.equal(boxes.length, 2, "a multi-meaning word offers a pick per meaning");
   // Every box ticked is the default, and it means the whole word: sending those
-  // positions would build a scoped card that covers everything — a second card
+  // positions would build a scoped card that covers everything: a second card
   // beside the plain one, for the same thing.
   const whole = await saveRequest();
   assert.equal(whole.sensePositions, undefined);
@@ -101,7 +101,7 @@ test("ticking every meaning saves the whole word, not a scoped card", async () =
 
 test("a word whose meanings are all saved does not offer an empty selection", async () => {
   // An empty pick means "the whole word", so an all-covered word must not render
-  // an unticked picker — that save would build a second whole-word card.
+  // an unticked picker: that save would build a second whole-word card.
   const { host, saveRequest } = await mountForm({
     senses: [{ glosses: ["high; tall"] }, { glosses: ["expensive"] }],
     savedSenses: "all",
@@ -124,7 +124,7 @@ test("examples are picked into state, so removing one survives the list re-rende
   // no meaning to choose first, so the common save carries a sentence.
   assert.equal(host.querySelectorAll(".sb-form-chip").length, 1);
 
-  // Add the second, drop the first — the chips are the picks, and dropping one
+  // Add the second, drop the first: the chips are the picks, and dropping one
   // re-renders the row without touching the other.
   const offers = [...host.querySelectorAll(".sb-form-offer")] as HTMLButtonElement[];
   offers[1].click();

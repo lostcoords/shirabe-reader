@@ -4,12 +4,12 @@ import type { GlossLanguage } from "./languages.js";
 
 export type { GlossLanguage };
 
-// Injected at build time by build.mjs (esbuild `define`): the default API host —
+// Injected at build time by build.mjs (esbuild `define`): the default API host :
 // https://shirabe.localhost for dev/watch builds, https://shirabe.org for shipped
 // builds. The user can still override it under Advanced.
 declare const __DEFAULT_API_BASE__: string;
 
-// Which key must be held while hovering a word to open the popup — Yomitan's
+// Which key must be held while hovering a word to open the popup: Yomitan's
 // "scan modifier" model. "none" shows it on plain hover; otherwise hold Alt /
 // Ctrl / Shift / Meta so casual reading isn't interrupted.
 export type ScanModifier = "none" | "alt" | "ctrl" | "shift" | "meta";
@@ -32,7 +32,7 @@ export type Config = {
   scopes: string[]; // scopes the connected key carries (gates mining buttons)
   entitled: boolean; // owner may write to the SRS (Pro or a school member)
   furiganaMode: FuriganaMode;
-  // Ordered, preferred first — the extension's copy of the account's
+  // Ordered, preferred first: the extension's copy of the account's
   // Prefs#languages. Synced from GET /v1/me while connected; edited locally
   // otherwise. Renders one meaning block per language, in this order.
   languages: GlossLanguage[];
@@ -96,7 +96,7 @@ export async function loadConfig(): Promise<Config> {
   return config;
 }
 
-// Where every "get Pro" click goes, tagged with the surface it came from — the
+// Where every "get Pro" click goes, tagged with the surface it came from: the
 // same convention the web app follows with `pricing_path(source: …)`. One helper
 // because three hand-built copies of this URL is how attribution quietly rots:
 // an untagged /pricing is indistinguishable from someone arriving on their own.
@@ -105,12 +105,12 @@ export const pricingUrl = (apiBase: string, source: string): string =>
 
 // Where every source behind the dictionary is credited in full. Off the API base
 // like the links above, so a dev build points at the local server, and with no
-// locale segment — the site redirects to the reader's own language.
+// locale segment: the site redirects to the reader's own language.
 export const creditsUrl = (apiBase: string): string =>
   `${apiBase.replace(/\/$/, "")}/credits`;
 
 // Signed in iff we hold a key. Mining (save/grade/known) needs WRITE_SRS *and*
-// SRS entitlement (Pro or school) — matching require_srs_pro! on the API. A
+// SRS entitlement (Pro or school): matching require_srs_pro! on the API. A
 // free account still gets dictionary lookup and word coloring.
 export const isConnected = (config: Config): boolean => config.apiKey.length > 0;
 export const canWriteSrs = (config: Config): boolean =>

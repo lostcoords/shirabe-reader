@@ -23,7 +23,7 @@ import { installClientReporter } from "../common/client-reporter.js";
 // hosts (and `web-ext` re-injects it on a dev reload). Each copy is its own
 // module instance that builds its own popup/toast host and its own
 // document listeners, so a second one stacks an orphaned popup the first can
-// never collapse — the "popup won't collapse" bug. Content scripts from the
+// never collapse: the "popup won't collapse" bug. Content scripts from the
 // same extension share one isolated-world window per frame, so a flag on it
 // lets a duplicate injection bail before wiring anything up.
 declare const __EXTENSION_VERSION__: string;
@@ -103,7 +103,7 @@ function boot(): void {
     }
 
     // asbplayer injects subtitle text into arbitrary video hosts (and iframes).
-    // Always watch when connected — no-op until `.asbplayer-offscreen` appears.
+    // Always watch when connected: no-op until `.asbplayer-offscreen` appears.
     // Not exclusive: page scanning and custom adapters still run in the top frame.
     if ((localDictionaryReady || isConnected(config)) && mode !== "off") startAsbplayer(showFurigana);
 
@@ -114,7 +114,7 @@ function boot(): void {
     }
 
     // Reader-on pages parse on load. Parsing is local, so there is nothing to
-    // ask permission for — the hotkey and context menu re-parse rather than
+    // ask permission for: the hotkey and context menu re-parse rather than
     // enable. A rule may name a dedicated custom parser (YouTube captions,
     // Netflix, Mokuro, …) in place of the generic page parser.
     if (mode === "auto" && (localDictionaryReady || isConnected(config)) && !parsed) {
@@ -222,7 +222,7 @@ function boot(): void {
     if (mode === "off" || !localDictionaryReady || (!force && !wantPopup(event))) return;
     const element = event.target as Element | null;
     if (element?.closest?.(".sb-word, .sb-host, input, textarea, select, [contenteditable='true']")) return;
-    // Anything that isn't Japanese text should let an open scan card go — a
+    // Anything that isn't Japanese text should let an open scan card go: a
     // scan target is bare page text, not a `.sb-word`, so the popup's own
     // pointer-out guard never fires for it and nothing else would close it.
     const caret = caretAt(event.clientX, event.clientY);
@@ -302,7 +302,7 @@ function boot(): void {
     save: (w) => save(w, picksForWord(w)),
     known: markKnown,
   };
-  // A shortcut for a button that isn't there grades a card by accident — the keys
+  // A shortcut for a button that isn't there grades a card by accident: the keys
   // leave with the row they belong to (see REVIEW_IN_READER).
   const GRADE_ACTIONS: KeybindAction[] = ["again", "hard", "good", "easy"];
   const WORD_ACTION_KEYS = (Object.keys(WORD_ACTIONS) as Array<Exclude<KeybindAction, "parse">>)
@@ -313,21 +313,21 @@ function boot(): void {
     const keybinds = current?.keybinds;
     if (!keybinds) return;
 
-    // Parse (page or selection) — page-level, no hover needed; not on off pages.
+    // Parse (page or selection): page-level, no hover needed; not on off pages.
     if (mode !== "off" && matchesKeybind(e, keybinds.parse)) {
       e.preventDefault();
       initParse();
       return;
     }
 
-    // Mining / review — only when the account can actually write to the SRS.
+    // Mining / review: only when the account can actually write to the SRS.
     if (!current || !canWriteSrs(current)) return;
     for (const action of WORD_ACTION_KEYS) {
       if (matchesKeybind(e, keybinds[action])) {
         if (!hovered) return;
         e.preventDefault();
         // A needs-Pro refusal rides the neutral toast, not the red one: there's
-        // no popup open to hold a link, so the message names the page instead —
+        // no popup open to hold a link, so the message names the page instead :
         // the configured host, so a dev build doesn't point at production.
         const host = pricingHost(current.apiBase);
         WORD_ACTIONS[action](hovered).then(({ ok, message, proRequired }) => {
@@ -366,7 +366,7 @@ function boot(): void {
 
   function parseSelection(): void {
     // The command is broadcast to every frame in the tab, and `getRangeAt(0)`
-    // throws where there is no selection — which is all of them but one.
+    // throws where there is no selection: which is all of them but one.
     const selection = window.getSelection();
     if (!selection?.rangeCount) return;
     const range = selection.getRangeAt(0);

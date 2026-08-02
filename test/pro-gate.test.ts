@@ -3,7 +3,7 @@ import test from "node:test";
 
 // The free/Pro line as the extension sees it: look up all you like, saving is
 // bought (specs/browser-extension.md §1). The server answers a free account's
-// save with 402 PRO_REQUIRED, and that has to arrive as an offer — not as a
+// save with 402 PRO_REQUIRED, and that has to arrive as an offer: not as a
 // stack trace under the Save button, which is what a free user used to get.
 
 const problem = (status: number, code: string, detail: string) => ({

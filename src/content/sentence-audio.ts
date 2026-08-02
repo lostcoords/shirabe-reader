@@ -1,13 +1,13 @@
 // Sentence audio for a mined subtitle: the line as it was actually spoken,
 // attached to the card next to the video frame.
 //
-// Audio can't be grabbed the way a frame can — a frame exists right now, a
+// Audio can't be grabbed the way a frame can: a frame exists right now, a
 // sentence only exists over its own duration. So mining replays it: seek back to
 // the cue, record it through `captureStream`, and put the video back where it
 // was. That costs the length of the line, out loud, which is the price of
 // getting the line the learner actually asked for.
 //
-// (A rolling per-cue recorder was tried instead — instant and silent, but it
+// (A rolling per-cue recorder was tried instead: instant and silent, but it
 // only holds what already played, and pausing the moment a line appears is
 // exactly when people mine. It also ran an encoder on every captioned page.
 // Dropped 2026-07-26; the tracker's Not-MVP list has it.)
@@ -15,7 +15,7 @@
 // Protected media can't be read: captureStream on a DRM element yields no audio
 // track, the same wall the video frame hits on Netflix.
 //
-// Where the line starts and ends is not this module's problem — `cues.ts` owns
+// Where the line starts and ends is not this module's problem: `cues.ts` owns
 // that, and says whether its answer is exact or observed.
 
 import { type Cue, forgetOpenCue } from "./cues.js";
@@ -25,7 +25,7 @@ import { type Cue, forgetOpenCue } from "./cues.js";
 const MIN_CLIP_MS = 1_500;
 const MAX_CLIP_MS = 16_000;
 // Breathing room either side, so a clip doesn't start on a half-swallowed first
-// mora — but never more silence than there actually is, or the line before
+// mora: but never more silence than there actually is, or the line before
 // bleeds into the recording.
 const PAD_MS = 500;
 // An observed start is stamped when the caption was drawn, which is after the
@@ -57,7 +57,7 @@ export async function captureSentenceAudio(video: HTMLVideoElement, cue: Cue): P
   return replayClip(video, range);
 }
 
-// The sentence plus half a second either side — or as much of that as the
+// The sentence plus half a second either side: or as much of that as the
 // silence allows. Where the gap to the next line is shorter than the padding,
 // the padding gives way: a clip that runs into the following sentence is worse
 // than one that starts a fraction late.
@@ -80,7 +80,7 @@ async function replayClip(video: HTMLVideoElement, range: { startMs: number; end
   const wasPaused = video.paused;
   let recorder: CueRecorder | undefined;
   try {
-    // Seek first, record second — a recorder started before the seek lands
+    // Seek first, record second: a recorder started before the seek lands
     // opens the clip with whatever was playing at the old position.
     await seek(video, range.startMs / 1000);
     recorder = startRecording(video);
@@ -147,7 +147,7 @@ type VideoWithCapture = HTMLVideoElement & {
 
 // MP4 first, because a clip has to survive being a *file*, not just a stream.
 // MediaRecorder's WebM ships no duration in its header and no seek cues, so the
-// clip reads as `Infinity` long and the first seek kills the demuxer — it can be
+// clip reads as `Infinity` long and the first seek kills the demuxer: it can be
 // played start-to-finish and nothing else, anywhere (Shirabe's own player has to
 // decode it whole to draw a timeline; an Anki export or a phone's player just
 // can't scrub it). The same capture recorded as MP4 carries a real duration and

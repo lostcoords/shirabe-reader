@@ -2,13 +2,13 @@
 
 **License: GPL-3.0.** The deinflection rules and transformer are ported from
 Yomitan (via [daidai](https://github.com/davafons/daidai), the same rules the
-website uses to name inflections), which is GPL-3.0 — so this extension is too,
+website uses to name inflections), which is GPL-3.0: so this extension is too,
 and its source is published. This covers the extension only: the Shirabe web app
 and API are separate works, are not distributed with it, and are not GPL. See
 [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
 A browser extension that parses Japanese on any web page and looks it up with
-Shirabe — hover any word for its reading and definition, colour it by what you
+Shirabe: hover any word for its reading and definition, colour it by what you
 already know, and mine or review it into your SRS without leaving the page.
 Inspired by [jpd-breader] and Yomitan, but backed by Shirabe's own tokenizer
 (Sudachi/kabosu) and dictionary.
@@ -30,53 +30,53 @@ sync, and knowledge-state colouring. Full product spec:
 
 What works in the current build:
 
-- **Atomic offline dictionary install/update** — compressed, checksummed pack;
+- **Atomic offline dictionary install/update**: compressed, checksummed pack;
   staged IndexedDB generations keep the previous dictionary on corruption or
   interruption. The **Dictionary** tab shows version, size, progress, removal, and
   credits.
-- **Phone-shaped popup** — a bottom navigation bar over three panels: **Search**
+- **Phone-shaped popup**: a bottom navigation bar over three panels: **Search**
   (typed lookup + history), **Page** (parse, reader entry points, per-site mode),
   and **Dictionary** (pack + optional account). **Settings** opens a full options
   page in its own tab (reading preferences, shortcuts, Advanced), the way Yomitan
   splits popup from settings.
-- **Local lookup and parsing** — Shift-hover scanning without page rewrites,
+- **Local lookup and parsing**: Shift-hover scanning without page rewrites,
   typed/selection lookup, EN/ES glosses in your account's language order, local
   prefix segmentation, and readable deinflection paths named exactly as the
   website names them. Words and kanji are separate corpora, as on the web: a word
   search never answers with a kanji; the popup's kanji strip is the explicit
   breakdown.
 
-- **One-click login** — click **Connect**, a sign-in window opens, you approve
+- **One-click login**: click **Connect**, a sign-in window opens, you approve
   access, and it closes on its own (OAuth 2.0 + PKCE via
   `identity.launchWebAuthFlow`; no code to copy, nothing to poll). Pasting a key
   by hand still works under _Settings → Advanced_ for scripts/CI. The key is scoped
   and revocable.
 - **Tokenize + wrap** visible Japanese into per-word spans locally,
   including content the page loads later (a `MutationObserver` re-parses it).
-- **Per-user word-state colouring** — new / learning / due / known, stamped by
+- **Per-user word-state colouring**: new / learning / due / known, stamped by
   `POST /v1/parse` and recoloured across the whole page after every review.
 - **Furigana** on kanji words (toggleable).
-- **Part-of-speech colouring** — the site's own groups and hues (nouns blue, verbs
+- **Part-of-speech colouring**: the site's own groups and hues (nouns blue, verbs
   green, adjectives orange, …) on the word or on its underline. One cue system
   covers every surface: a subtitle shows exactly what a paragraph shows.
 - **Hover popup** with headword, reading, and definitions in your chosen
   language from IndexedDB, isolated in a shadow root so it renders the same
   on every site. Show it on plain hover, or only on **Alt/Option + hover**.
-- **Mine inline** — **＋ Save** creates a card, **✓ Known** parks it, and a word
+- **Mine inline**: **＋ Save** creates a card, **✓ Known** parks it, and a word
   you already study offers **Manage**, the same control its dictionary result
   carries on the site. Grading is deliberately not here: reviewing wants the
   history and interval previews around it, so it stays where they are. The row is
-  wired but not rendered — see `REVIEW_IN_READER` in `src/content/actions.ts`.
+  wired but not rendered: see `REVIEW_IN_READER` in `src/content/actions.ts`.
 - **Automatic local parsing** whenever the reader is on. The right-click menu
   can reparse a page or parse a selection explicitly.
-- **Page awareness** — coverage and known/learning/unknown/due counts, i+1
+- **Page awareness**: coverage and known/learning/unknown/due counts, i+1
   paragraph highlighting, occurrence/unique coverage, a toolbar badge,
   and Pause/Reparse/Revert controls.
-- **asbplayer subtitles** — when [asbplayer](https://github.com/asbplayer/asbplayer)
+- **asbplayer subtitles**: when [asbplayer](https://github.com/asbplayer/asbplayer)
   is injecting JP subs (streaming or `app.asbplayer.dev`), lines are tokenized
   for hover/save the same way as page text. No Anki required for lookups; clip
   mining still goes through asbplayer→Anki until a Shirabe media ingress lands.
-- **Target surfaces** — ordinary pages and Wikipedia, native YouTube captions,
+- **Target surfaces**: ordinary pages and Wikipedia, native YouTube captions,
   native Netflix timed text, Ttsu Reader novel pages, and Mokuro OCR text boxes
   each have an explicit dynamic parser and maintained DOM fixture. asbplayer can
   remain layered over Netflix or YouTube.
@@ -109,7 +109,7 @@ the extension loaded, opened on a Japanese page. It first builds a small local
 dictionary pack automatically, so **Install dictionary** works without a separate
 pack-build command. Keep `bin/dev` running from the repository root; restart it
 after changing middleware or boot configuration. **Launch the extension once and leave it
-open** — edits hot-reload in place, no relaunch:
+open**: edits hot-reload in place, no relaunch:
 
 - **TS** (background / content / popup logic) → esbuild rebuilds `dist/<target>`
   → `web-ext` reloads the extension.
@@ -126,7 +126,7 @@ to re-inject them into already-open pages; background-worker and popup changes
 apply immediately.
 
 The dev browser uses a **persistent profile** (`.web-ext-profile/`, gitignored),
-so you sign in and approve the extension **once** — your login and connection
+so you sign in and approve the extension **once**: your login and connection
 survive restarts. Dev/watch builds also default the **API server** to
 `https://shirabe.localhost` (production builds → `https://shirabe.org`), so you
 just click **Connect** (the API is on every host, no `api.` subdomain). Firefox
@@ -139,7 +139,7 @@ To point at a different server, override it under **Settings → Advanced**.
 ## Develop in your own Firefox
 
 `npm run dev` launches its own browser profile. To work in the Firefox you
-already use — your tabs, logins, and other add-ons — attach a temporary add-on
+already use: your tabs, logins, and other add-ons: attach a temporary add-on
 to it instead and let it reload itself:
 
 ```bash
@@ -153,20 +153,20 @@ One-time setup in that Firefox:
 2. `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** →
    select `extension/dist/firefox/manifest.json`.
 
-From then on every save rebuilds, and the add-on console logs `rebuilt` — hit
+From then on every save rebuilds, and the add-on console logs `rebuilt`: hit
 **Reload** on the add-on's card in `about:debugging` to pick it up. The watcher
 runs a small event stream on `http://127.0.0.1:8473/reload` that watch builds
 subscribe to (`src/background/dev-reload.ts`); it announces the rebuild but does
 not reload the extension for you. `runtime.reload()` is the only lever a page
 has, and it is not established that it reloads a _temporary_ add-on rather than
-removing it — and nothing outside can do it either, since `web-ext` only attaches
+removing it: and nothing outside can do it either, since `web-ext` only attaches
 to a Firefox it launched itself. As with `npm run dev`, refresh the tab to
 re-inject content-script changes.
 
 Two things to know: a temporary add-on is gone after you quit Firefox, so step 2
 repeats each session, and the watch build carries the `reader-dev@shirabe.org`
 add-on ID, so it lives alongside a store-installed Shirabe Reader instead of
-replacing it. Chrome has no equivalent — its MV3 service worker can't hold the
+replacing it. Chrome has no equivalent: its MV3 service worker can't hold the
 event-stream connection, so `dev:chrome` stays on web-ext.
 
 ## Load it (Firefox)
@@ -183,7 +183,7 @@ choose `dist/chrome`.
 1. Click the extension icon → **Dictionary** → **Install dictionary**. Lookup then
    works without an account or network connection.
 2. Optionally, on the same tab, click **Connect Pro account**. A sign-in window
-   opens; sign in (if needed) and approve access — it closes on its own and the
+   opens; sign in (if needed) and approve access: it closes on its own and the
    panel flips to _Connected as …_. The extension never sees your password, only a
    scoped, revocable API key it exchanges for itself (OAuth 2.0 + PKCE).
 3. Open **Settings** (bottom bar) to pick a **definition language** and scan
@@ -194,8 +194,8 @@ Alternatively, open **Settings → Advanced** and paste a key made with
 `bin/rails api_keys:create` instead of connecting. Either way the key is stored
 in extension-local storage and sent as `Authorization: Bearer …`. `/v1/*` allows
 cross-origin requests (`config/initializers/cors.rb`), so no extra setup is
-needed. (For local dev the API server already defaults to `https://shirabe.localhost`
-— see _Develop with hot reload_.)
+needed. (For local dev the API server already defaults to `https://shirabe.localhost`:
+see _Develop with hot reload_.)
 
 ## Architecture
 
@@ -229,8 +229,8 @@ context is sent only on an explicit save action.
 
 ## Parsing engine
 
-The full architecture for the parsing pipeline — how text is collected into
-paragraphs/fragments, batched, parsed, and mapped back onto the DOM — plus the
+The full architecture for the parsing pipeline: how text is collected into
+paragraphs/fragments, batched, parsed, and mapped back onto the DOM: plus the
 reference study of jiten/JitenReader and the phased build plan, lives in
 [`docs/specs/extension-parsing.md`](../docs/specs/extension-parsing.md).
 

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
-import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
+import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, lookupVariants, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
 
 const records = [
   { type: "header", schemaVersion: 4, languages: ["eng", "spa"], source: "Shirabe open-core" },
@@ -30,7 +30,7 @@ const records = [
     ["6", "高い", "たかい", "high", "alto", "adj-i", 600],
     ["7", "猫", "ねこ", "cat", "gato", "n", 700],
     ["8", "見る", "みる", "to see", "ver", "v1", 800],
-    // "hurl (" / "curl (" contain the substring "url (" — real JMdict glosses
+    // "hurl (" / "curl (" contain the substring "url (": real JMdict glosses
     // that a careless CSS-injection guard rejects, aborting the whole install.
     ["10", "投げつける", "なげつける", "to hurl (at)", "lanzar", "v1", 1000],
     ["11", "カール", "かーる", "to curl (hair)", "rizar", "vs", 1100],
@@ -40,7 +40,7 @@ const records = [
     readings: [{ text: reading, kind: "kana" }],
     senses: [{ glosses: { eng: [english], spa: [spanish] }, partsOfSpeech: [pos], fields: [], misc: [], dialects: [], restrictions: [] }],
     frequencies: [{ source: "jiten-global", text: headword, reading, rank }],
-    // Cited by id — the sentence record itself is further down, stored once.
+    // Cited by id: the sentence record itself is further down, stored once.
     ...(headword === "猫" ? { examples: ["tatoeba:tatoeba_1"] } : {}),
   })),
   {
@@ -73,7 +73,7 @@ const records = [
   })),
   // JMdict restricts a reading to the writings it actually spells: 良い天気 reads
   // either よいてんき or いいてんき, but いい天気 only ever reads いいてんき. Taking the
-  // entry's first kana regardless pairs いい天気 with よいてんき — which cannot be
+  // entry's first kana regardless pairs いい天気 with よいてんき: which cannot be
   // aligned, so the furigana smears over the whole word instead of the kanji.
   {
     type: "term", id: "jmdict:23", dictionary: "jmdict", headword: "良い天気",
@@ -96,7 +96,7 @@ const records = [
     type: "term", id: "jmdict:16", dictionary: "jmdict", headword: "について",
     expressions: [
       // Real JMdict lists the kana itself as an expression, not only as a
-      // reading — that is the shape that exposed the uk-demotion bug.
+      // reading: that is the shape that exposed the uk-demotion bug.
       { text: "について", script: "kana", common: true, tags: [] },
       { text: "に就いて", script: "mixed", common: false, tags: ["rK"] },
       { text: "に付いて", script: "mixed", common: false, tags: ["rK"] },
@@ -106,7 +106,7 @@ const records = [
     frequencies: [{ source: "jiten-global", text: "について", reading: "について", rank: 50 }],
   },
   // Pitch is filed under a WRITING (綺麗, きれい), but a usually-kana word leads with
-  // its kana — and the corpus has an exact (きれい, きれい) row for almost nothing. So
+  // its kana: and the corpus has an exact (きれい, きれい) row for almost nothing. So
   // the popup has to accept the sibling row for the same reading, or every kana-led
   // word (まつ, はな, こと) goes silent offline while the site shows its accent.
   {
@@ -143,7 +143,7 @@ const records = [
     frequencies: [{ source: "jiten-global", text: "来る", reading: "くる", rank: 50 }],
   },
   // 逸脱 (いつだつ) is a noun/suru-verb. Without the POS gate, the godan past rule
-  // った→つ "deinflects" いつだった into いつだつ and matches it here — burying いつ.
+  // った→つ "deinflects" いつだった into いつだつ and matches it here: burying いつ.
   {
     type: "term", id: "jmdict:18", dictionary: "jmdict", headword: "逸脱",
     expressions: [{ text: "逸脱", script: "mixed", common: true, tags: [] }],
@@ -151,7 +151,7 @@ const records = [
     senses: [{ glosses: { eng: ["deviation; departure"], spa: ["desviación"] }, partsOfSpeech: ["n", "vs"], fields: [], misc: [], dialects: [], restrictions: [] }],
     frequencies: [{ source: "jiten-global", text: "逸脱", reading: "いつだつ", rank: 15_000 }],
   },
-  // いつ (when): usually-kana, so a bare kana surface is a confident exact match —
+  // いつ (when): usually-kana, so a bare kana surface is a confident exact match :
   // it should win once 逸脱's spurious deinflection is rejected.
   {
     type: "term", id: "jmdict:19", dictionary: "jmdict", headword: "何時",
@@ -185,7 +185,7 @@ const records = [
   },
   { type: "kanji", id: "kanjidic:食", char: "食", readings: { on: ["ショク"], kun: ["た.べる"] }, meanings: { eng: ["eat"], spa: ["comer"] }, strokes: 9 },
   // KANJIDIC lists pinyin/korean/vietnam before the Japanese readings, and 猫 is
-  // also a word — both of which the lookup has to see past.
+  // also a word: both of which the lookup has to see past.
   {
     type: "kanji", id: "kanjidic:猫", char: "猫",
     readings: { pinyin: ["mao1"], korean_r: ["myo"], vietnam: ["Miêu"], on: ["ビョウ"], kun: ["ねこ"] },
@@ -248,7 +248,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.deepEqual(definition?.senses[0]?.partsOfSpeech, ["Ichidan verb", "Transitive verb"],
     "offline POS codes resolve to the same short labels as the site");
   assert.deepEqual(definition?.pitch.map((pitch) => pitch.downstep), [2], "alternate-spelling pitch rows do not leak into the displayed headword");
-  // The clip URL is no longer shipped per row (that was 40% of the pack) — it is
+  // The clip URL is no longer shipped per row (that was 40% of the pack): it is
   // hashed from the manifest's recipe. Recomputed here the way Audio::Clip#digest
   // does it server-side: if either side ever drifts, both stop naming the same
   // file on the CDN and every play button silently 404s.
@@ -259,7 +259,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   const kanaLed = await lookupOffline("きれい", ["eng"], "https://shirabe.test");
   assert.equal(kanaLed?.headword, "きれい", "a usually-kana word leads with its kana");
   assert.deepEqual(kanaLed?.pitch.map((pitch) => pitch.downstep), [1],
-    "a kana-led headword still shows the pattern filed under its writing — the accent, and its clip, belong to the reading");
+    "a kana-led headword still shows the pattern filed under its writing: the accent, and its clip, belong to the reading");
   assert.equal(kanaLed?.pitch[0]?.audioUrl, `https://cdn.shirabe.org/audio/words/${
     createHash("sha256").update(["きれい", "1", "1628969216", "1", "test-salt"].join("\x1f")).digest("hex")}.m4a`,
     "the clip is named after the reading being displayed, not the spelling the row was filed under");
@@ -273,7 +273,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.ok(tokens.some((token) => token.lemma === "食べる" && token.surface === "食べました"));
 
   // Full-width headwords (Ｔシャツ, ２ちゃんねる, Ｎ響) are ~2% of pack keys. Queries
-  // are NFKC-normalized, so the index must be too — and page text stays raw, so
+  // are NFKC-normalized, so the index must be too: and page text stays raw, so
   // the token surface must keep its original width.
   const fullWidth = await lookupOffline("Ｔシャツ", ["eng"], "https://shirabe.test");
   assert.equal(fullWidth?.headword, "Ｔシャツ");
@@ -309,7 +309,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   );
 
   // A usually-kana expression appears on the page as its kana reading, which is a
-  // *reading*, not a writing form — so contextual confidence must accept a reading
+  // *reading*, not a writing form: so contextual confidence must accept a reading
   // match, or について loses to the bare particle に and is split into に + つい + て.
   assert.deepEqual(
     (await parseOffline("猫について", ["eng"], "https://shirabe.test")).filter((token) => token.content).map((token) => token.surface),
@@ -327,7 +327,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   );
 
   // `uk` is read from the PRIMARY sense only, matching the backend's
-  // `facets.first` — a uk tag on a minor later sense must not turn the kanji
+  // `facets.first`: a uk tag on a minor later sense must not turn the kanji
   // headword into kana.
   assert.equal((await lookupOffline("表", ["eng"], "https://shirabe.test"))?.headword, "表",
     "uk on a non-primary sense does not flip the headword to kana");
@@ -345,13 +345,13 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     ["English · JMdict", ["to eat"]],
     ["Español · JMdict", ["comer"]],
   ]);
-  // A single language does not mix in the other — the server's default is one
+  // A single language does not mix in the other: the server's default is one
   // language, and English is only a per-sense fallback when a gloss is missing.
   assert.deepEqual((await lookupOffline("食べる", ["spa"], "https://shirabe.test"))?.senses.map((sense) => sense.source), ["Español · JMdict"]);
   assert.deepEqual((await lookupOffline("食べる", ["eng"], "https://shirabe.test"))?.senses.map((sense) => sense.source), ["English · JMdict"]);
 
   // Words and kanji are separate corpora, as on the web: a word search answers
-  // with the word 猫/ねこ, and never with a kanji — 亜 has a KANJIDIC entry but no
+  // with the word 猫/ねこ, and never with a kanji: 亜 has a KANJIDIC entry but no
   // term here, so the word search finds nothing rather than falling back.
   const cat = await lookupOffline("猫", ["eng"], "https://shirabe.test");
   assert.equal(cat?.headword, "猫");
@@ -360,7 +360,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal(await lookupOffline("亜", ["eng"], "https://shirabe.test"), null, "word search must never answer with a kanji entry");
 
   // The kanji breakdown is the explicit path, and KANJIDIC lists pinyin/korean/
-  // vietnam first — only on/kun are Japanese.
+  // vietnam first: only on/kun are Japanese.
   const sub = await lookupKanjiOffline("亜", ["eng"], "https://shirabe.test");
   assert.equal(sub?.headword, "亜");
   assert.equal(sub?.reading, "ア", "kanji readings must be Japanese, never pinyin/korean/vietnamese");
@@ -385,7 +385,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal(itsu?.lemma, "いつ", "the uk word displays as kana いつ, not 何時");
   assert.equal((await lookupOffline("いつ", ["eng"], "https://shirabe.test"))?.headword, "いつ", "いつ lookup leads with kana");
   assert.equal((await lookupOffline("何時", ["eng"], "https://shirabe.test"))?.headword, "何時", "looking up the kanji spelling still leads with 何時");
-  // A usually-kana word's KANA spelling stays confident — only its kanji spellings
+  // A usually-kana word's KANA spelling stays confident: only its kanji spellings
   // are demoted. JMdict lists について as a real expression, and demoting every uk
   // spelling shredded it into に + つい + て.
   assert.deepEqual(
@@ -413,7 +413,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   }
 
   // Text-processor variants (Yomitan-style): emphasis katakana folds to hiragana
-  // and stretched kana collapses, so caption/subtitle spellings reach the entry —
+  // and stretched kana collapses, so caption/subtitle spellings reach the entry :
   // while the on-page surface is preserved and a lone mora (ミ) is never folded.
   for (const surface of ["スゴイ", "すっごい", "すごーい", "すっっごーい"]) {
     const first = (await parseOffline(surface, ["eng"], "https://shirabe.test")).find((token) => token.content);
@@ -438,7 +438,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   for (let iteration = 0; iteration < 50; iteration += 1) await parseOffline(corpus, ["eng"], "https://shirabe.test");
   const benchmarkMs = performance.now() - benchmarkStartedAt;
   // Diagnostic only. Wall-clock on unknown CI hardware can't be asserted without
-  // either flaking or being so loose it passes a 20x regression — which is what
+  // either flaking or being so loose it passes a 20x regression: which is what
   // the old `< 10_000` bound did for a run that takes a few hundred ms.
   context.diagnostic(`dictionary-prefix benchmark: 50 representative sentences in ${benchmarkMs.toFixed(1)} ms`);
 
@@ -484,7 +484,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
 
   // Clip URLs are built from the manifest's recipe now, so the recipe is where a
   // hostile pack would aim a play button. The base has to survive the same guard
-  // the privileged background fetch applies — our bucket, over https, or nothing.
+  // the privileged background fetch applies: our bucket, over https, or nothing.
   archive = compressed;
   const offSiteAudio = manifest("v-external-audio");
   current = { ...offSiteAudio, audio: { ...offSiteAudio.audio, baseUrl: "https://example.com/audio" } };
@@ -515,10 +515,30 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal((await dictionaryStatus()).revision, "v3");
 });
 
+test("an honorific prefix is probed away so ご配慮 reaches 配慮", () => {
+  const texts = (surface: string): string[] => lookupVariants(surface).map((variant) => variant.text);
+
+  // JMdict lists ご連絡 but not ご配慮; probing the stripped stem is what keeps
+  // the two reading the same way instead of one span and two.
+  assert.ok(texts("ご配慮").includes("配慮"));
+  assert.ok(texts("お手紙").includes("手紙"));
+  assert.ok(texts("御配慮").includes("配慮"));
+  assert.ok(texts("お忙しい").includes("忙しい"));
+
+  // The verbatim spelling stays first and free, so a listed form still wins.
+  assert.deepEqual(lookupVariants("ご配慮")[0], { text: "ご配慮", processingCost: 0 });
+
+  // A kana stem is far more often an ordinary word than an honorific: stripping
+  // おもう to もう or およそ to よそ would invent a reading nobody wrote.
+  assert.ok(!texts("おもう").includes("もう"));
+  assert.ok(!texts("およそ").includes("よそ"));
+  assert.ok(!texts("ご").includes(""));
+});
+
 test("a parsed token's part of speech is the JMdict code, not the label the popup prints", () => {
   const source = readFileSync("src/common/offline-dictionary.ts", "utf8");
   // A definition is built for display, so its `partsOfSpeech` are already run
-  // through posLabels — "Godan verb", which matches none of the code selectors
+  // through posLabels: "Godan verb", which matches none of the code selectors
   // in content.css and colours nothing. Everything downstream (underline hues,
   // the i+1 function-word test, counters) matches on codes.
   assert.match(source, /posCodes: sense\.partsOfSpeech/);

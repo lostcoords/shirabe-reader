@@ -2,7 +2,7 @@ import { send } from "../common/messages.js";
 import type { SentenceCapture } from "../common/messages.js";
 import type { Definition } from "../common/types.js";
 
-// The full capture form — the extension's front door to the same Card the web
+// The full capture form: the extension's front door to the same Card the web
 // app's save modal and new-card page build (docs/specs/srs.md §1.0, and
 // docs/plans/extension-card-form.md for why each rule below exists). Quick Save
 // still posts a bare identity; this is what you open when the card is worth
@@ -44,7 +44,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
 };
 
 // A labelled row. Deliberately NOT a <label> wrapper: the examples row holds
-// buttons, and a button inside a label activates twice — the click bubbles to the
+// buttons, and a button inside a label activates twice: the click bubbles to the
 // label, which activates its control, which is the button (happy-dom recurses on
 // it until the stack gives out; a browser just double-fires). So the label points
 // at the control by id when there is a single real one, and is plain text when
@@ -75,7 +75,7 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
 
   // ── Deck ───────────────────────────────────────────────────────────────────
   // Picking an existing deck is the common case, so the name field hides behind
-  // a `+` — same shape as the web form.
+  // a `+`: same shape as the web form.
   const deckSelect = el("select", "sb-input");
   const newDeckName = el("input", "sb-input");
   newDeckName.type = "text";
@@ -139,7 +139,7 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
   }
 
   // ── Examples ───────────────────────────────────────────────────────────────
-  // Picks live here, not in the list — the list re-renders and the DOM would
+  // Picks live here, not in the list: the list re-renders and the DOM would
   // take the picks with it.
   const picks = new Map<string, Pick>();
   const chipRow = el("div", "sb-form-picks");
@@ -173,7 +173,7 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
   };
 
   const offers = el("div", "sb-form-offers");
-  // The mined line arrives already picked — it is why the reader opened this.
+  // The mined line arrives already picked: it is why the reader opened this.
   if (capture.sentence) {
     picks.set("mined", { key: "mined", sentence: capture.sentence });
     offers.append(offer("mined", capture.sentence, "The line you mined"));
@@ -250,7 +250,7 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
     submit.disabled = true;
     feedback.textContent = "Saving…";
     const ticked = senseBoxes.filter((box) => box.checked).map((box) => Number(box.dataset.position));
-    // Ticking every meaning is the whole word, and so is ticking none — but an
+    // Ticking every meaning is the whole word, and so is ticking none: but an
     // all-covered word must not send an empty pick, which would build a second
     // whole-word card rather than the nothing the learner intended.
     const scoped = pickable && ticked.length > 0 && ticked.length < senseBoxes.length;
