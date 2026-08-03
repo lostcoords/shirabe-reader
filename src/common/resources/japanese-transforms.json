@@ -6286,6 +6286,2188 @@
           "deinflected": "しくない"
         }
       ]
+    },
+    "obligation": {
+      "name": "obligation",
+      "description": "Expresses that something must be done.\nUsage: a negated verb closed by a negated ならない/いけない/だめ. The double negative is the obligation: 行かなければならない = there is no not-going.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-ば"],
+          "inflected": "なければならない",
+          "deinflected": "なければ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-ば"],
+          "inflected": "なければなりません",
+          "deinflected": "なければ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-ば"],
+          "inflected": "なければいけない",
+          "deinflected": "なければ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-ば"],
+          "inflected": "なければいけません",
+          "deinflected": "なければ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-ば"],
+          "inflected": "ねばならない",
+          "deinflected": "ねば"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-ば"],
+          "inflected": "ねばなりません",
+          "deinflected": "ねば"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくてはならない",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくてはいけない",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくてはなりません",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくてはいけません",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくちゃならない",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくちゃいけない",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくちゃだめ",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくちゃ",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-ゃ"],
+          "inflected": "なきゃならない",
+          "deinflected": "なきゃ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-ゃ"],
+          "inflected": "なきゃいけない",
+          "deinflected": "なきゃ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-ゃ"],
+          "inflected": "なきゃだめ",
+          "deinflected": "なきゃ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "ないといけない",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "ないとならない",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "ないとだめ",
+          "deinflected": "ない"
+        }
+      ]
+    },
+    "prohibition": {
+      "name": "prohibition",
+      "description": "Expresses that something must not be done.\nUsage: the て-form of a verb closed by a negated いけない/ならない/だめ. Unlike obligation the verb itself is not negated, which is what makes it the opposite.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "てはいけない",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "てはならない",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "てはいけません",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "てはなりません",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "てはだめ",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "ちゃいけない",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "ちゃならない",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "ちゃだめ",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "ではいけない",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "ではならない",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "ではいけません",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "ではなりません",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "ではだめ",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "じゃいけない",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "じゃならない",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "じゃだめ",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "permission": {
+      "name": "permission",
+      "description": "Expresses that something is allowed.\nUsage: the て-form of a verb closed by いい/よい/かまわない. The counterpart of prohibition, which closes the same て-form with a negated helper instead.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "てもいい",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "でもいい",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "てもよい",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "でもよい",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "てもかまわない",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "でもかまわない",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "てもかまいません",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "でもかまいません",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "てもだいじょうぶ",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["-て"],
+          "inflected": "でもだいじょうぶ",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "exemption": {
+      "name": "exemption",
+      "description": "Expresses that something need not be done.\nUsage: a negated verb closed by いい/よい/かまわない. The counterpart of obligation: 行かなくてもいい = not going is also fine.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくてもいい",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくてもよい",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくてもかまわない",
+          "deinflected": "ない"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["adj-i"],
+          "inflected": "なくてもかまいません",
+          "deinflected": "ない"
+        }
+      ]
+    },
+    "-てみる": {
+      "name": "-てみる",
+      "description": "Attempt.\nUsage: attach みる to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["-て"],
+          "inflected": "てみる",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["-て"],
+          "inflected": "でみる",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-てある": {
+      "name": "-てある",
+      "description": "Resultant state.\nUsage: attach ある to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "てある",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "である",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-ていく": {
+      "name": "-ていく",
+      "description": "Progression away.\nUsage: attach いく to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "ていく",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "でいく",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-てくる": {
+      "name": "-てくる",
+      "description": "Progression toward.\nUsage: attach くる to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["vk"],
+          "conditionsOut": ["-て"],
+          "inflected": "てくる",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["vk"],
+          "conditionsOut": ["-て"],
+          "inflected": "でくる",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-べき": {
+      "name": "-べき",
+      "description": "Expresses that something should be done.\nUsage: attach べき to the dictionary form (終止形) of verbs. する takes すべき.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v1", "v5", "vk", "vs", "vz"],
+          "inflected": "べき",
+          "deinflected": ""
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "すべき",
+          "deinflected": "する"
+        }
+      ]
+    },
+    "-ながら": {
+      "name": "-ながら",
+      "description": "Simultaneous action.\nUsage: attach ながら to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v1"],
+          "inflected": "ながら",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "いながら",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "きながら",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎながら",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "しながら",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "ちながら",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "にながら",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "びながら",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "みながら",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "りながら",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vz"],
+          "inflected": "じながら",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "しながら",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "為ながら",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "きながら",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "来ながら",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "來ながら",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-つつ": {
+      "name": "-つつ",
+      "description": "Simultaneous action (literary).\nUsage: attach つつ to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v1"],
+          "inflected": "つつ",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "いつつ",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "きつつ",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎつつ",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "しつつ",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "ちつつ",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "につつ",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "びつつ",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "みつつ",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "りつつ",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vz"],
+          "inflected": "じつつ",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "しつつ",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "為つつ",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "きつつ",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "来つつ",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "來つつ",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-やすい": {
+      "name": "-やすい",
+      "description": "Easy to do.\nUsage: attach やすい to the continuative form (連用形). It conjugates as an i-adjective.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v1"],
+          "inflected": "やすい",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "いやすい",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "きやすい",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎやすい",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "しやすい",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "ちやすい",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "にやすい",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "びやすい",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "みやすい",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "りやすい",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vz"],
+          "inflected": "じやすい",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vs"],
+          "inflected": "しやすい",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vs"],
+          "inflected": "為やすい",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vk"],
+          "inflected": "きやすい",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vk"],
+          "inflected": "来やすい",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vk"],
+          "inflected": "來やすい",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-にくい": {
+      "name": "-にくい",
+      "description": "Hard to do.\nUsage: attach にくい to the continuative form (連用形). It conjugates as an i-adjective.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v1"],
+          "inflected": "にくい",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "いにくい",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "きにくい",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎにくい",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "しにくい",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "ちにくい",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "ににくい",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "びにくい",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "みにくい",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["v5"],
+          "inflected": "りにくい",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vz"],
+          "inflected": "じにくい",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vs"],
+          "inflected": "しにくい",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vs"],
+          "inflected": "為にくい",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vk"],
+          "inflected": "きにくい",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vk"],
+          "inflected": "来にくい",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["adj-i"],
+          "conditionsOut": ["vk"],
+          "inflected": "來にくい",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-はじめる": {
+      "name": "-はじめる",
+      "description": "Begin doing.\nUsage: attach はじめる to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v1"],
+          "inflected": "はじめる",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "いはじめる",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "きはじめる",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎはじめる",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "しはじめる",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "ちはじめる",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "にはじめる",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "びはじめる",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "みはじめる",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "りはじめる",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vz"],
+          "inflected": "じはじめる",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vs"],
+          "inflected": "しはじめる",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vs"],
+          "inflected": "為はじめる",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "きはじめる",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "来はじめる",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "來はじめる",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-始める": {
+      "name": "-始める",
+      "description": "Begin doing.\nUsage: attach 始める to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v1"],
+          "inflected": "始める",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "い始める",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "き始める",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎ始める",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "し始める",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "ち始める",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "に始める",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "び始める",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "み始める",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "り始める",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vz"],
+          "inflected": "じ始める",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vs"],
+          "inflected": "し始める",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vs"],
+          "inflected": "為始める",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "き始める",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "来始める",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "來始める",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-つづける": {
+      "name": "-つづける",
+      "description": "Continue doing.\nUsage: attach つづける to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v1"],
+          "inflected": "つづける",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "いつづける",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "きつづける",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎつづける",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "しつづける",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "ちつづける",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "につづける",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "びつづける",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "みつづける",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "りつづける",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vz"],
+          "inflected": "じつづける",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vs"],
+          "inflected": "しつづける",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vs"],
+          "inflected": "為つづける",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "きつづける",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "来つづける",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "來つづける",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-続ける": {
+      "name": "-続ける",
+      "description": "Continue doing.\nUsage: attach 続ける to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v1"],
+          "inflected": "続ける",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "い続ける",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "き続ける",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎ続ける",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "し続ける",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "ち続ける",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "に続ける",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "び続ける",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "み続ける",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["v5"],
+          "inflected": "り続ける",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vz"],
+          "inflected": "じ続ける",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vs"],
+          "inflected": "し続ける",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vs"],
+          "inflected": "為続ける",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "き続ける",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "来続ける",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["vk"],
+          "inflected": "來続ける",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-おわる": {
+      "name": "-おわる",
+      "description": "Finish doing.\nUsage: attach おわる to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v1"],
+          "inflected": "おわる",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "いおわる",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "きおわる",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎおわる",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "しおわる",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "ちおわる",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "におわる",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "びおわる",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "みおわる",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "りおわる",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vz"],
+          "inflected": "じおわる",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vs"],
+          "inflected": "しおわる",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vs"],
+          "inflected": "為おわる",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vk"],
+          "inflected": "きおわる",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vk"],
+          "inflected": "来おわる",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vk"],
+          "inflected": "來おわる",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-終わる": {
+      "name": "-終わる",
+      "description": "Finish doing.\nUsage: attach 終わる to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v1"],
+          "inflected": "終わる",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "い終わる",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "き終わる",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎ終わる",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "し終わる",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "ち終わる",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "に終わる",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "び終わる",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "み終わる",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["v5"],
+          "inflected": "り終わる",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vz"],
+          "inflected": "じ終わる",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vs"],
+          "inflected": "し終わる",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vs"],
+          "inflected": "為終わる",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vk"],
+          "inflected": "き終わる",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vk"],
+          "inflected": "来終わる",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["vk"],
+          "inflected": "來終わる",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-てあげる": {
+      "name": "-てあげる",
+      "description": "Doing for someone.\nUsage: attach あげる to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["-て"],
+          "inflected": "てあげる",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["-て"],
+          "inflected": "であげる",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-てやる": {
+      "name": "-てやる",
+      "description": "Doing for someone, plain.\nUsage: attach やる to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "てやる",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "でやる",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-てさしあげる": {
+      "name": "-てさしあげる",
+      "description": "Doing for someone, humble.\nUsage: attach さしあげる to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["-て"],
+          "inflected": "てさしあげる",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["-て"],
+          "inflected": "でさしあげる",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-てくれる": {
+      "name": "-てくれる",
+      "description": "Done for me.\nUsage: attach くれる to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["-て"],
+          "inflected": "てくれる",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v1"],
+          "conditionsOut": ["-て"],
+          "inflected": "でくれる",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-てくださる": {
+      "name": "-てくださる",
+      "description": "Done for me, honorific.\nUsage: attach くださる to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "てくださる",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "でくださる",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-てもらう": {
+      "name": "-てもらう",
+      "description": "Having someone do.\nUsage: attach もらう to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "てもらう",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "でもらう",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-ていただく": {
+      "name": "-ていただく",
+      "description": "Having someone do, humble.\nUsage: attach いただく to the て-form of a verb.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "ていただく",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": ["v5"],
+          "conditionsOut": ["-て"],
+          "inflected": "でいただく",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-てください": {
+      "name": "-てください",
+      "description": "Polite request.\nUsage: attach ください (the irregular imperative of くださる) to the て-form.",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["-て"],
+          "inflected": "てください",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["-て"],
+          "inflected": "でください",
+          "deinflected": "で"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["-て"],
+          "inflected": "てちょうだい",
+          "deinflected": "て"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["-て"],
+          "inflected": "でちょうだい",
+          "deinflected": "で"
+        }
+      ]
+    },
+    "-がち": {
+      "name": "-がち",
+      "description": "Tends to.\nUsage: attach がち to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v1"],
+          "inflected": "がち",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "いがち",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "きがち",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎがち",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "しがち",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "ちがち",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "にがち",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "びがち",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "みがち",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "りがち",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vz"],
+          "inflected": "じがち",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "しがち",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "為がち",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "きがち",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "来がち",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "來がち",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-っぱなし": {
+      "name": "-っぱなし",
+      "description": "Left as it is.\nUsage: attach っぱなし to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v1"],
+          "inflected": "っぱなし",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "いっぱなし",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "きっぱなし",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎっぱなし",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "しっぱなし",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "ちっぱなし",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "にっぱなし",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "びっぱなし",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "みっぱなし",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "りっぱなし",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vz"],
+          "inflected": "じっぱなし",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "しっぱなし",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "為っぱなし",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "きっぱなし",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "来っぱなし",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "來っぱなし",
+          "deinflected": "來る"
+        }
+      ]
+    },
+    "-かねる": {
+      "name": "-かねる",
+      "description": "Cannot bring oneself to.\nUsage: attach かねる to the continuative form (連用形).",
+      "rules": [
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v1"],
+          "inflected": "かねる",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "いかねる",
+          "deinflected": "う"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "きかねる",
+          "deinflected": "く"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "ぎかねる",
+          "deinflected": "ぐ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "しかねる",
+          "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "ちかねる",
+          "deinflected": "つ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "にかねる",
+          "deinflected": "ぬ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "びかねる",
+          "deinflected": "ぶ"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "みかねる",
+          "deinflected": "む"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["v5"],
+          "inflected": "りかねる",
+          "deinflected": "る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vz"],
+          "inflected": "じかねる",
+          "deinflected": "ずる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "しかねる",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vs"],
+          "inflected": "為かねる",
+          "deinflected": "為る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "きかねる",
+          "deinflected": "くる"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "来かねる",
+          "deinflected": "来る"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": ["vk"],
+          "inflected": "來かねる",
+          "deinflected": "來る"
+        }
+      ]
     }
   }
 }

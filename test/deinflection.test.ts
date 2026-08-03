@@ -65,6 +65,98 @@ test("inflection chains match daidai's, so labels read the same as the website",
   assert.deepEqual(chain("食べさせられた", "食べる"), ["past", "potential / passive", "causative"]);
 });
 
+// The obligation / prohibition constructions (daidai 0.2.3). Each strips only
+// its helper and hands the rest to a rule that already existed, so the chain
+// shows the whole derivation rather than one opaque step. Chains are pinned
+// because the popup and the website must name the same grammar.
+test("deinflects the obligation construction to its verb", () => {
+  assert.deepEqual(chain("行かなければならない", "行く"), ["obligation (must)", "provisional (-ba)", "negative"]);
+  assert.deepEqual(chain("行かなくてはいけない", "行く"), ["obligation (must)", "negative"]);
+  assert.deepEqual(chain("行かないといけない", "行く"), ["obligation (must)", "negative"]);
+  assert.deepEqual(chain("行かねばならない", "行く"), ["obligation (must)", "negative conditional (-neba)"]);
+});
+
+// The helper can be dropped entirely and it still reads as an obligation.
+test("deinflects an obligation with its helper left off", () => {
+  assert.ok(forms("行かなくちゃ").includes("行く"));
+  assert.ok(forms("行かなきゃならない").includes("行く"));
+});
+
+// Prohibition leaves the verb un-negated, which is what makes it the opposite.
+test("deinflects the prohibition construction to its verb", () => {
+  assert.deepEqual(chain("食べてはいけない", "食べる"), ["prohibition (must not)", "te-form"]);
+  assert.deepEqual(chain("読んではいけない", "読む"), ["prohibition (must not)", "te-form"]);
+  assert.ok(forms("遊んじゃだめ").includes("遊ぶ"));
+});
+
+test("obligation and prohibition are labelled as the opposites they are", () => {
+  assert.equal(inflectionLabel("obligation"), "obligation (must)");
+  assert.equal(inflectionLabel("prohibition"), "prohibition (must not)");
+});
+
+
+// The four-part set learners meet together. なくてもいい contains てもいい, so the
+// negated reading has to come out shorter or the wrong one wins: daidai lands it
+// straight on ない for exactly that reason.
+test("deinflects permission and exemption", () => {
+  assert.deepEqual(chain("行ってもいい", "行く"), ["permission (may)", "te-form"]);
+  assert.deepEqual(chain("行かなくてもいい", "行く"), ["exemption (need not)", "negative"]);
+  assert.ok(forms("食べてもかまわない").includes("食べる"));
+});
+
+// The rest of the て-auxiliary family, alongside -おく and -しまう. conditionsIn is
+// the auxiliary's own class, so it may conjugate and still reach the verb.
+test("deinflects the remaining te-auxiliaries", () => {
+  assert.deepEqual(chain("読んでみる", "読む"), ["attempt (-temiru)", "te-form"]);
+  assert.deepEqual(chain("置いてある", "置く"), ["resultant state (-tearu)", "te-form"]);
+  assert.ok(forms("増えていく").includes("増える"));
+  assert.ok(forms("増えてくる").includes("増える"));
+  assert.deepEqual(chain("読んでみた", "読む"), ["past", "attempt (-temiru)", "te-form"]);
+});
+
+test("deinflects renyoukei suffixes and べき", () => {
+  assert.deepEqual(chain("食べながら", "食べる"), ["simultaneous (-nagara)"]);
+  assert.deepEqual(chain("読みやすい", "読む"), ["easy to (-yasui)"]);
+  assert.deepEqual(chain("読みにくい", "読む"), ["hard to (-nikui)"]);
+  assert.deepEqual(chain("行くべき", "行く"), ["obligation (-beki)"]);
+  assert.ok(forms("すべき").includes("する"));
+});
+
+test("deinflects aspectual compound verbs", () => {
+  assert.deepEqual(chain("読み始める", "読む"), ["begin (-hajimeru)"]);
+  assert.ok(forms("読み続ける").includes("読む"));
+  assert.ok(forms("読み終わる").includes("読む"));
+});
+
+// The benefactives: who the action is done for.
+test("deinflects the benefactives", () => {
+  assert.deepEqual(chain("読んであげる", "読む"), ["doing for someone (-teageru)", "te-form"]);
+  assert.deepEqual(chain("読んでくれる", "読む"), ["done for me (-tekureru)", "te-form"]);
+  assert.deepEqual(chain("読んでもらう", "読む"), ["having someone do (-temorau)", "te-form"]);
+  assert.ok(forms("教えていただく").includes("教える"));
+  assert.ok(forms("書いてくださる").includes("書く"));
+});
+
+
+// The commonest polite request there is; ください is くださる's irregular imperative.
+test("deinflects the polite request and further renyoukei suffixes", () => {
+  assert.deepEqual(chain("読んでください", "読む"), ["polite request (-tekudasai)", "te-form"]);
+  assert.ok(forms("来てください").includes("来る"));
+  assert.deepEqual(chain("忘れがち", "忘れる"), ["tends to (-gachi)"]);
+  assert.deepEqual(chain("分かりかねる", "分かる"), ["cannot (-kaneru)"]);
+  assert.ok(forms("出しっぱなし").includes("出す"));
+});
+
+// 〜だす, 〜なおす and 〜きる lexicalise and the dictionary already carries them
+// (見直す is "to review"; every 〜だす compound checked is a JMdict entry). A rule
+// would win nothing there while 出す as a main verb is everywhere: it read 外に出す
+// as に出す. They stay the dictionary's job.
+test("lexicalised compounds are left to the dictionary", () => {
+  assert.ok(!forms("見直す").includes("見る"));
+  assert.ok(!forms("読み直す").includes("読む"));
+  assert.ok(!forms("泣き出す").includes("泣く"));
+});
+
 // Colloquial contractions the old flat suffix table could not reach at all.
 test("deinflects colloquial contractions", () => {
   assert.ok(forms("食べちゃう").includes("食べる"));

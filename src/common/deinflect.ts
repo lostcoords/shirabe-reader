@@ -50,6 +50,28 @@ const LABELS: Record<string, string> = {
   "-え": "slang (-e)", "n-slang": "n-slang",
   "imperative negative slang": "imperative negative (slang)",
   "kansai-ben": "kansai dialect",
+  // Opposites, despite looking alike: obligation negates the verb and then
+  // negates the helper (行かなければならない, "there is no not-going"), while
+  // prohibition leaves the verb plain (食べてはいけない, "eating won't do").
+  obligation: "obligation (must)",
+  prohibition: "prohibition (must not)",
+  permission: "permission (may)",
+  exemption: "exemption (need not)",
+  "-てみる": "attempt (-temiru)", "-てある": "resultant state (-tearu)",
+  "-ていく": "progression away (-teiku)", "-てくる": "progression toward (-tekuru)",
+  "-べき": "obligation (-beki)",
+  "-ながら": "simultaneous (-nagara)", "-つつ": "simultaneous (-tsutsu)",
+  "-やすい": "easy to (-yasui)", "-にくい": "hard to (-nikui)",
+  "-はじめる": "begin (-hajimeru)", "-始める": "begin (-hajimeru)",
+  "-つづける": "continue (-tsuzukeru)", "-続ける": "continue (-tsuzukeru)",
+  "-おわる": "finish (-owaru)", "-終わる": "finish (-owaru)",
+  "-てあげる": "doing for someone (-teageru)", "-てやる": "doing for someone, plain (-teyaru)",
+  "-てさしあげる": "doing for someone, humble (-tesashiageru)",
+  "-てくれる": "done for me (-tekureru)", "-てくださる": "done for me, honorific (-tekudasaru)",
+  "-てもらう": "having someone do (-temorau)", "-ていただく": "having someone do, humble (-teitadaku)",
+  "-てください": "polite request (-tekudasai)",
+  "-がち": "tends to (-gachi)", "-っぱなし": "left as it is (-ppanashi)",
+  "-かねる": "cannot (-kaneru)",
 };
 
 export const inflectionLabel = (name: string): string => LABELS[name] ?? name;
