@@ -103,7 +103,7 @@ export class ShirabeApi {
   async save(options: {
     lemma: string; surface?: string; reading?: string; entry?: string; deckId?: number; newDeckName?: string;
     hint?: string; notes?: string; sentence?: SentenceCapture; sentences?: SentenceCapture[];
-    sensePositions?: number[]; imageDataUrl?: string; audioDataUrl?: string; cardImageDataUrl?: string;
+    sensePositions?: number[]; imageDataUrl?: string; audioDataUrl?: string;
   }): Promise<SaveResult> {
     const { entry, ...fields } = options;
     const response = await this.post<{ card: { id: number }; created: boolean; word: WordStateEntry }>(

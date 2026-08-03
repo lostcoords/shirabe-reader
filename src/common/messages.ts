@@ -100,13 +100,13 @@ export type Request =
       imageDataUrl?: string; audioDataUrl?: string;
       // The full capture form's extras (docs/plans/extension-card-form.md): a deck
       // typed instead of picked, the learner's own fields, every example the card
-      // should link, and the card's own picture. A quick save sends none of them,
-      // which is what leaves an existing card's notes and examples alone.
+      // should link. A quick save sends none of them, which is what leaves an
+      // existing card's notes and examples alone. A screenshot is not here: it
+      // rides the mined line, as `SentenceCapture#imageDataUrl`.
       newDeckName?: string;
       hint?: string;
       notes?: string;
       sentences?: SentenceCapture[];
-      cardImageDataUrl?: string;
     }
   // Grade a due card on the 1–4 FSRS scale, by lemma (+reading). POST /v1/srs/reviews.
   | { type: "grade"; lemma: string; reading?: string; rating: Rating }

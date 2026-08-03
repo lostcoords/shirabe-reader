@@ -224,12 +224,16 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
   form.append(field("Hint", hint), field("Notes", notes));
 
   // ── Picture ────────────────────────────────────────────────────────────────
-  // Only offered when there is one: the screenshot is taken at capture time, and
-  // an empty frame is not a decision worth showing.
+  // Only offered when there is one, and only when there is a mined line to hang
+  // it on: a picture belongs to the sentence it was mined from, so with no line
+  // there is nothing for the frame to be a picture OF. Quick Save has always
+  // filed it that way; this form used to send it as the card's own picture
+  // instead, so the same screenshot landed in two different places depending on
+  // which door you came through.
   const keepImage = el("input");
   keepImage.type = "checkbox";
   keepImage.checked = true;
-  if (capture.imageDataUrl) {
+  if (capture.imageDataUrl && capture.sentence) {
     const preview = el("img", "sb-form-shot");
     preview.src = capture.imageDataUrl;
     preview.alt = "Captured screenshot";
@@ -254,7 +258,12 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
     // all-covered word must not send an empty pick, which would build a second
     // whole-word card rather than the nothing the learner intended.
     const scoped = pickable && ticked.length > 0 && ticked.length < senseBoxes.length;
-    const sentences = [...picks.values()].map((pick) => pick.sentence);
+    // The screenshot rides the line it was mined from, never the card. It is the
+    // MINED line specifically: a Tatoeba example or one the learner typed was
+    // never on the page this frame came from.
+    const shot = capture.imageDataUrl && keepImage.checked ? capture.imageDataUrl : undefined;
+    const sentences = [...picks.values()].map((pick) =>
+      pick.key === "mined" && shot ? { ...pick.sentence, imageDataUrl: shot } : pick.sentence);
 
     const response = await send({
       type: "save",
@@ -269,7 +278,6 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
       ...(sentences.length ? { sentences } : {}),
       hint: hint.value.trim(),
       notes: notes.value.trim(),
-      ...(capture.imageDataUrl && keepImage.checked ? { cardImageDataUrl: capture.imageDataUrl } : {}),
     });
 
     if (!response.ok) {

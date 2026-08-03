@@ -147,7 +147,39 @@ test("the mined line leads the examples and keeps its page origin", async () => 
   assert.deepEqual(request.sentences?.map((s) => s.text), ["この街は家賃が高い。"],
     "the line the reader mined is why they opened the form; the word's own examples are offers");
   assert.equal(request.sentences?.[0]?.origin, undefined, "no origin means the server reads it as a page mine");
-  assert.equal(request.cardImageDataUrl, "data:image/png;base64,AA", "the captured frame becomes the card's picture");
+  assert.equal(request.sentences?.[0]?.imageDataUrl, "data:image/png;base64,AA",
+    "the frame rides the line it was mined from, the way Quick Save has always filed it");
+});
+
+// The frame is a picture OF the mined line, so a corpus example or a line the
+// learner typed must not inherit it: neither was ever on the page.
+test("only the mined line carries the screenshot", async () => {
+  const { host, saveRequest } = await mountForm({
+    senses: [{ glosses: ["expensive"] }],
+    examples: [{ japanese: "この本は高い。", translation: "This book is expensive." }],
+    capture: { sentence: { text: "この街は家賃が高い。", capturedAt: "2026-07-27T00:00:00Z" }, imageDataUrl: "data:image/png;base64,AA" },
+  });
+
+  const offers = [...host.querySelectorAll(".sb-form-offer")] as HTMLButtonElement[];
+  offers[offers.length - 1].click();
+
+  const request = await saveRequest();
+  const shots = request.sentences?.map((s) => [s.origin, s.imageDataUrl]);
+  assert.deepEqual(shots, [[undefined, "data:image/png;base64,AA"], ["tatoeba", undefined]]);
+});
+
+// No line, nothing for the frame to be a picture of, and no card-level picture
+// to fall back on: the import files every picture on a sentence and so do we.
+test("a word mined with no line sends no picture at all", async () => {
+  const { host, saveRequest } = await mountForm({
+    senses: [{ glosses: ["expensive"] }],
+    capture: { imageDataUrl: "data:image/png;base64,AA" },
+  });
+
+  assert.equal(host.querySelector(".sb-form-shot"), null, "no line, so the Picture row is not offered");
+
+  const request = await saveRequest();
+  assert.ok(!request.sentences?.some((s) => s.imageDataUrl), "and no sentence carries the frame either");
 });
 
 test("hint and notes are always sent, so clearing them is a real edit", async () => {
