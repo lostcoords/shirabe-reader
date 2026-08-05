@@ -19,6 +19,27 @@ test("the local scanner loads on ordinary pages while required API hosts stay Sh
   }]);
 });
 
+// A reviewer reads the manifest, the listing, and the code together, and an
+// add-on that declares more than it takes gets asked to justify the difference.
+// Reading a page collects nothing: parsing and lookup are local. The optional
+// entries are the ones a reader turns on: error reports, connecting an account,
+// mining a sentence. Firefox only permits technicalAndInteraction as optional,
+// which is why the switch below has to exist.
+test("the data collection declaration matches what the code actually sends", () => {
+  const builder = readFileSync("build.mjs", "utf8");
+  assert.match(builder, /required: \["none"\]/);
+  assert.match(builder, /optional: \["technicalAndInteraction", "authenticationInfo", "websiteContent"\]/);
+
+  // Declared optional means switchable, not merely disclosed.
+  assert.match(readFileSync("src/common/config.ts", "utf8"), /errorReports: boolean/);
+  assert.match(readFileSync("src/options/options.html", "utf8"), /id="errorReports"/);
+  // And the switch reaches the send path rather than only the stored settings.
+  assert.match(readFileSync("src/background/telemetry.ts", "utf8"), /if \(!enabled \|\| !signals\.length\) return;/);
+
+  const listing = readFileSync("STORE_LISTING.md", "utf8");
+  assert.match(listing, /No data is collected for ordinary use/);
+});
+
 test("localhost access is added only to watch builds", () => {
   const builder = readFileSync("build.mjs", "utf8");
   assert.match(builder, /if \(watch\) base\.host_permissions\.push\("https:\/\/shirabe\.localhost\/\*"\)/);

@@ -79,7 +79,10 @@ Reviewers reject vague answers here. Be specific and tie each one to a user-visi
 - **Signed-in (optional):** words the user chooses to save, and their review
   grades, are sent to their own Shirabe account. This is the feature the user
   asked for, not analytics.
-- **Error reports** contain no page content or personal data.
+- **Error reports** contain no page content or personal data: the error class,
+  our own stack frames, the extension version and the browser, and nothing that
+  says which page you were on. This is the one thing sent without being asked
+  for, and it is what the Firefox listing declares as technical data.
 - No advertising, no selling of data, no tracking across sites.
 - Privacy policy: https://shirabe.org/en/privacy
 

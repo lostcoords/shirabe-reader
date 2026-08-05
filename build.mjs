@@ -135,8 +135,16 @@ async function manifest() {
         // while a broken dev origin can never poison a user's release data.
         id: watch ? "reader-dev@shirabe.org" : "reader@shirabe.org",
         strict_min_version: "142.0",
+        // What we actually send, not what we could reach. Reading a page sends
+        // nothing: parsing and lookup are local, and telemetry carries failure
+        // shape only (error class, our own frames, versions, browser). The two
+        // optional entries are user-initiated: connecting an account transmits
+        // its key, and mining a sentence transmits that sentence. Keep this
+        // honest against src/common/telemetry.ts and STORE_LISTING.md, since a
+        // reviewer compares all three.
         data_collection_permissions: {
-          required: ["authenticationInfo", "browsingActivity", "searchTerms", "websiteContent"],
+          required: ["none"],
+          optional: ["technicalAndInteraction", "authenticationInfo", "websiteContent"],
         },
       },
       gecko_android: {},

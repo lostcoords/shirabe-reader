@@ -48,13 +48,15 @@ What works in the current build:
 
 - **One-click login**: click **Connect**, a sign-in window opens, you approve
   access, and it closes on its own (OAuth 2.0 + PKCE via
-  `identity.launchWebAuthFlow`; no code to copy, nothing to poll). Pasting a key
-  by hand still works under _Settings → Advanced_ for scripts/CI. The key is scoped
-  and revocable.
+  `identity.launchWebAuthFlow`; no code to copy, nothing to poll). If you are not
+  signed in yet, that window signs you in first: Google finishes inside it, and a
+  magic link is sent to your own browser with a Continue button waiting here. The
+  key is scoped and revocable.
 - **Tokenize + wrap** visible Japanese into per-word spans locally,
   including content the page loads later (a `MutationObserver` re-parses it).
-- **Per-user word-state colouring**: new / learning / due / known, stamped by
-  `POST /v1/parse` and recoloured across the whole page after every review.
+- **Per-user word-state colouring**: new / learning / due / known, fetched by a
+  separate coalesced `states` request (parsing is local and never waits on it)
+  and recoloured across the whole page after every review.
 - **Furigana** on kanji words (toggleable).
 - **Part-of-speech colouring**: the site's own groups and hues (nouns blue, verbs
   green, adjectives orange, …) on the word or on its underline. One cue system
@@ -132,7 +134,8 @@ survive restarts. Dev/watch builds also default the **API server** to
 just click **Connect** (the API is on every host, no `api.` subdomain). Firefox
 launches with `security.enterprise_roots.enabled=true` so its cert store trusts
 the `rb-portless` dev CA from your OS keychain (Chrome uses the keychain already).
-To point at a different server, override it under **Settings → Advanced**.
+The server is a build-time default (`src/common/config.ts`), not a setting: to
+point at a different one, build with it changed.
 
 [`web-ext`]: https://github.com/mozilla/web-ext
 
@@ -190,8 +193,9 @@ choose `dist/chrome`.
    modifier (Shift by default).
 4. Open a Japanese page. Shirabe parses it locally while the reader toggle is on.
 
-Alternatively, open **Settings → Advanced** and paste a key made with
-`bin/rails api_keys:create` instead of connecting. Either way the key is stored
+Connecting is the only way in: there is no paste-a-key pane, because a key
+minted by hand carries the wrong scopes for the reader and cannot be revoked
+from the browser that holds it. The key is stored
 in extension-local storage and sent as `Authorization: Bearer …`. `/v1/*` allows
 cross-origin requests (`config/initializers/cors.rb`), so no extra setup is
 needed. (For local dev the API server already defaults to `https://shirabe.localhost`:

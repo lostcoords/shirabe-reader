@@ -47,6 +47,11 @@ export type Config = {
   // Record the spoken line when mining a subtitle. It replays the cue to do it
   // (see content/sentence-audio.ts), so it's worth being able to turn off.
   mineSentenceAudio: boolean;
+  // Send error reports (failure shape only: never page content, never a URL).
+  // Firefox classes this as technicalAndInteraction data, which its policy only
+  // lets an add-on collect when the reader can turn it off, so this switch is
+  // what makes the manifest's optional declaration true.
+  errorReports: boolean;
 };
 
 export const DEFAULTS: Config = {
@@ -67,6 +72,7 @@ export const DEFAULTS: Config = {
   iPlusOneIncludesLearning: true,
   iPlusOneFrequencyMax: 10_000,
   mineSentenceAudio: true,
+  errorReports: true,
 };
 
 const KEY = "config";

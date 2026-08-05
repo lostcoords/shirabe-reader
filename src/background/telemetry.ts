@@ -63,8 +63,19 @@ function identity(): FaroIdentity {
   };
 }
 
+// The reader's switch (Config#errorReports), not a sampling knob: off means
+// nothing is queued and nothing already queued is sent. Firefox only allows
+// technicalAndInteraction collection when it can be turned off, so this is what
+// makes the manifest's declaration true rather than aspirational.
+let enabled = true;
+
+export function setTelemetryEnabled(on: boolean): void {
+  enabled = on;
+  if (!on) queue.length = 0;
+}
+
 function enqueue(...signals: TelemetrySignal[]): void {
-  if (!signals.length) return;
+  if (!enabled || !signals.length) return;
   queue.push(...signals);
   if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE);
   if (queue.length >= FLUSH_AT) {

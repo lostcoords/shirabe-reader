@@ -30,6 +30,7 @@ const prefs = {
   languages: $<HTMLSelectElement>("languages"),
   posColoring: $<HTMLSelectElement>("posColoring"),
   mineSentenceAudio: $<HTMLInputElement>("mineSentenceAudio"),
+  errorReports: $<HTMLInputElement>("errorReports"),
   iPlusOneIncludesLearning: $<HTMLInputElement>("iPlusOneIncludesLearning"),
   iPlusOneFrequencyMax: $<HTMLInputElement>("iPlusOneFrequencyMax"),
 };
@@ -43,6 +44,7 @@ loadConfig().then((loaded) => {
   prefs.languages.value = config.languages.join(",");
   prefs.posColoring.value = config.posColoring;
   prefs.mineSentenceAudio.checked = config.mineSentenceAudio;
+  prefs.errorReports.checked = config.errorReports;
   prefs.iPlusOneIncludesLearning.checked = config.iPlusOneIncludesLearning;
   prefs.iPlusOneFrequencyMax.value = String(config.iPlusOneFrequencyMax);
   const base = config.apiBase.replace(/\/$/, "");
@@ -80,6 +82,7 @@ $<HTMLFormElement>("prefs").addEventListener("change", async (event) => {
     languages,
     posColoring: prefs.posColoring.value as PosColoring,
     mineSentenceAudio: prefs.mineSentenceAudio.checked,
+    errorReports: prefs.errorReports.checked,
     iPlusOneIncludesLearning: prefs.iPlusOneIncludesLearning.checked,
     iPlusOneFrequencyMax: Math.max(1, Number(prefs.iPlusOneFrequencyMax.value) || DEFAULTS.iPlusOneFrequencyMax),
   });

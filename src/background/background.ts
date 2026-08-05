@@ -6,7 +6,7 @@ import { normalizePattern, refreshRemoteHostRules } from "../common/host-rules.j
 import { cancelDictionaryInstall, checkDictionaryUpdate, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary, resumeInterruptedDictionaryInstall } from "../common/offline-dictionary.js";
 import type { Deck, Failure, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
-import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers } from "./telemetry.js";
+import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers, setTelemetryEnabled } from "./telemetry.js";
 import { installDevReload } from "./dev-reload.js";
 
 // Single API client + our own copy of the config (the client hides it). Both
@@ -32,6 +32,11 @@ async function initializeBackground(): Promise<void> {
       formatted: formatBackgroundError(error),
     });
   }
+
+  // Handlers are installed before this point (a startup crash is exactly what we
+  // want to hear about), so anything queued while the setting was unknown is
+  // dropped here if the reader has it off.
+  setTelemetryEnabled(config.errorReports);
 
   api = new ShirabeApi(config);
   // Best-effort refresh of the server-maintained reader site list, so we can
@@ -68,6 +73,7 @@ async function traceBackgroundTask(stage: string, task: () => Promise<unknown>):
 onConfigChanged((c) => {
   config = c;
   api?.update(c);
+  setTelemetryEnabled(c.errorReports);
   void syncRegisteredContentScript(c);
 });
 
@@ -508,7 +514,22 @@ function pickDetails(details: Record<string, StudyDetails>, lemmas: string[]): R
 // we open the consent page in an auth window and let the browser hand a one-time
 // code straight back to us. We exchange it (with the PKCE verifier we kept) for a
 // scoped key: no visible code, no polling.
+// The popup is a page that dies when it loses focus, and clicking the auth
+// window is exactly how it loses focus. The worker outlives it, so the worker
+// is what remembers a handshake is open: otherwise reopening the popup shows
+// "Not connected" and offers a second auth window while the first is still up.
+let connecting = false;
+
 async function connect(): Promise<void> {
+  connecting = true;
+  try {
+    await runConnect();
+  } finally {
+    connecting = false;
+  }
+}
+
+async function runConnect(): Promise<void> {
   const { verifier, challenge } = await pkce();
   const state = randomToken(16);
   const redirectUri = ext.identity.getRedirectURL();
@@ -597,7 +618,7 @@ async function status(): Promise<Status> {
     account: config.account,
     canWrite: canWriteSrs(config),
     entitled: config.entitled,
-    connecting: false,
+    connecting,
     apiBase: config.apiBase,
   };
 }

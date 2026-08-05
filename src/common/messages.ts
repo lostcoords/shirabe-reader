@@ -70,7 +70,7 @@ export type Status = {
   account: string;
   canWrite: boolean; // WRITE_SRS + entitled → mining buttons are usable
   entitled: boolean; // owner is SRS-entitled (Pro or a school member)
-  connecting: boolean; // a device-login handshake is mid-flight
+  connecting: boolean; // an auth window is open and the handshake is mid-flight
   apiBase: string;
 };
 
