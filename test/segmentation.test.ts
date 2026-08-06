@@ -40,6 +40,12 @@ type SegmentationCase = {
   merges?: string[];   // these surfaces must each be ONE token (robust: pins only the boundary at issue)
   splits?: string[];   // these surfaces must NOT be a single token
   lemmas?: Record<string, string>; // surface → lemma BOTH engines must resolve to
+  // surface → the dictionary entry BOTH engines must land on ("jmdict:1009470").
+  // Stronger than `lemmas` and the only cross-engine claim that survives the two
+  // designs: a lemma is what a form reduces to and the engines disagree about
+  // that on purpose, while an entry id means the same thing here, on the web,
+  // and in the API's `sourceId`.
+  entries?: Record<string, string>;
   tokens?: string[];
   // Absent means the row needs the real dictionary; `fixture` means it is still
   // meaningful against the bundled 12-entry pack. Safe direction: a row that
@@ -185,6 +191,15 @@ test("segmentation corpus", async (context) => {
         assert.ok(token, `[${label}] expected a token "${surface}" to check its lemma: got ${shown}${why}`);
         assert.equal(token.lemma, lemma,
           `[${label}] "${surface}" must resolve to ${lemma} in BOTH engines: a lemma that disagrees with the web forks the SRS card${why}`);
+      }
+      // The entry, which is the claim that actually holds across two tokenizers
+      // and the server: `jmdict:1009470` means one thing everywhere, where a
+      // lemma means whichever thing each engine decided.
+      for (const [surface, id] of Object.entries(entry.entries ?? {})) {
+        const token = tokens.find((item) => item.surface === surface);
+        assert.ok(token, `[${label}] expected a token "${surface}" to check its entry: got ${shown}${why}`);
+        assert.equal(token.entry, id,
+          `[${label}] "${surface}" must resolve to entry ${id} in BOTH engines and the API${why}`);
       }
 
       if (entry.dictionary_words) {

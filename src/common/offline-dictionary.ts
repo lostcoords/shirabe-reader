@@ -457,6 +457,11 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
     tokens.push({
       start: position, length: surface.length, surface, reading: definition.reading,
       lemma: await copulaHead(db, generation, definition) ?? definition.headword,
+      // The entry, not just the form it reduces to. Already in hand here, and the
+      // only thing about this token that means the same on the server: two
+      // tokenizers disagree about lemmas by design, and a save keyed on one of
+      // them forks the card.
+      entry: definition.entry,
       pos: firstPartOfSpeech(definition),
       content: true, state: "none", frequency: definition.frequency,
     });
@@ -526,7 +531,7 @@ async function mergeExpressions(db: IDBDatabase, generation: string, tokens: Par
       merged.push({
         start: run[0]!.start, length: run.reduce((total, token) => total + token.length, 0),
         surface: run.map((token) => token.surface).join(""), reading: expression.reading,
-        lemma: expression.headword, pos: firstPartOfSpeech(expression),
+        lemma: expression.headword, entry: expression.entry, pos: firstPartOfSpeech(expression),
         content: true, state: "none", frequency: expression.frequency,
       });
     } else {
@@ -965,6 +970,18 @@ const PATH_MARGIN = 0.5;
 // several characters down (であったまる needs で, three lengths below であった).
 const MAX_PATH_ALTERNATIVES = 4;
 
+// Characters no Japanese word can START with: the long-vowel mark and the small
+// kana, which all modify the mora before them. A cut that leaves one of these
+// opening the next token has split a word down the middle, whatever the path
+// costs say, so it is not an alternative worth pricing.
+//
+// This is what カレー needed. カレ folds to かれ and so matches 彼, one of the
+// commonest words in the language, and the scorer duly bought カレ + ー over
+// カレー: the reader hovered curry and got "he". ラーメン was never at risk only
+// because ラーメ happens to spell nothing. Pricing cannot answer this, because
+// the cheap path really is cheaper; it is the cut itself that is illegal.
+const NEVER_INITIAL = /^[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ゛゜]/;
+
 async function pathAdjusted(
   db: IDBDatabase, generation: string, rest: string,
   languages: readonly GlossLanguage[], apiBase: string, best: Definition | null,
@@ -981,6 +998,7 @@ async function pathAdjusted(
   for (const hit of candidates) if (!byLength.has(hit.prefixLength)) byLength.set(hit.prefixLength, hit);
   const alternatives = [...byLength.values()]
     .filter((hit) => hit.prefixLength < winner.prefixLength)
+    .filter((hit) => !NEVER_INITIAL.test(rest.slice(hit.prefixLength)))
     .slice(0, MAX_PATH_ALTERNATIVES);
   if (!alternatives.length) return best;
 

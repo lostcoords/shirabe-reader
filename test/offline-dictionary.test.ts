@@ -288,7 +288,10 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     // The code, not the label: `exp` is what content.css and the i+1
     // function-word test match on. The label belongs to the popup, which reads
     // it from the sense (asserted below).
-    lemma: "一石二鳥", pos: "exp", content: true, state: "none", frequency: 80_000,
+    // `entry` is the pack's stable slug:sourceId handle, and the reason a token
+    // carries one: it means the same thing here, on the web, and in the API,
+    // where the lemma beside it means whichever thing each tokenizer decided.
+    lemma: "一石二鳥", entry: "jmdict:12", pos: "exp", content: true, state: "none", frequency: 80_000,
   });
   const expressionLookup = await lookupOffline("一石二鳥", ["eng"], "https://shirabe.test");
   assert.deepEqual(expressionLookup?.senses[0]?.partsOfSpeech, ["Expression"]);

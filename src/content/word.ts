@@ -90,6 +90,13 @@ export function renderToken(token: ParsedToken, showFurigana: boolean): Node {
   word.dataset.lemma = token.lemma;
   word.dataset.surface = token.surface;
   word.dataset.state = token.state; // popup reads this to gate the review buttons
+  // The entry the parser landed on, so a save carries the word's IDENTITY and not
+  // just the form this engine reduced it to. Without it `entryFor` has to go back
+  // to the dictionary keyed on the lemma, which is the one field the two
+  // tokenizers disagree about by design: a save that travels under it can land on
+  // a different word than the same save from the website, and the learner ends up
+  // with two cards for one word.
+  if (token.entry) word.dataset.entry = token.entry;
   if (token.pos) word.dataset.pos = token.pos; // i+1 reads this to tell context words from copulas
   if (token.frequency != null) word.dataset.frequency = String(token.frequency);
   if (token.reading) word.dataset.reading = token.reading;

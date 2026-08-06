@@ -79,3 +79,31 @@ test("a rendered word carries its part of speech, so the page can colour by it",
   ) as HTMLElement;
   assert.equal(unlabelled.dataset.pos, undefined);
 });
+
+// A save has to travel under the word's IDENTITY, not under the form this engine
+// reduced it to. The two tokenizers disagree about lemmas by design, so a save
+// keyed on one can land on a different word than the same save from the website
+// and leave the learner with two cards for one word. The parser now knows the
+// entry, so the token carries it and `entryFor` never has to go back to the
+// dictionary with a lemma in its hand.
+test("a rendered token carries the dictionary entry it resolved to", async () => {
+  const { Window } = await import("happy-dom");
+  const window = new Window({ url: "https://reader.test/page" });
+  Object.assign(globalThis, { window, document: window.document, Node: window.Node, HTMLElement: window.HTMLElement });
+  const { renderToken } = await import("../src/content/word.js");
+
+  const word = renderToken(
+    { start: 0, length: 2, surface: "なら", reading: null, lemma: "なら", entry: "jmdict:1009470",
+      pos: "aux", content: true, state: "none" },
+    false,
+  ) as HTMLElement;
+  assert.equal(word.dataset.entry, "jmdict:1009470");
+
+  // Absent where the parser resolved no entry (a numeral, an unknown run), so a
+  // save falls back to the lemma rather than shipping a handle to nothing.
+  const coined = renderToken(
+    { start: 0, length: 5, surface: "ズオンガー", reading: null, lemma: "ズオンガー", pos: "", content: true, state: "none" },
+    false,
+  ) as HTMLElement;
+  assert.equal(coined.dataset.entry, undefined);
+});
