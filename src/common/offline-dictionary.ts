@@ -752,7 +752,7 @@ async function bestWithLookahead(
   // list already in hand doubled the queries for every position on the page.
   const candidates = await contextualCandidates(db, generation, source, afterSuruNoun);
   const best = candidates.length
-    ? termDefinition(candidates[0], languages, apiBase)
+    ? termDefinition(wholeKatakanaWord(candidates, source), languages, apiBase)
     : await lookupInDatabase(db, generation, source, languages, apiBase, true);
   const matched = best?.sourceForm;
   if (!matched) return best;
@@ -974,13 +974,46 @@ const MAX_PATH_ALTERNATIVES = 4;
 // kana, which all modify the mora before them. A cut that leaves one of these
 // opening the next token has split a word down the middle, whatever the path
 // costs say, so it is not an alternative worth pricing.
-//
-// This is what カレー needed. カレ folds to かれ and so matches 彼, one of the
-// commonest words in the language, and the scorer duly bought カレ + ー over
-// カレー: the reader hovered curry and got "he". ラーメン was never at risk only
-// because ラーメ happens to spell nothing. Pricing cannot answer this, because
-// the cheap path really is cheaper; it is the cut itself that is illegal.
 const NEVER_INITIAL = /^[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ゛゜]/;
+
+// Katakana, including the long-vowel mark and the small forms: one unbroken run
+// of these is one word. Japanese does not write two katakana words against each
+// other without a separator (a ・, a particle, a change of script), so a cut with
+// katakana on both sides is inside a word, not between two.
+//
+// Pricing cannot answer this and should not try. カレ folds to かれ and matches
+// 彼, one of the commonest words in the language, so カレ + ー really is the
+// cheaper path and the reader hovering curry was told "he". The same arithmetic
+// shredded チョコレート into チョ + コレ (此れ) + ー + ト, セミナー into セ + ミナ
+// + ー, カレンダー into カレ + ンダ + ー: 71 common words in a sweep of the 1,002
+// exposed to it. ラーメン was never at risk only because ラーメ spells nothing,
+// which is luck, not a rule.
+// One character of a katakana run, long-vowel mark included: the same class
+// `unknownRun` already groups whole for the same reason, applied one layer up.
+const KATAKANA_CHAR = /[\p{Script=Katakana}ー]/u;
+
+// Would cutting here land in the middle of a katakana run?
+const cutsInsideKatakana = (rest: string, at: number): boolean =>
+  at > 0 && at < rest.length && KATAKANA_CHAR.test(rest[at - 1]!) && KATAKANA_CHAR.test(rest[at]!);
+
+// The same rule applied to the WINNER rather than to the alternatives it is
+// priced against. Candidates are ordered by score, not by length, so a very
+// common short word can lead the list outright and never reach the path scorer
+// at all: バラ (rose) leads バラバラ and バランス, ナミ leads ナミビア. When the
+// leader stops inside a katakana run, the longest candidate that does not is the
+// word; when no candidate clears the run, the leader stands, because then we are
+// guessing either way.
+function wholeKatakanaWord(candidates: LookupHit[], source: string): LookupHit {
+  const leader = candidates[0]!;
+  if (!cutsInsideKatakana(source, leader.prefixLength)) return leader;
+
+  let whole: LookupHit | undefined;
+  for (const hit of candidates) {
+    if (cutsInsideKatakana(source, hit.prefixLength)) continue;
+    if (!whole || hit.prefixLength > whole.prefixLength) whole = hit;
+  }
+  return whole ?? leader;
+}
 
 async function pathAdjusted(
   db: IDBDatabase, generation: string, rest: string,
@@ -999,6 +1032,7 @@ async function pathAdjusted(
   const alternatives = [...byLength.values()]
     .filter((hit) => hit.prefixLength < winner.prefixLength)
     .filter((hit) => !NEVER_INITIAL.test(rest.slice(hit.prefixLength)))
+    .filter((hit) => !cutsInsideKatakana(rest, hit.prefixLength))
     .slice(0, MAX_PATH_ALTERNATIVES);
   if (!alternatives.length) return best;
 
