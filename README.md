@@ -196,7 +196,7 @@ choose `dist/chrome`.
 Connecting is the only way in: there is no paste-a-key pane, because a key
 minted by hand carries the wrong scopes for the reader and cannot be revoked
 from the browser that holds it. The key is stored
-in extension-local storage and sent as `Authorization: Bearer …`. `/v1/*` allows
+in extension-local storage and sent as `Authorization: Bearer …`. `/api/v1/*` allows
 cross-origin requests (`config/initializers/cors.rb`), so no extra setup is
 needed. (For local dev the API server already defaults to `https://shirabe.localhost`:
 see _Develop with hot reload_.)

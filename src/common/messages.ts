@@ -4,7 +4,7 @@ import type { DictionaryStatus, PackManifest } from "./offline-dictionary.js";
 import type { GlossLanguage } from "./languages.js";
 import type { ClientReport } from "./telemetry.js";
 
-// A grade on Shirabe's 1–4 FSRS scale, matching POST /v1/srs/reviews.
+// A grade on Shirabe's 1–4 FSRS scale, matching POST /api/v1/srs/reviews.
 export type Rating = 1 | 2 | 3 | 4;
 export type Deck = { id: number; name: string; visibility: "personal" | "school" };
 export type DeckMembership = { id: number; name: string };
@@ -108,7 +108,7 @@ export type Request =
       notes?: string;
       sentences?: SentenceCapture[];
     }
-  // Grade a due card on the 1–4 FSRS scale, by lemma (+reading). POST /v1/srs/reviews.
+  // Grade a due card on the 1–4 FSRS scale, by lemma (+reading). POST /api/v1/srs/reviews.
   | { type: "grade"; lemma: string; reading?: string; rating: Rating }
   | { type: "decks" }
   | { type: "states"; lemmas: string[] }

@@ -16,7 +16,7 @@ source maps, a development API host, test fixtures, or a local dictionary pack.
   hosts. `<all_urls>` remains optional and is requested per site when the user
   enables automatic parsing; `activeTab` supports an explicit one-page action.
 - Confirm no remote executable JavaScript exists. Dictionary packs and
-  `/v1/reader/host-rules` are schema-validated data only.
+  `/api/v1/reader/host-rules` are schema-validated data only.
 - Confirm the popup links to offline data notices and the privacy disclosure.
 
 ## Acceptance smoke matrix

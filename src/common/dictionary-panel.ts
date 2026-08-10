@@ -141,7 +141,7 @@ export function mountDictionaryPanel(hooks: DictionaryPanelHooks): DictionaryPan
     lines.push(`indexedDB: ${typeof indexedDB === "undefined" ? "missing" : "available"}`);
     lines.push(`gzip: ${typeof DecompressionStream === "undefined" ? "missing" : "available"}`);
     try {
-      const response = await fetch(`${apiBase}/v1/dictionary-packs/current`, { cache: "no-store" });
+      const response = await fetch(`${apiBase}/api/v1/dictionary-packs/current`, { cache: "no-store" });
       lines.push(`manifest: HTTP ${response.status}`);
       if (!response.ok) {
         lines.push(`response: ${(await response.text()).slice(0, 240)}`);

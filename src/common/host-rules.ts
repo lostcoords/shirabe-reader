@@ -175,7 +175,7 @@ export async function loadHostRules(): Promise<HostRule[]> {
 // live yet) or network error simply leaves the built-ins in charge.
 export async function refreshRemoteHostRules(apiBase: string): Promise<void> {
   try {
-    const res = await fetch(`${apiBase.replace(/\/$/, "")}/v1/reader/host-rules`, { headers: { Accept: "application/json" } });
+    const res = await fetch(`${apiBase.replace(/\/$/, "")}/api/v1/reader/host-rules`, { headers: { Accept: "application/json" } });
     if (!res.ok) return;
     const data = (await res.json()) as { version?: number; rules?: HostRule[] };
     if (Number.isInteger(data.version) && Array.isArray(data.rules)) {

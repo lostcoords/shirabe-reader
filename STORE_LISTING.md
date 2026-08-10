@@ -89,7 +89,7 @@ Reviewers reject vague answers here. Be specific and tie each one to a user-visi
 ## Remote code
 
 None. The extension executes no remote JavaScript. Dictionary packs and the
-`/v1/reader/host-rules` response are schema-validated **data** only.
+`/api/v1/reader/host-rules` response are schema-validated **data** only.
 
 ## Screenshots to capture
 

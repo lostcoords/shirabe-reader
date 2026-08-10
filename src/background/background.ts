@@ -578,7 +578,7 @@ async function adopt(apiKey: string, scopes: string[]): Promise<void> {
 // Re-check the connected account's name + SRS entitlement against the server, so
 // a lapsed subscription (or a freshly-activated one) is reflected the next time
 // the popup opens. Best-effort: on a network hiccup the stored values stay
-// authoritative: the key still mines fine if /v1/me merely blips.
+// authoritative: the key still mines fine if /api/v1/me merely blips.
 const ACCOUNT_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
 
 async function refreshAccount(force = false): Promise<void> {

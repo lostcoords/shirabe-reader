@@ -324,7 +324,7 @@ function nextPaint(): Promise<void> {
   });
 }
 
-// Grade a due card on Shirabe's 1–4 scale via POST /v1/srs/reviews, which rejects
+// Grade a due card on Shirabe's 1–4 scale via POST /api/v1/srs/reviews, which rejects
 // a word that isn't currently due. Grading lives apart from saving now.
 export async function grade(word: HTMLElement, rating: Rating): Promise<Outcome> {
   const lemma = lemmaOf(word);

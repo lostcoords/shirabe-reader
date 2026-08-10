@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Request } from "../src/common/messages.js";
 
-// A saved word has to arrive at /v1 with the entry it came from. The pack cites
+// A saved word has to arrive at /api/v1 with the entry it came from. The pack cites
 // an entry as one handle ("jmdict:2517580"); the API links a card by the pair
 // (dictionarySlug, sourceId). Getting that translation wrong is silent: the
 // save still succeeds, it just lands an orphan card (docs/specs/srs.md §1.1),
@@ -27,7 +27,7 @@ async function postedBody(options: { lemma: string; entry?: string }): Promise<R
   }
 }
 
-test("a save posts the entry as the (dictionarySlug, sourceId) pair /v1 links by", async () => {
+test("a save posts the entry as the (dictionarySlug, sourceId) pair /api/v1 links by", async () => {
   const body = await postedBody({ lemma: "変わる", entry: "jmdict:1207590" });
 
   assert.equal(body.dictionarySlug, "jmdict");

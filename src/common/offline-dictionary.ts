@@ -239,7 +239,7 @@ export async function checkDictionaryUpdate(apiBase: string): Promise<void> {
   const last = await meta<string>(db, "lastUpdateCheck");
   if (last && Date.now() - Date.parse(last) < 24 * 60 * 60 * 1000) return;
   await setMeta(db, "lastUpdateCheck", new Date().toISOString());
-  const response = await fetch(`${apiBase.replace(/\/$/, "")}/v1/dictionary-packs/current`, { cache: "no-store" });
+  const response = await fetch(`${apiBase.replace(/\/$/, "")}/api/v1/dictionary-packs/current`, { cache: "no-store" });
   if (!response.ok) return;
   const available = (await response.json()) as PackManifest;
   validateManifest(available);
@@ -1383,7 +1383,7 @@ async function termsForProbe(index: IDBIndex, key: string): Promise<Array<Stored
 async function performInstall(apiBase: string, signal: AbortSignal): Promise<PackManifest> {
   const base = apiBase.replace(/\/$/, "");
   reportInstallProgress(0, "Fetching the dictionary manifest");
-  const manifestResponse = await fetch(`${base}/v1/dictionary-packs/current`, { cache: "no-store", signal });
+  const manifestResponse = await fetch(`${base}/api/v1/dictionary-packs/current`, { cache: "no-store", signal });
   if (!manifestResponse.ok) throw new Error(await responseFailure("Dictionary manifest", manifestResponse));
   const manifest = (await manifestResponse.json()) as PackManifest;
   validateManifest(manifest);

@@ -273,7 +273,7 @@ test("anonymous dictionary use is the default and OAuth is an explicit account a
   assert.match(popup, /Connect account/);
   assert.doesNotMatch(api, /const OAUTH_SCOPES = \[[^\]]*READ_DICTIONARY/);
   assert.match(api, /const OAUTH_SCOPES = \["READ_ACCOUNT", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"\]/);
-  assert.match(api, /"\/v1\/preferences"/);
+  assert.match(api, /"\/api\/v1\/preferences"/);
   assert.match(popupLogic, /send\(\{ type: "updateLanguages", languages \}\)/);
   // Connecting is an explicit click on the shared account card, never something
   // lookup or an install can trigger on the reader's behalf.

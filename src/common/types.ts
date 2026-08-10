@@ -1,6 +1,6 @@
 // Shared shapes that cross the content ↔ background boundary.
 
-// A word's learning status, mirroring Shirabe's Card::STATES. `/v1/parse`
+// A word's learning status, mirroring Shirabe's Card::STATES. `/api/v1/parse`
 // stamps each word with the caller's state; "none" means the user has no card
 // for it yet (not-yet-tracked). Ordered weakest → strongest, like the server.
 export type WordState = "none" | "new" | "learning" | "due" | "retired";
@@ -16,7 +16,7 @@ export type ParsedToken = {
   /** The dictionary entry this token resolved to, as the pack's stable
       `slug:sourceId` handle ("jmdict:1009470"): the same handle
       `Definition.entry` carries on a lookup, and the same `(dictionary,
-      sourceId)` pair `/v1/parse` answers with. A lemma is what a form REDUCES
+      sourceId)` pair `/api/v1/parse` answers with. A lemma is what a form REDUCES
       to and the two tokenizers disagree about it by design, so this is what a
       save should travel under and what cross-engine parity is asserted on.
       Absent where the token resolved to no entry (a numeral, an unknown run). */
@@ -53,7 +53,7 @@ export type Sense = {
 export type Example = { japanese: string; translation: string | null };
 
 // A definition as shown in the hover popup: a faithful slice of the shirabe.org
-// word card. Flattened from /v1/search (which already returns all of this).
+// word card. Flattened from /api/v1/search (which already returns all of this).
 export type Definition = {
   headword: string;
   reading: string | null;

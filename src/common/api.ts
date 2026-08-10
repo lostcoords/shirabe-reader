@@ -17,14 +17,14 @@ export class ApiError extends Error {
   }
 }
 
-// ── Raw server shapes (subset of what /v1 returns) ───────────────────────────
+// ── Raw server shapes (subset of what /api/v1 returns) ───────────────────────────
 
 // Dictionary lookup is public and local, so connecting must never ask for it.
 // OAuth exists only for the personal online layer: identify the account, read
 // its study state, and save/grade through the SRS.
 const OAUTH_SCOPES = ["READ_ACCOUNT", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"];
 
-// One word, as every word-level endpoint reports it (/v1 `WordStateEntry`): the
+// One word, as every word-level endpoint reports it (/api/v1 `WordStateEntry`): the
 // batch lookup, setting a state, and saving all answer in this shape, so the
 // reader reads a word the same way whatever changed it.
 type WordStateEntry = {
@@ -48,7 +48,7 @@ const studyDetails = (word: WordStateEntry): StudyDetails => ({
   ...(word.intervals ? { intervals: word.intervals } : {}),
 });
 
-// The pack cites an entry as one handle ("jmdict:2517580"); /v1 takes it as the
+// The pack cites an entry as one handle ("jmdict:2517580"); /api/v1 takes it as the
 // (dictionarySlug, sourceId) pair it links a card by: never a row id, which
 // changes on every dictionary rebuild. Split on the FIRST colon: a slug never
 // contains one, a source id may (jmnedict ids are free text). A handle that
@@ -90,13 +90,13 @@ export class ShirabeApi {
   // the code and verifier are the proof.
   async exchangeCode(opts: { code: string; verifier: string; redirectUri: string }): Promise<{ apiKey: string; scopes: string[] }> {
     return this.post(
-      "/v1/oauth/token",
+      "/api/v1/oauth/token",
       { grant_type: "authorization_code", code: opts.code, code_verifier: opts.verifier, redirect_uri: opts.redirectUri },
       { auth: false },
     );
   }
 
-  // ── SRS write-back (/v1/srs/*, requires a WRITE_SRS key) ────────────────────
+  // ── SRS write-back (/api/v1/srs/*, requires a WRITE_SRS key) ────────────────────
   // Save (or mine) a word as a review card. `sensePositions` scopes the card to a
   // subset of the word's senses (empty/omitted = the whole word). Grading is a
   // separate call: see `grade`.
@@ -107,7 +107,7 @@ export class ShirabeApi {
   }): Promise<SaveResult> {
     const { entry, ...fields } = options;
     const response = await this.post<{ card: { id: number }; created: boolean; word: WordStateEntry }>(
-      "/v1/srs/saves", { ...fields, ...entryHandle(entry) },
+      "/api/v1/srs/saves", { ...fields, ...entryHandle(entry) },
     );
     // The card that was written identifies itself; everything else about the word
     //: its state, decks, how many cards it now holds: comes from `word`, the
@@ -119,10 +119,10 @@ export class ShirabeApi {
     };
   }
 
-  // Grade a due card by lemma (+reading). POST /v1/srs/reviews rejects a word
+  // Grade a due card by lemma (+reading). POST /api/v1/srs/reviews rejects a word
   // that isn't currently due, so this can't create early or duplicate reviews.
   async grade(options: { lemma: string; reading?: string; rating: 1 | 2 | 3 | 4 }): Promise<GradeResult> {
-    const response = await this.post<{ card: { id: number; state: WordState }; intervals: IntervalPreviews }>("/v1/srs/reviews", options);
+    const response = await this.post<{ card: { id: number; state: WordState }; intervals: IntervalPreviews }>("/api/v1/srs/reviews", options);
     const cardId = response.card?.id;
     return {
       state: response.card.state,
@@ -132,12 +132,12 @@ export class ShirabeApi {
   }
 
   async decks(): Promise<Deck[]> {
-    const { decks } = await this.get<{ decks: Deck[] }>("/v1/srs/decks");
+    const { decks } = await this.get<{ decks: Deck[] }>("/api/v1/srs/decks");
     return decks;
   }
 
   async states(lemmas: string[]): Promise<{ states: Record<string, WordState>; details: Record<string, StudyDetails> }> {
-    const { states } = await this.post<{ states: WordStateEntry[] }>("/v1/srs/states/lookup", { words: lemmas });
+    const { states } = await this.post<{ states: WordStateEntry[] }>("/api/v1/srs/states/lookup", { words: lemmas });
     return {
       states: Object.fromEntries(states.map((item) => [item.lemma, item.state])),
       details: Object.fromEntries(states.map((item) => [item.lemma, studyDetails(item)])),
@@ -148,7 +148,7 @@ export class ShirabeApi {
   // it into rotation. A state is word-level: it lands on every card the word
   // holds: so the answer is the whole word, not one card.
   async setState(lemma: string, state: "retired" | "reviewing"): Promise<StudyDetails> {
-    const { word } = await this.post<{ word: WordStateEntry }>("/v1/srs/states", { lemma, state });
+    const { word } = await this.post<{ word: WordStateEntry }>("/api/v1/srs/states", { lemma, state });
     return studyDetails(word);
   }
 
@@ -168,7 +168,7 @@ export class ShirabeApi {
       user: { displayName?: string; name?: string };
       entitlement?: { srs?: boolean };
       preferences?: { languages?: string[] };
-    }>("/v1/me");
+    }>("/api/v1/me");
     return {
       name: data.user.displayName || data.user.name || "",
       entitled: data.entitlement?.srs === true,
@@ -182,7 +182,7 @@ export class ShirabeApi {
   // scramble an ordering this client can't see.
   async updateLanguages(languages: readonly GlossLanguage[]): Promise<GlossLanguage[]> {
     const data = await this.patch<{ preferences: { languages: string[] } }>(
-      "/v1/preferences",
+      "/api/v1/preferences",
       { languages: uiLanguagesFrom(languages) },
     );
     return glossLanguagesFrom(data.preferences.languages);

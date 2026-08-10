@@ -25,15 +25,15 @@ export type PosColoring = "off" | "text" | "underline";
 // worker and the action popup (settings UI). The key is normally minted by the
 // device-login flow (see api.ts) rather than pasted.
 export type Config = {
-  apiBase: string; // build-time default below; no trailing slash (/v1 is on every host)
+  apiBase: string; // build-time default below; no trailing slash (/api/v1 is on every host)
   apiKey: string;
   account: string; // display name of the connected account (for the popup header)
-  accountCheckedAt: string; // last successful /v1/me refresh
+  accountCheckedAt: string; // last successful /api/v1/me refresh
   scopes: string[]; // scopes the connected key carries (gates mining buttons)
   entitled: boolean; // owner may write to the SRS (Pro or a school member)
   furiganaMode: FuriganaMode;
   // Ordered, preferred first: the extension's copy of the account's
-  // Prefs#languages. Synced from GET /v1/me while connected; edited locally
+  // Prefs#languages. Synced from GET /api/v1/me while connected; edited locally
   // otherwise. Renders one meaning block per language, in this order.
   languages: GlossLanguage[];
   scanModifier: ScanModifier; // which key (if any) opens the hover popup
