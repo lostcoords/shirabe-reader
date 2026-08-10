@@ -500,6 +500,9 @@ const BARE_PARTICLES = new Set([ ...CASE_PARTICLES, "は", "も", "の", "や", 
 // because JMdict answers は with the noun 葉 and も with 藻; a kana particle looked
 // up on its own is a homograph of something.
 const GRAMMAR_TAILS = new Set([ ...BARE_PARTICLES, "です", "だ", "ます", "た", "て", "ん" ]);
+// Sudachi's 係助詞, the particles that mark a topic rather than a case. A pronoun
+// wearing one keeps it apart (see grammarEntry).
+const TOPIC_PARTICLES = new Set([ "は", "も" ]);
 const EXPRESSION_MAX_SPAN = 3;
 
 async function mergeExpressions(db: IDBDatabase, generation: string, tokens: ParsedToken[],
@@ -548,6 +551,14 @@ async function grammarEntry(db: IDBDatabase, generation: string, run: ParsedToke
   languages: readonly GlossLanguage[], apiBase: string, unbound = false): Promise<Definition | null> {
   if (!unbound
     && CASE_PARTICLES.has(run[0]!.surface) && run.every((token) => BARE_PARTICLES.has(token.surface))) return null;
+  // A pronoun wearing a topic particle is the pronoun, marked: これ is what the
+  // reader is pointing at and は is what the sentence does with it. JMdict lists
+  // これは and それは anyway (the interjection "my goodness!" and the adverbial
+  // "that is"), so this fused exactly the two demonstratives that happen to have
+  // an entry while あれは and 私は, identical in shape, stayed apart: the
+  // dictionary deciding segmentation by accident of coverage.
+  // Tokenizer#topic_marked_pronoun? draws the same line on the web.
+  if (run[0]!.pos === "pn" && run.slice(1).every((token) => TOPIC_PARTICLES.has(token.surface))) return null;
   if (!run.slice(1).every((token) => GRAMMAR_TAILS.has(token.surface))) return null;
   const text = run.map((token) => token.surface).join("");
   const hits = await hitsForCandidates(db, generation,
