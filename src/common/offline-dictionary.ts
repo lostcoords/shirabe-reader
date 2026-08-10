@@ -566,6 +566,17 @@ const HAS_EMPHATIC = /[っッー]/;
 const katakanaToHiragana = (text: string): string =>
   text.replace(/[ァ-ヶ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60));
 
+// Width is a typography accident of the page, never a distinction a reader
+// means, but the two sides of a lookup fold it opposite ways: `normalize` puts
+// the page's text through NFKC, which narrows ３ to 3, while JMdict files the
+// counted number WIDE (３つ under 三つ, ＡＩ, ＥＤＴＡ). So a page writing 3つ
+// probed 3つ, the pack held ３つ, and they never met: the run was cut into
+// 3 | つの and a reader hovering it got nothing at all. The website was blind
+// the same way and fixed it in `Entry.width_variants`.
+const NARROW_ALNUM = /[0-9A-Za-z]/;
+const widenAlnum = (text: string): string =>
+  text.replace(/[0-9A-Za-z]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 0xfee0));
+
 // Port of Yomitan's collapseEmphaticSequences (full collapse): interior elongation
 // marks (っ/ッ/ー) are dropped, so すっっごーーい → すごい and すっごい → すごい.
 // Leading/trailing elongation is left alone. Legit sokuon (学校 → がこう) also
@@ -685,6 +696,10 @@ export function lookupVariants(prefix: string): Array<{ text: string; processing
   // which NFKC does not do (they are distinct unified ideographs). Safe at any
   // length: it only rewrites kanji, so it can't invent a kana word.
   if (HAS_KANJI.test(prefix)) add(convertVariants(prefix), 1);
+  // Safe at any length, and before the length guard below for that reason: a
+  // lone 3 is a number whichever width it is written in, so widening cannot
+  // invent a different word the way folding kana could.
+  if (NARROW_ALNUM.test(prefix)) add(widenAlnum(prefix), 1);
   // A single mora is never an emphasis (スゴイ) or stretched (すっごい) form, but a
   // lone katakana ミ would fold to み and deinflect to 見る: so only vary length ≥ 2.
   const chars = [...prefix];

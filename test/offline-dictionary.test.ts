@@ -541,6 +541,25 @@ test("an honorific prefix is probed away so ご配慮 reaches 配慮", () => {
   assert.ok(!texts("ご").includes(""));
 });
 
+test("a narrow spelling reaches the wide one the dictionary files it under", () => {
+  const texts = (surface: string): string[] => lookupVariants(surface).map((variant) => variant.text);
+
+  // JMdict files acronyms and counted numbers WIDE (ＡＢＣ, ＥＤＴＡ, ３つ) while a
+  // page writes them narrow, and `normalize` puts the page's text through NFKC,
+  // which folds the other way. So the two never met: the pack carries ＡＢＣ and
+  // not one narrow twin, and every one of those entries was unreachable from a
+  // page that spelled it the ordinary way.
+  assert.ok(texts("ABC").includes("ＡＢＣ"));
+  assert.ok(texts("3つ").includes("３つ"));
+
+  // Verbatim first and free, so a narrow spelling the pack really carries still
+  // wins on its own terms.
+  assert.deepEqual(lookupVariants("ABC")[0], { text: "ABC", processingCost: 0 });
+
+  // Kana and kanji are not alnum, so nothing else moves.
+  assert.deepEqual(texts("猫"), [ "猫" ]);
+});
+
 test("a parsed token's part of speech is the JMdict code, not the label the popup prints", () => {
   const source = readFileSync("src/common/offline-dictionary.ts", "utf8");
   // A definition is built for display, so its `partsOfSpeech` are already run
