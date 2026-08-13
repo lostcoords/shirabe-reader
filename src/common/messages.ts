@@ -46,8 +46,17 @@ export type SentenceCapture = {
   mediaTimestampMs?: number;
   /** End of the mined line, so the card holds a range and not just a cue-in. */
   mediaEndMs?: number;
-  targetStart?: number;
-  targetEnd?: number;
+  /**
+   * How WE cut this line into words, in order, joining back to `text` exactly.
+   * Only this extension ever held the page, so this is the only tokenization of
+   * it that exists: without it the server reads the line again with Sudachi and
+   * the learner's card ends up pointing into a sentence cut differently from
+   * the one they were looking at. Advisory, and dropped server-side unless the
+   * surfaces rebuild the text.
+   */
+  tokens?: { surface: string }[];
+  /** Which of `tokens` was mined: a line saying one word twice needs this. */
+  targetIndex?: number;
   /** This line's own screenshot / clip: a written sentence can carry both. */
   imageDataUrl?: string;
   audioDataUrl?: string;
@@ -85,6 +94,12 @@ export type Request =
   // Words and kanji are separate corpora, as on the web: a word search never
   // answers with a kanji. `kind: "kanji"` is the explicit kanji-breakdown path.
   | { type: "lookup"; query: string; kind?: "word" | "kanji" }
+  // The word the reader PICKED from a token's candidates, by its entry handle
+  // ("jmdict:1247250"). `lookup` above asks which word a spelling is; this one
+  // is told, and re-deriving it would hand back the word they just rejected.
+  // `surface` is the span they tapped, because sense restrictions are keyed on
+  // the spelling in front of them.
+  | { type: "lookupEntry"; entry: string; surface: string }
   | { type: "dictionaryStatus" }
   | { type: "installDictionary" }
   | { type: "removeDictionary" }
@@ -133,6 +148,7 @@ export type Response =
   | { ok: true; type: "parseBatch"; tokens: ParsedToken[][]; dictionaryInstalling?: boolean }
   | { ok: true; type: "cancelParse" }
   | { ok: true; type: "lookup"; definition: Definition | null; dictionaryInstalling?: boolean }
+  | { ok: true; type: "lookupEntry"; definition: Definition | null }
   | { ok: true; type: "dictionaryStatus"; dictionary: DictionaryStatus }
   // `manifest` is set when install finished immediately (already current).
   // Long installs return without it; the popup polls dictionaryStatus instead.

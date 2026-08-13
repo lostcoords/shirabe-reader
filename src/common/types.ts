@@ -7,6 +7,16 @@ export type WordState = "none" | "new" | "learning" | "due" | "retired";
 
 // One token as the content script needs it: where it sits in the source text
 // (UTF-16 offsets, matching the DOM), how to render furigana, and its state.
+/** One word a span could be. Enough to render a choice and to save the one the
+    reader picks: `entry` is the `(dictionary, sourceId)` identity the server
+    calls `sourceId` + `dictionary`, and it is what a save travels under. */
+export type TokenCandidate = {
+  entry: string;
+  headword: string;
+  reading: string | null;
+  common: boolean;
+};
+
 export type ParsedToken = {
   start: number;
   length: number;
@@ -21,6 +31,21 @@ export type ParsedToken = {
       save should travel under and what cross-engine parity is asserted on.
       Absent where the token resolved to no entry (a numeral, an unknown run). */
   entry?: string;
+  /** Every word this span could be, best first, `candidates[0]` being the one
+      `entry` names. The offline half of `POST /api/v1/words/identify`, and the
+      same reason it exists: one answer is a claim we often cannot support. きみ
+      is 君, 黄身 or 黍, and only the reader knows which they meant.
+
+      Present only where the span resolved to something and more than one word
+      claims it, so its absence means "no choice to offer" rather than "not
+      computed". The parser has always had this list: `contextualCandidates`
+      gathers it and greed threw the runners-up away at the last step.
+
+      Read off the PRE-gate set, so it holds the words a spelling merely carries
+      (君 for きみ) and not just the ones it names. The gate decides where to CUT
+      and is right to refuse those; deciding which word this is, is the other
+      question. See docs/specs/extension-parsing.md §3. */
+  candidates?: TokenCandidate[];
   pos: string; // short POS label: "noun", "verb", "prt", …
   content: boolean; // true for meaning-bearing words (not particles/punctuation)
   state: WordState;
@@ -50,7 +75,15 @@ export type Sense = {
 // records. Plain text: shipping a token stream per sentence to make the words
 // clickable would have cost several megabytes, and the parser can tokenize one
 // locally if that ever earns its place.
-export type Example = { japanese: string; translation: string | null };
+// `tokens` is the cut the SITE read this line with, shipped in the pack. Mining
+// this example carries it to the server, so the saved sentence keeps the words
+// the learner was shown instead of being read again on arrival. Absent for a
+// pack built before recipe 10.
+export type Example = {
+  japanese: string;
+  translation: string | null;
+  tokens?: { surface: string }[];
+};
 
 // A definition as shown in the hover popup: a faithful slice of the shirabe.org
 // word card. Flattened from /api/v1/search (which already returns all of this).

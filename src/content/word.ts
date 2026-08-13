@@ -1,4 +1,4 @@
-import type { ParsedToken, WordState } from "../common/types.js";
+import type { ParsedToken, TokenCandidate, WordState } from "../common/types.js";
 
 // Every interactive word renders into a `.sb-word` span and registers here,
 // keyed by lemma, so a single review can recolour *every* occurrence on the
@@ -7,6 +7,41 @@ import type { ParsedToken, WordState } from "../common/types.js";
 const byLemma = new Map<string, Set<HTMLElement>>();
 
 const STATE_CLASS = /sb-(none|new|learning|due|retired)/;
+
+// The other words each span could be, for the popup's picker. A WeakMap rather
+// than a `data-` attribute: a long page has thousands of ambiguous spans and
+// this is a list of objects, so serializing it onto the DOM would cost bytes
+// and a JSON round trip per hover for something only the popup ever reads.
+// Keyed on the element, so it is collected with the element.
+const candidatesByWord = new WeakMap<HTMLElement, TokenCandidate[]>();
+
+// Every word the tapped span can name, best first, `[0]` being the one the
+// parser chose. Empty where the span names one word, which is most of them.
+export function candidatesFor(word: HTMLElement): TokenCandidate[] {
+  return candidatesByWord.get(word) ?? [];
+}
+
+/** The cut of one sentence as the reader saw it, and which chip they mined. */
+export type ShownCut = { surfaces: readonly string[]; index: number };
+
+// The cut a mined line ACTUALLY carried, recorded when it was drawn. A save
+// re-parsed `dataset.sentence` on its own instead, and that is a different
+// question: the page tokenized the whole text node, with lookahead across the
+// sentence boundary, so re-reading one sentence in isolation can come back cut
+// differently. `targetIndex` was then dropped silently, which is exactly the
+// case where the card most needs it: a line that reads two ways.
+//
+// Shared per sentence, so a twenty-word line holds one array and twenty
+// references to it, and it dies with the page.
+const cutByWord = new WeakMap<HTMLElement, ShownCut>();
+
+export function rememberShownCut(word: HTMLElement, cut: ShownCut): void {
+  cutByWord.set(word, cut);
+}
+
+export function shownCut(word: HTMLElement): ShownCut | undefined {
+  return cutByWord.get(word);
+}
 
 // Furigana only earns its place over words that actually contain kanji: a
 // kana-only surface (この, では, アクセント) reads its own reading, so ruby there
@@ -97,6 +132,9 @@ export function renderToken(token: ParsedToken, showFurigana: boolean): Node {
   // a different word than the same save from the website, and the learner ends up
   // with two cards for one word.
   if (token.entry) word.dataset.entry = token.entry;
+  // Present only where the span names more than one word, so the popup can test
+  // for a picker rather than counting a list that is usually one long.
+  if (token.candidates?.length) candidatesByWord.set(word, token.candidates);
   if (token.pos) word.dataset.pos = token.pos; // i+1 reads this to tell context words from copulas
   if (token.frequency != null) word.dataset.frequency = String(token.frequency);
   if (token.reading) word.dataset.reading = token.reading;

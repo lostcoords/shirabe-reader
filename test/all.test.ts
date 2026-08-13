@@ -12,3 +12,10 @@ import "./telemetry.test.js";
 import "./pro-gate.test.js";
 import "./save-link.test.js";
 import "./background-cache.test.js";
+import "./sweep-merge.test.js";
+// Last on purpose: each case installs a two-word pack of its own, which replaces
+// whatever is installed, and the harness shares one fake IndexedDB across files.
+import "./token-candidates.test.js";
+import "./candidate-picker.test.js";
+import "./shown-cut.test.js";
+import "./selection-lookup.test.js";

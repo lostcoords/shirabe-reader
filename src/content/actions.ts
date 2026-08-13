@@ -2,7 +2,7 @@ import { isProRequired, send, type Failure, type Rating, type SentenceCapture, t
 import { loadConfig } from "../common/config.js";
 import { captureSentenceAudio } from "./sentence-audio.js";
 import { type Cue, cueFor } from "./cues.js";
-import { applyStateEverywhere } from "./word.js";
+import { applyStateEverywhere, shownCut } from "./word.js";
 
 // Mining + review actions shared by the popup buttons and the keyboard
 // shortcuts. Each performs the network call, recolours every occurrence of the
@@ -104,11 +104,23 @@ export function setScanOrigin(word: HTMLElement, origin: Element | null | undefi
 
 const contextOf = (word: HTMLElement): Element | null => (word.isConnected ? word : scanOrigin.get(word) ?? null);
 
-function sentenceOf(word: HTMLElement, cue?: Cue | null): SentenceCapture | undefined {
+async function sentenceOf(word: HTMLElement, cue?: Cue | null): Promise<SentenceCapture | undefined> {
   const text = word.dataset.sentence?.trim();
   if (!text) return;
-  const targetStart = numberFrom(word.dataset.targetStart);
-  const targetEnd = numberFrom(word.dataset.targetEnd);
+  // Our cut of the line, and which chip of it the learner mined. We are the only
+  // thing that ever held this page, so this is the only tokenization of the
+  // sentence that exists: send none and the server reads it again with Sudachi,
+  // and the card ends up pointing into a sentence cut differently from the one
+  // on screen.
+  //
+  // The cut the reader SAW first, off the record the renderer left; a re-parse
+  // only where there is none (a raw-text scan, a caption adapter, a rewritten
+  // line). Best-effort either way: a failure here must never cost the card.
+  //
+  // The character offsets this used to send went with it: the server filed them
+  // in a blob nothing read, and an index into the cut answers the same question
+  // exactly, against an array both sides hold.
+  const cut = cutOf(word, text) ?? await reparsedCut(text, numberFrom(word.dataset.targetStart));
   // Both ends of the line, so the card can point back at the moment it came
   // from: and so a clip can be re-cut later without mining the word again.
   // The cue wins where there is one: it knows the sentence may have spanned
@@ -124,9 +136,54 @@ function sentenceOf(word: HTMLElement, cue?: Cue | null): SentenceCapture | unde
     integration: contextOf(word)?.closest<HTMLElement>("[data-integration]")?.dataset.integration || "web_page",
     ...(mediaTimestampMs == null ? {} : { mediaTimestampMs }),
     ...(mediaEndMs == null ? {} : { mediaEndMs }),
-    ...(targetStart == null ? {} : { targetStart }),
-    ...(targetEnd == null ? {} : { targetEnd }),
+    ...(cut ? cut : {}),
   };
+}
+
+// The line as we read it, plus which token starts at `targetStart`. Returns
+// nothing rather than throwing: the cut is advisory, the server drops one that
+// does not rebuild the text anyway, and no save is worth losing over it.
+type Cut = { tokens: { surface: string }[]; targetIndex?: number };
+
+// The cut the reader actually saw, recorded when the line was drawn. Preferred
+// over re-parsing for the reason the re-parse exists to serve: the card should
+// point into the sentence that was ON SCREEN. `dataset.sentence` read on its own
+// can come back cut differently, because the parse that drew it had the rest of
+// the text node to look ahead into, and the mismatch dropped `targetIndex`
+// silently in exactly the lines that read two ways.
+//
+// Guarded on the text, so a caption that rewrote itself under a stale record
+// falls through to the re-parse rather than describing a line nobody read.
+function cutOf(word: HTMLElement, text: string): Cut | undefined {
+  const shown = shownCut(word);
+  if (!shown || shown.surfaces.join("") !== text) return;
+
+  return { tokens: shown.surfaces.map((surface) => ({ surface })), targetIndex: shown.index };
+}
+
+async function reparsedCut(text: string, targetStart: number | undefined): Promise<Cut | undefined> {
+  try {
+    // Through the worker: the pack lives in ITS IndexedDB, not the page's.
+    const res = await send({ type: "parseBatch", texts: [text] });
+    if (!res.ok || res.type !== "parseBatch") return;
+
+    const tokens = (res.tokens[0] ?? []).map((token) => ({ surface: token.surface }));
+    if (!tokens.length || tokens.map((token) => token.surface).join("") !== text) return;
+
+    // UTF-16 code units, because that is what `targetStart` counts: it comes from
+    // a DOM text-node offset. Counting code points here instead would drift by
+    // one per astral character (𠮟, an emoji, a variation selector) and point at
+    // the wrong word in exactly the lines where surrogate pairs turn up.
+    let at = 0;
+    let targetIndex: number | undefined;
+    for (const [index, token] of tokens.entries()) {
+      if (at === targetStart) { targetIndex = index; break; }
+      at += token.surface.length;
+    }
+    return targetIndex == null ? { tokens } : { tokens, targetIndex };
+  } catch {
+    return;
+  }
 }
 
 function numberFrom(value: string | undefined): number | undefined {
@@ -143,7 +200,7 @@ export async function captureFor(word: HTMLElement): Promise<{ sentence?: Senten
   const imageDataUrl = await captureScreenshot(video);
   const cue = video ? cueOf(word, video) : null;
   const audioDataUrl = cue && video ? await captureSentenceAudio(video, cue) : undefined;
-  return { sentence: sentenceOf(word, cue) ?? undefined, imageDataUrl, audioDataUrl };
+  return { sentence: (await sentenceOf(word, cue)) ?? undefined, imageDataUrl, audioDataUrl };
 }
 
 // The dictionary entry to link the card to. The popup stamps it on the word it
@@ -176,7 +233,7 @@ async function saveRequest(word: HTMLElement, sensePositions?: number[]) {
   // replay moves the playhead, so a screenshot racing it would catch some other
   // moment of the video.
   const audioDataUrl = cue && video ? await captureSentenceAudio(video, cue) : undefined;
-  const sentence = sentenceOf(word, cue);
+  const sentence = await sentenceOf(word, cue);
   return send({
     type: "save",
     lemma: lemmaOf(word),

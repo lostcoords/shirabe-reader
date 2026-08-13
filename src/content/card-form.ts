@@ -185,6 +185,10 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
       translation: example.translation ?? undefined,
       origin: "tatoeba",
       capturedAt: new Date().toISOString(),
+      // The cut this line shipped with, so saving it keeps the words the
+      // learner was shown rather than having the server read the line again on
+      // arrival with the other engine.
+      ...(example.tokens ? { tokens: example.tokens } : {}),
     };
     // A single-meaning word has no meaning to choose first, so its common save
     // should still carry a sentence without a second decision.

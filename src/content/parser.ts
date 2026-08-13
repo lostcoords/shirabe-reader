@@ -1,6 +1,6 @@
 import { send } from "../common/messages.js";
 import type { ParsedToken } from "../common/types.js";
-import { applyStateEverywhere, renderToken } from "./word.js";
+import { applyStateEverywhere, rememberShownCut, renderToken } from "./word.js";
 
 // Keep in sync with offline-dictionary's Japanese character set so caption
 // text that uses full-width alphanumerics (ＣＤ, Ｔシャツ) is still collected.
@@ -88,10 +88,54 @@ async function parseBatch(nodes: Text[], showFurigana: boolean): Promise<void> {
   queueStateRefresh(res.tokens.flat());
 }
 
+
+// The cut ONE sentence carried, as the page drew it, memoised per sentence so a
+// twenty-word line builds one array rather than twenty. Sliced out of the token
+// stream the whole text node was parsed with, which is the point: re-reading the
+// sentence on its own can come back cut differently, because the parse that
+// produced these boundaries had the rest of the node to look ahead into.
+//
+// Nothing is recorded when the slice does not rebuild the sentence exactly. That
+// happens when a token straddles the boundary, and then there IS no cut of this
+// sentence to report: the save falls back to re-parsing and says so.
+function shownCuts(text: string, tokens: readonly ParsedToken[]): Map<number, readonly string[]> {
+  const bySentence = new Map<number, ParsedToken[]>();
+  for (const token of tokens) {
+    const sentence = sentenceAt(text, token.start);
+    const list = bySentence.get(sentence.start);
+    if (list) list.push(token);
+    else bySentence.set(sentence.start, [ token ]);
+  }
+
+  const cuts = new Map<number, readonly string[]>();
+  for (const [ start, list ] of bySentence) {
+    const surfaces = list.map((token) => token.surface);
+    if (surfaces.join("") === sentenceAt(text, start).text) cuts.set(start, surfaces);
+  }
+  return cuts;
+}
+
+
+// Which chip of the shown cut this element is, found by walking the surfaces to
+// the offset the element already carries. By POSITION rather than by matching
+// the surface, because a line repeating a word ("本を読む本") would otherwise
+// point every occurrence at the first one.
+function recordShownCut(word: HTMLElement, surfaces: readonly string[] | undefined, surface: string, targetStart: number): void {
+  if (!surfaces) return;
+
+  let at = 0;
+  for (const [ index, text ] of surfaces.entries()) {
+    if (at === targetStart && text === surface) return rememberShownCut(word, { surfaces, index });
+    at += text.length;
+  }
+}
+
 // Rebuild one text node as tokenized, word-wrapped DOM (gaps kept as plain text).
-function buildWrapper(text: string, tokens: ParsedToken[], showFurigana: boolean): HTMLElement {
+// Exported for the cut tests: what it records is what a mined card points into.
+export function buildWrapper(text: string, tokens: ParsedToken[], showFurigana: boolean): HTMLElement {
   const wrapper = document.createElement("span");
   wrapper.dataset[PARSED_FLAG] = "1";
+  const cuts = shownCuts(text, tokens);
   let cursor = 0;
   for (const token of tokens) {
     if (token.start > cursor) wrapper.append(text.slice(cursor, token.start));
@@ -101,6 +145,7 @@ function buildWrapper(text: string, tokens: ParsedToken[], showFurigana: boolean
       rendered.dataset.sentence = sentence.text;
       rendered.dataset.targetStart = String(token.start - sentence.start);
       rendered.dataset.targetEnd = String(token.start - sentence.start + token.length);
+      recordShownCut(rendered, cuts.get(sentence.start), token.surface, token.start - sentence.start);
     }
     wrapper.append(rendered);
     cursor = token.start + token.length;
@@ -589,6 +634,9 @@ function collectFragmentTextNodes(root: Node, filter?: string): Text[] {
 export function mappedWrapper(nodeText: string, nodeStart: number, context: string, tokens: ParsedToken[], showFurigana: boolean): HTMLElement {
   const wrapper = document.createElement("span");
   wrapper.dataset[PARSED_FLAG] = "1";
+  // Off the CONTEXT, which is the whole paragraph these fragments belong to:
+  // the sentence a fragment sits in may start in a text node before this one.
+  const cuts = shownCuts(context, tokens);
   const nodeEnd = nodeStart + nodeText.length;
   let cursor = 0;
   for (const token of tokens) {
@@ -617,6 +665,10 @@ export function mappedWrapper(nodeText: string, nodeStart: number, context: stri
       rendered.dataset.sentence = sentence.text;
       rendered.dataset.targetStart = String(token.start - sentence.start);
       rendered.dataset.targetEnd = String(token.start - sentence.start + token.length);
+      // The WHOLE token's surface, not this fragment's: a word split across
+      // inline markup is one chip of the line, and the cut has to read as the
+      // line does.
+      recordShownCut(rendered, cuts.get(sentence.start), token.surface, token.start - sentence.start);
     }
     wrapper.append(rendered);
     cursor = end - nodeStart;

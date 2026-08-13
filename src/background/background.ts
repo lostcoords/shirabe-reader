@@ -3,7 +3,7 @@ import { ext, usesPromiseMessageResponses } from "../common/browser.js";
 import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config } from "../common/config.js";
 import { isR2AudioUrl } from "../common/audio.js";
 import { normalizePattern, refreshRemoteHostRules } from "../common/host-rules.js";
-import { cancelDictionaryInstall, checkDictionaryUpdate, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary, resumeInterruptedDictionaryInstall } from "../common/offline-dictionary.js";
+import { cancelDictionaryInstall, checkDictionaryUpdate, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupEntryOffline, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary, resumeInterruptedDictionaryInstall } from "../common/offline-dictionary.js";
 import type { Deck, Failure, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
 import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers, setTelemetryEnabled } from "./telemetry.js";
@@ -192,6 +192,21 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
         if (!(error instanceof DictionaryNotInstalledError)) throw error;
         void repairDictionaryInstallation().catch(() => undefined);
         return { ok: true, type: "lookup", definition: null, dictionaryInstalling: true };
+      }
+    }
+    // The word the reader picked, by handle. Cached beside the ordinary lookup
+    // and keyed the same way: a definition is whatever the pack says, so the
+    // connection state is not part of the key.
+    case "lookupEntry": {
+      try {
+        const definition = await lookupCache.fetch(
+          `entry:${config.languages.join(",")}:${request.entry}:${request.surface}`,
+          async () => lookupEntryOffline(request.entry, request.surface, config.languages, config.apiBase),
+        );
+        return { ok: true, type: "lookupEntry", definition };
+      } catch (error) {
+        if (!(error instanceof DictionaryNotInstalledError)) throw error;
+        return { ok: true, type: "lookupEntry", definition: null };
       }
     }
     case "dictionaryStatus":

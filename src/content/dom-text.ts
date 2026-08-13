@@ -15,6 +15,29 @@ function acceptTextNode(candidate: Node): number {
   return parent?.closest(".sb-host,input,textarea,select,[contenteditable='true']") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
 }
 
+// What a SELECTION says, with the furigana taken out. `Selection#toString()`
+// reads every text node it spans, `<rt>` among them, so highlighting 帰った on a
+// page with furigana on hands the dictionary 帰かえった and it finds nothing. The
+// caret scanner has always skipped ruby (`acceptTextNode` above); the selection
+// paths did not, which is why the escape hatch for a bad cut was the one lookup
+// that broke on exactly the pages that need it.
+//
+// `cloneContents` rather than a TreeWalker: the fragment already carries the
+// clipped first and last nodes, so removing the annotations from a copy is the
+// whole job and there are no boundary offsets to get wrong.
+export function rangeText(range: Range): string {
+  const fragment = range.cloneContents();
+  for (const annotation of fragment.querySelectorAll("rt,rp")) annotation.remove();
+  return (fragment.textContent ?? "").trim();
+}
+
+// The same for whatever is selected now, across the open shadow root as well:
+// Firefox exposes a selection inside one on the root rather than on `window`.
+export function selectionText(selection: Selection | null | undefined): string {
+  if (!selection?.rangeCount) return "";
+  return rangeText(selection.getRangeAt(0));
+}
+
 export function logicalTextAt(node: Text, offset: number, maxChars = 32): { text: string; context: string; contextOffset: number } {
   const block = node.parentElement?.closest(BLOCK_SELECTOR) ?? node.parentElement;
   if (!block) return { text: [...node.data.slice(offset)].slice(0, maxChars).join(""), context: node.data, contextOffset: offset };

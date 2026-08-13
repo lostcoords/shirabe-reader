@@ -570,3 +570,4 @@ test("a parsed token's part of speech is the JMdict code, not the label the popu
   assert.match(source, /const code = sense\.posCodes\?\.\[0\]/);
   assert.doesNotMatch(source, /pos: definition\.senses\[0\]\?\.partsOfSpeech/);
 });
+

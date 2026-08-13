@@ -5,9 +5,9 @@ import type { Definition, Example, Sense } from "../common/types.js";
 import { applyStudyDetails, captureFor, grade, GRADES, markKnown, REVIEW_IN_READER, save, setScanOrigin, studyUrlForWord, type Outcome } from "./actions.js";
 import { renderCardForm } from "./card-form.js";
 import { refreshMetrics } from "./metrics-reporter.js";
-import { rangeFromCaret } from "./dom-text.js";
+import { rangeFromCaret, selectionText } from "./dom-text.js";
 import { placeCard } from "./placement.js";
-import { appendFurigana, hasKanji } from "./word.js";
+import { appendFurigana, candidatesFor, hasKanji } from "./word.js";
 import { isR2AudioUrl } from "../common/audio.js";
 import { toast } from "./toast.js";
 
@@ -112,7 +112,9 @@ function element(): HTMLElement {
     // not on `window`, so reading only `window.getSelection()` makes
     // double-click-a-gloss silently do nothing there.
     const shadow = root as ShadowRoot & { getSelection?: () => Selection | null };
-    const selection = (shadow.getSelection?.() ?? window.getSelection())?.toString().trim();
+    // `selectionText`, not `toString()`: the headword above carries ruby, so
+    // double-clicking it used to hand the nested lookup 帰かえった.
+    const selection = selectionText(shadow.getSelection?.() ?? window.getSelection());
     const target = event.target as HTMLElement | null;
     if (selection && target) nestedLookup(selection, target.getBoundingClientRect(), currentDepth);
   });
@@ -296,7 +298,16 @@ function showWord(word: HTMLElement): void {
 // `originalTextLength`). Absent for `.sb-word` hovers (already highlighted) and
 // nested/selection lookups.
 type ScanAnchor = { node: Text; offset: number };
-type PopupTarget = { key: string; query: string; rect: DOMRect; word: HTMLElement; depth: number; kind?: "word" | "kanji"; anchor?: ScanAnchor };
+type PopupTarget = {
+  key: string; query: string; rect: DOMRect; word: HTMLElement; depth: number;
+  kind?: "word" | "kanji"; anchor?: ScanAnchor;
+  /**
+   * The entry handle the reader PICKED from this span's candidates. Present
+   * only after a pick, and it swaps the question: `query` asks which word this
+   * spelling is, `pick` says which one it is.
+   */
+  pick?: string;
+};
 
 async function showTarget(target: PopupTarget): Promise<void> {
   if (target.key === currentKey && box?.classList.contains("sb-visible")) return;
@@ -317,14 +328,19 @@ async function showTarget(target: PopupTarget): Promise<void> {
   // and `visible()` all key off.
   box?.classList.add("sb-visible");
 
-  const res = await send({ type: "lookup", query: target.query, kind: target.kind ?? "word" });
+  // A pick is answered by handle, so the reader gets the word they chose rather
+  // than the one the ladder prefers. Everything after this point is the same:
+  // the definition it lands on is a definition like any other.
+  const res = target.pick
+    ? await send({ type: "lookupEntry", entry: target.pick, surface: target.query })
+    : await send({ type: "lookup", query: target.query, kind: target.kind ?? "word" });
   if (mine !== token) return; // user moved to another word meanwhile
 
   if (!res.ok) {
     el.replaceChildren(messageRow(res.error));
     return;
   }
-  if (res.dictionaryInstalling) {
+  if (res.type === "lookup" && res.dictionaryInstalling) {
     el.replaceChildren(loadingRow(target.query), messageRow("Preparing the offline dictionary…"));
     position(target);
     void ensureDictionaryInstallation(target.key);
@@ -503,6 +519,8 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
   const body = document.createElement("div");
   body.className = "sb-body";
   if (def.inflection?.length) body.append(block("sb-inflection", `${def.sourceForm ?? lemma} → ${def.headword} · ${def.inflection.join(" · ")}`));
+  const picker = candidateRow(word, def);
+  if (picker) body.append(picker);
   const badges = badgeRow(def);
   if (badges) body.append(badges);
   if (def.pitch.length && def.reading) body.append(pitchRows(def.pitch, def.reading));
@@ -1019,6 +1037,49 @@ function plansLink(): HTMLAnchorElement {
 }
 
 // Small DOM helpers.
+// The other words this span could be, when it names more than one. The reader
+// is the only one who knows which they meant: きみ is 君, 黄身 or 黍, and every
+// rung the parser could climb has already been climbed. So it offers rather
+// than decides, best first, with the current answer marked.
+//
+// **The pick is what gets carded**, which is the whole point of the row and not
+// a side effect: choosing writes `dataset.entry`, and the save posts that as
+// `dictionarySlug` + `sourceId`. Without it a save re-derives the word from the
+// lemma and can land on the one the reader just rejected.
+function candidateRow(word: HTMLElement, def: Definition): HTMLElement | null {
+  const candidates = candidatesFor(word);
+  if (candidates.length < 2) return null;
+
+  const row = document.createElement("div");
+  row.className = "sb-candidates";
+  for (const candidate of candidates) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "sb-candidate";
+    chip.dataset.entry = candidate.entry;
+    chip.textContent = candidate.reading && candidate.reading !== candidate.headword
+      ? `${candidate.headword}・${candidate.reading}`
+      : candidate.headword;
+    if (candidate.entry === def.entry) {
+      chip.classList.add("sb-candidate-on");
+      chip.setAttribute("aria-current", "true");
+    }
+    chip.addEventListener("click", () => pickCandidate(word, candidate.entry));
+    row.append(chip);
+  }
+  return row;
+}
+
+// Show the word the reader picked, by handle. Not a fresh lookup: they have
+// settled the question this popup exists to ask, and re-deriving it would hand
+// back whatever the ladder prefers, which is the word they just rejected.
+function pickCandidate(word: HTMLElement, entry: string): void {
+  const target = currentTarget;
+  if (!target || target.pick === entry) return;
+
+  void showTarget({ ...target, key: `pick:${entry}`, pick: entry, word });
+}
+
 function block(className: string, text: string): HTMLElement {
   const el = document.createElement("div");
   el.className = className;
@@ -1167,6 +1228,28 @@ const CSS = `
 .sb-popup-reading { font-size: 14px; font-weight: 500; color: var(--sb-accent); }
 .sb-popup-message { color: var(--sb-ink-subtle); padding-right: var(--sb-chrome-gutter); }
 .sb-inflection { margin-bottom: 7px; color: var(--sb-ink-subtle); font-size: 12px; }
+
+/* The candidate picker: every word this span can name, the current one marked.
+   A row of chips rather than a list, because it is a choice between two or
+   three short labels and it sits above the definition it changes. */
+.sb-candidates { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.sb-candidate {
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 2px 8px;
+  color: var(--sb-ink-subtle);
+  background: transparent;
+  border: 1px solid var(--sb-outline);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.sb-candidate:hover { color: var(--sb-ink); border-color: var(--sb-accent); }
+.sb-candidate-on {
+  color: var(--sb-accent);
+  border-color: var(--sb-accent);
+  font-weight: 600;
+}
 .sb-study-unavailable { flex: 0 0 auto; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--sb-outline); color: var(--sb-ink-subtle); font-size: 11px; }
 .sb-study-unavailable .sb-plans { font-size: 11px; }
 

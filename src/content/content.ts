@@ -13,7 +13,7 @@ import { startAsbplayer } from "./parsers/asbplayer.js";
 import { startYouTubeCaptions } from "./parsers/youtube.js";
 import { startDynamicReader } from "./parsers/dynamic-reader.js";
 import { dismissPopup, picksForWord, scheduleHide, scheduleShow, scheduleTextLookup, setWriteState, showNow } from "./popup.js";
-import { logicalTextAt } from "./dom-text.js";
+import { logicalTextAt, selectionText } from "./dom-text.js";
 import { toast } from "./toast.js";
 import { ensureFurigana } from "./word.js";
 import { installClientReporter } from "../common/client-reporter.js";
@@ -384,10 +384,13 @@ function boot(): void {
     else if (message.command === "dictionaryChanged") void sendDictionaryStatus();
   });
 
+  // Yomitan's other lookup surface, and the escape hatch when our cut is wrong:
+  // whatever you highlight, looked up as itself, spans ignored. `selectionText`
+  // rather than `toString()` because the latter reads the furigana too.
   function lookupSelection(): void {
     const selection = window.getSelection();
-    const text = selection?.toString().trim();
-    if (!selection || !text || !selection.rangeCount) return;
+    const text = selectionText(selection);
+    if (!selection?.rangeCount || !text) return;
     scheduleTextLookup(text.slice(0, 24), selection.getRangeAt(0).getBoundingClientRect(), text, 0);
   }
 

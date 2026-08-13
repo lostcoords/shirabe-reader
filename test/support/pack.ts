@@ -61,11 +61,21 @@ export function* packLines(path: string): Generator<string> {
  */
 export function lookupKeys(sentences: string[], maxSpan = CORPUS_MAX_SPAN): Set<string> {
   const keys = new Set<string>();
+  // Expand each distinct span ONCE. A span's keys depend on its text alone, and
+  // Japanese repeats itself relentlessly: every particle, every common word, and
+  // every prefix of every common phrase recurs across a corpus. Total spans grow
+  // linearly with the corpus while distinct spans grow far slower, so this is
+  // what decides whether a sweep can be more than a sample.
+  const expanded = new Set<string>();
   for (const sentence of sentences) {
     const chars = [...sentence];
     for (let start = 0; start < chars.length; start += 1) {
       for (let end = start + 1; end <= Math.min(chars.length, start + maxSpan); end += 1) {
-        for (const variant of lookupVariants(chars.slice(start, end).join(""))) {
+        const span = chars.slice(start, end).join("");
+        if (expanded.has(span)) continue;
+        expanded.add(span);
+
+        for (const variant of lookupVariants(span)) {
           keys.add(variant.text);
           for (const found of deinflect(variant.text)) keys.add(found.term);
         }

@@ -2,7 +2,7 @@ import { convertVariants } from "kanji-processor";
 import { deinflect, inflectionLabel, posConditionFlags } from "./deinflect.js";
 import { posLabels, tagLabels } from "./jmdict-tags.js";
 import { GLOSS_LABELS, withEnglishFallback, type GlossLanguage } from "./languages.js";
-import type { Definition, ParsedToken, Sense } from "./types.js";
+import type { Definition, ParsedToken, Sense, TokenCandidate } from "./types.js";
 import { sha256 as createSha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
@@ -119,11 +119,20 @@ type OfflineKanji = {
 };
 
 // A Tatoeba example, stored once and cited by every term it illustrates.
+//
+// `tokens` is the cut the SITE read this line with, shipped in the pack so both
+// engines show the same words in the same places. Without it we would tokenize
+// the line here with the other engine and disagree with the page the learner
+// just came from. Optional: a pack built before recipe 10 has none, and the
+// renderer falls back to the plain string.
+type OfflineSentenceToken = { surface: string; reading?: string; lemma?: string; pos?: string };
+
 type OfflineSentence = {
   type: "sentence";
   id: string;
   japanese: string;
   translations: Record<string, string>;
+  tokens?: OfflineSentenceToken[];
 };
 
 type Stored<T> = T & { pk: string; generation: string };
@@ -405,6 +414,35 @@ export async function lookupOffline(query: string, languages: readonly GlossLang
   return forPopup(db, generation, await lookupInDatabase(db, generation, source, languages, apiBase), languages);
 }
 
+// One named entry, for a reader who PICKED it. Everything else in this file
+// answers "which word is this"; this answers "show me that one", because the
+// reader has already settled the question and re-deriving it would hand them
+// back the word they just rejected.
+//
+// A direct primary-key read: the terms store is keyed on `generation\0id` and an
+// entry handle IS that id ("jmdict:1247250"), so choosing costs one get rather
+// than a re-parse. `surface` is the span they tapped, kept because sense
+// restrictions are keyed on the spelling in front of them.
+export async function lookupEntryOffline(
+  entry: string, surface: string, languages: readonly GlossLanguage[], apiBase: string,
+): Promise<Definition | null> {
+  const db = await openDatabase();
+  const generation = await activeGeneration(db);
+  if (!generation) throw new DictionaryNotInstalledError("look up words");
+
+  const term = await getByPk<Stored<OfflineTerm>>(db, "terms", `${generation}\0${entry}`);
+  if (!term) return null;
+
+  const matched = normalize(surface) || term.headword;
+  const hit: LookupHit = {
+    term,
+    candidate: { text: matched, reasons: [] },
+    prefixLength: [...matched].length,
+    surface: matched,
+  };
+  return forPopup(db, generation, termDefinition(hit, languages, apiBase), languages);
+}
+
 export async function parseOffline(text: string, languages: readonly GlossLanguage[], apiBase: string): Promise<ParsedToken[]> {
   const db = await openDatabase();
   const generation = await activeGeneration(db);
@@ -417,6 +455,9 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
   // noun outranks a deinflected verb of the same length. One bit of context is
   // enough to settle it, and it is the bit Sudachi's POS bigrams carry.
   let afterSuruNoun = false;
+  // Whether the token before this position was a content word, which is what
+  // makes a leading は a particle rather than the first mora of a word.
+  let afterContent = false;
   while (position < text.length) {
     const rest = text.slice(position);
     if (!startsJapanese(rest)) {
@@ -425,6 +466,7 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
       tokens.push({ start: position, length: surface.length, surface, reading: null, lemma: surface, pos: "", content: false, state: "none" });
       position += surface.length;
       afterSuruNoun = false; // punctuation or a Latin run ends the compound
+      afterContent = false;
       continue;
     }
 
@@ -434,9 +476,29 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
       tokens.push({ start: position, length: surface.length, surface, reading: null, lemma: surface, pos: "", content: false, state: "none" });
       position += surface.length;
       afterSuruNoun = false;
+      afterContent = false;
       continue;
     }
+    // A match that opens with a bound particle and only exists by deinflection
+    // has eaten the particle in front of it: はもう is 食む, not は + もう. Emit the
+    // particle alone and let the next pass read the word.
+    if (await swallowedParticle(db, generation, definition, afterContent)) {
+      const particle = [...rest][0]!;
+      tokens.push({ start: position, length: particle.length, surface: particle,
+        reading: null, lemma: particle, pos: "prt", content: false, state: "none" });
+      position += particle.length;
+      afterSuruNoun = false;
+      afterContent = false;
+      continue;
+    }
+
     const surface = definition.sourceForm;
+    // The other words this span could be, asked under the context the span was
+    // read in: `afterSuruNoun` names what came BEFORE this token, so it has to be
+    // read before the line below reassigns it for the next one. Passing the new
+    // value asked a different question and, since the flag is in the cache key,
+    // paid for a second gather to get the wrong answer.
+    const alternatives = await alternativesFor(db, generation, rest, surface, definition, afterSuruNoun);
     afterSuruNoun = takesSuru(definition);
     // Number + counter: JMdict lists some of these as their own noun (七本 "seven
     // long cylindrical things", 六人 "six people") but not others (三匹 is a name
@@ -452,6 +514,7 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
         lemma: head, pos: "", content: true, state: "none",
       });
       position += head.length;
+      afterContent = true;
       continue;
     }
     tokens.push({
@@ -462,10 +525,14 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
       // tokenizers disagree about lemmas by design, and a save keyed on one of
       // them forks the card.
       entry: definition.entry,
+      // Spread rather than assigned, so a token with nothing to choose between
+      // carries no `candidates` key at all rather than an undefined one.
+      ...alternatives ? { candidates: alternatives } : {},
       pos: firstPartOfSpeech(definition),
       content: true, state: "none", frequency: definition.frequency,
     });
     position += surface.length;
+    afterContent = true;
   }
   // A numeral's surface keeps the width the page used; its lemma is the number, so
   // ２ and 2 are one card and not two. Applied to the finished stream because a
@@ -776,9 +843,9 @@ async function bestWithLookahead(
   // Gathered once and used twice: the winner becomes the token, the runners-up
   // are what the path scorer prices it against. Re-asking the database for a
   // list already in hand doubled the queries for every position on the page.
-  const candidates = await contextualCandidates(db, generation, source, afterSuruNoun);
-  const best = candidates.length
-    ? termDefinition(wholeKatakanaWord(candidates, source), languages, apiBase)
+  const { trusted } = await contextualCandidates(db, generation, source, afterSuruNoun);
+  const best = trusted.length
+    ? termDefinition(wholeKatakanaWord(trusted, source), languages, apiBase)
     : await lookupInDatabase(db, generation, source, languages, apiBase, true);
   const matched = best?.sourceForm;
   if (!matched) return best;
@@ -808,7 +875,51 @@ async function bestWithLookahead(
   // So price the two readings as PATHS and take the cheaper. Cost is corpus rank,
   // logged: Sudachi minimises a connection cost over a full lattice, and this is
   // the two-token slice of that we can afford. Ranks ride in the pack already.
-  return pathAdjusted(db, generation, rest, languages, apiBase, best, candidates);
+  return pathAdjusted(db, generation, rest, languages, apiBase, best, trusted);
+}
+
+// Particles a word can be mis-cut across: they bind what comes BEFORE them, so a
+// match that opens with one and was reached by deinflection has eaten it.
+// `Tokenizer#BOUND_PARTICLES` is the same list on the web.
+const BOUND_PARTICLES = new Set([ "は", "が", "を", "に", "へ", "も", "と", "で" ]);
+
+// Did this match swallow the particle in front of it? 彼はもう帰った came back as
+// 彼 | はもう | 帰った, because はもう deinflects to はむ (食む, an archaic "to eat")
+// and longest-match takes the longer span. 私はたいてい went the same way through
+// はたく. The topic particle belongs to 彼, and もう is the word.
+//
+// Three conditions, and all three are load-bearing. The match must have been
+// reached by DEINFLECTION, so a listed expression is never touched (について and
+// ではないか are exact matches and stay whole). It must open with a bound particle.
+// And something must come BEFORE it, because a sentence-initial は is not marking
+// anything. The web does this to Sudachi's output in `unswallow_particles`, for
+// the same reason and with the same list; this is the longest-match side of it.
+async function swallowedParticle(
+  db: IDBDatabase, generation: string, definition: Definition | null, afterContent: boolean,
+): Promise<boolean> {
+  if (!afterContent || !definition?.sourceForm) return false;
+
+  const characters = [...definition.sourceForm];
+  if (characters.length < 2 || !BOUND_PARTICLES.has(characters[0]!)) return false;
+  if (!definition.inflection?.length) return false;
+
+  // …and the fourth condition, which the first draft left out and 長居できない
+  // caught within the minute. "Is the tail a word?" does not separate them: きない
+  // is an entry too (rank 137,415). What separates them is WHICH READING IS THE
+  // RARE ONE, measured rather than guessed:
+  //
+  //   はもう   104,213   tail もう        42   the tail is 2,481x commoner  → は was eaten
+  //   できない      62   tail きない 137,415   the tail is 2,216x rarer     → で is part of できる
+  //
+  // So the particle is only cut off when what is left is MUCH commoner than the
+  // reading that swallowed it, on the same 6-bit bar `MUCH_COMMONER` sets for the
+  // path scorer. Nothing here is a threshold anyone had to invent.
+  const tail = characters.slice(1).join("");
+  const hits = await hitsForCandidates(db, generation, [ { prefix: tail, candidate: { text: tail, reasons: [] } } ], false);
+  const tailRank = Math.min(...hits.map((hit) => frequencyForHit(hit) ?? UNRANKED));
+  if (!Number.isFinite(tailRank)) return false;
+
+  return Math.log2((definition.frequency ?? UNRANKED) + 1) - Math.log2(tailRank + 1) >= MUCH_COMMONER;
 }
 
 // Every reading of this position the contextual gate trusts, best first: the
@@ -820,22 +931,174 @@ async function bestWithLookahead(
 // below must not drag it across. The web reads it the same way.
 const SURU_STEM = /^[しすさせ]/;
 
-const candidateCache = new BoundedCache<LookupHit[]>(600);
+// One gather, two answers, and they are different questions.
+//
+// `trusted` is what the CUT is made of: the readings that cleared the contextual
+// gate, best first. `all` is every reading the span produced before the gate ran,
+// which is what "which word is this" may offer. The gate is right for the parser
+// and wrong for the list: dropping it shatters 全く (adverb, common, but
+// usually-kana so never confident) into 全 + く, while keeping it made 君
+// unreachable for きみ, because a kanji word matched by its kana READING only
+// clears the gate when the entry is `uk`.
+//
+// So both come out of the one gather rather than the gate being loosened. The
+// pre-gate array already existed and was thrown away.
+type SpanCandidates = { trusted: LookupHit[]; all: LookupHit[] };
 
-async function contextualCandidates(db: IDBDatabase, generation: string, source: string, afterSuruNoun = false): Promise<LookupHit[]> {
+const candidateCache = new BoundedCache<SpanCandidates>(600);
+
+async function contextualCandidates(db: IDBDatabase, generation: string, source: string, afterSuruNoun = false): Promise<SpanCandidates> {
   // The suru bit belongs in the key: the same span reads differently after 勉強
   // than after の, and a cache that ignored it would serve one for the other.
   const key = `${generation}\0${afterSuruNoun ? "s" : ""}\0${source}`;
   const cached = candidateCache.get(key);
   if (cached) return cached;
-  const hits = await gatherCandidates(db, generation, source, afterSuruNoun);
-  candidateCache.set(key, hits);
-  return hits;
+  const candidates = await gatherCandidates(db, generation, source, afterSuruNoun);
+  candidateCache.set(key, candidates);
+  return candidates;
+}
+
+// Every OTHER word this exact span could be, best first, with the chosen one at
+// the head. The offline half of `POST /api/v1/words/identify`.
+//
+// The list is not new work: `contextualCandidates` already gathered it to pick
+// the winner and its answer is still in the cache, so this reads what greed threw
+// away rather than asking again. `rest` is sliced to the same window the parser
+// asked about, because a different window is a different cache key: asking about
+// the whole remaining paragraph missed the entry every time and re-gathered one
+// prefix per character of it.
+//
+// Read off `all`, not `trusted`: the gate that picks the CUT drops every word a
+// spelling merely carries (君 for きみ is not `uk`, so it never cleared it), which
+// is precisely the word a reader taps to ask about.
+//
+// Narrowed to hits covering the SAME span, because a picker offers other
+// readings of the word in front of the reader, not shorter or longer cuts of it.
+// Re-cutting the sentence is the parser's job and it has already done it. That
+// narrowing is also what keeps the pre-gate list honest: the gate's rules about
+// では and 全く are about where to CUT, and a hit on another span is filtered out
+// here anyway.
+//
+// Absent where there is nothing to choose between, so a client can treat its
+// presence as "there is a question here" rather than testing the length.
+async function alternativesFor(
+  db: IDBDatabase, generation: string, rest: string, surface: string,
+  chosen: Definition, afterSuruNoun: boolean,
+): Promise<TokenCandidate[] | undefined> {
+  const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS), afterSuruNoun);
+  const hits = all
+    .filter((hit) => hit.surface === surface)
+    .sort(byLadder);
+  const summaries: TokenCandidate[] = [];
+  const seen = new Set<string>();
+  for (const hit of hits) {
+    // `term.id` IS the handle: the pack stores it already qualified
+    // ("jmdict:1009470"), which is what `termDefinition` puts on `entry`.
+    const entry = hit.term.id;
+    if (seen.has(entry)) continue;
+    seen.add(entry);
+    summaries.push({
+      entry,
+      headword: hit.term.headword,
+      reading: hit.term.readings[0]?.text ?? null,
+      common: hit.term.expressions.some((expression) => expression.common),
+    });
+  }
+  if (summaries.length < 2) return undefined;
+  // The chosen word leads, whatever order the ladder left the list in: the head
+  // is the answer, and a caller reading only `candidates[0]` must get `entry`.
+  const at = summaries.findIndex((candidate) => candidate.entry === chosen.entry);
+  if (at > 0) summaries.unshift(...summaries.splice(at, 1));
+  return summaries;
+}
+
+/**
+ * The server's rung ladder, standing on the rungs we have.
+ *
+ * `WordIds` orders candidates by: the class the sentence read (needs a
+ * morphological analyser, which we do not have), then the spelling's own words
+ * before the ones it merely carries, then the reading, then common, then corpus
+ * rank. We climb every rung but the first, so an offline list and an
+ * `identify` call given the same fields come out in the same order.
+ *
+ * Not the path scorer's order, which `contextualCompare` produces and which
+ * answers a different question: "which CUT is cheapest", not "which WORD is
+ * this". The two coincide often enough to hide the difference and diverge
+ * exactly where a spelling names several words, which is the case this list
+ * exists for. Where the cut IS settled, `contextualCompare` continues down these
+ * same rungs rather than inventing its own tie-break: they share `filedRung`.
+ *
+ * Every hit here covers the same span (`alternativesFor` filtered to it), so a
+ * hit's own `surface` is the spelling being ranked and nothing has to be passed
+ * alongside.
+ *
+ * Rank is used weakly and last, because it is keyed on SPELLING on both sides:
+ * は, 歯, 葉, 刃 and 派 all report the same number. Filed-before-carried has to
+ * come first or the commonest particles in the language are decided by a coin
+ * flip.
+ */
+function byLadder(a: LookupHit, b: LookupHit): number {
+  const filed = filedRung(a, b);
+  if (filed) return filed;
+  // Rung 3: the reading the sentence used.
+  const reading = Number(Boolean(matchingExpression(b))) - Number(Boolean(matchingExpression(a)));
+  if (reading) return reading;
+  // Rung 4: common, then rank, then a stable id so the order never wobbles.
+  const common = Number(isCommonWord(b)) - Number(isCommonWord(a));
+  if (common) return common;
+  const rank = (frequencyForHit(a) ?? Number.POSITIVE_INFINITY) - (frequencyForHit(b) ?? Number.POSITIVE_INFINITY);
+  if (rank) return rank;
+  return a.term.id.localeCompare(b.term.id);
+}
+
+// Rung 2, and the one rung both the CUT and the LIST run: a word the spelling
+// NAMES beats one it merely reads as. `filed` on the server; here, the entry
+// leading with this spelling, or a usually-kana word matching by reading, which
+// is what `Entry#headword?` means.
+//
+// …but a spelling's own words do not get to be rare AND win, which is the second
+// half of `WordIds#pick`'s version. とき is filed under 鴇, the crested ibis
+// whose kana form JMdict lists, and merely CARRIES 時: a reader writing とき
+// means the time. Stated pairwise so one comparator can hold it: a carried
+// COMMON word beats a filed rare one, and filed wins every other way round. は
+// keeps its particle, which is filed AND common, so this never reaches it.
+function filedRung(a: LookupHit, b: LookupHit): number {
+  const aFiled = isFiledUnder(a, a.surface);
+  if (aFiled === isFiledUnder(b, b.surface)) return 0;
+
+  const [ filed, carried ] = aFiled ? [ a, b ] : [ b, a ];
+  const filedFirst = !isCommonWord(filed) && isCommonWord(carried) ? 1 : -1;
+  return aFiled ? filedFirst : -filedFirst;
+}
+
+// `Entry#common?`, ported: rung 4 asks whether the WORD is common, not whether
+// this writing of it is. A word its spelling merely CARRIES has no matching
+// expression at all (君 is not written きみ), so asking the writing answers false
+// for every carried word and hands the rung straight to corpus rank, which is
+// keyed on SPELLING and reports one number for は, 歯, 葉, 刃 and 派 alike. It is
+// also the flag `alternativesFor` reports on each candidate, so the order and the
+// label now come from the same question.
+//
+// The writing still wins where there is one: a rare spelling of a common word is
+// a deliberate choice by whoever wrote the page, and rung 4 keeps saying so.
+function isCommonWord(hit: LookupHit): boolean {
+  return matchingExpression(hit)?.common ?? hit.term.expressions.some((expression) => expression.common);
+}
+
+// `Entry#headword?`, ported: a kanji writing the term is filed under, or a kana
+// one where the word is usually written in kana. 君 merely READS きみ, so it is
+// carried rather than filed, which is exactly the distinction that decides
+// whether a spelling's own word or a borrowed one leads.
+function isFiledUnder(hit: LookupHit, surface: string): boolean {
+  const text = normalize(surface);
+  const expression = hit.term.expressions.find((item) => normalize(item.text) === text);
+  if (!expression) return false;
+  return expression.script !== "kana" || isUsuallyKana(hit.term);
 }
 
 // The scorer looks one token ahead, which is the very span the parser reads on
 // its next step: so the work lands in the cache above rather than being redone.
-async function gatherCandidates(db: IDBDatabase, generation: string, source: string, afterSuruNoun = false): Promise<LookupHit[]> {
+async function gatherCandidates(db: IDBDatabase, generation: string, source: string, afterSuruNoun = false): Promise<SpanCandidates> {
   const prefixes = prefixesLongestFirst(source);
   const exactHits = await hitsForCandidates(db, generation, prefixes.flatMap((prefix) =>
     lookupVariants(prefix).map((variant) => ({
@@ -868,7 +1131,7 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
   // confident) into 全 + く on a hair's-breadth score difference.
   if (!confident.length) {
     hits.sort((a, b) => b.prefixLength - a.prefixLength || score(b, source) - score(a, source));
-    return hits;
+    return { trusted: hits, all: hits };
   }
   confident.sort(contextualCompare);
   // The sort prefers the analysis with fewer inflection steps, which is right
@@ -923,7 +1186,7 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
       && SURU_STEM.test(hit.surface));
     if (suru > 0) confident.unshift(...confident.splice(suru, 1));
   }
-  return confident;
+  return { trusted: confident, all: hits };
 }
 
 // A token's price: how rare it is, logged so the difference between rank 2 and
@@ -976,7 +1239,7 @@ async function cheapestFrom(
   // it for the 。 that follows made 書いている look worse than 書いて + いる.
   if (!startsJapanese(tail)) return 0;
 
-  const options = await contextualCandidates(db, generation, tail.slice(0, MAX_SCAN_CHARS));
+  const { trusted: options } = await contextualCandidates(db, generation, tail.slice(0, MAX_SCAN_CHARS));
   // An unexplained character is always an option, and always the expensive one.
   let best = UNPARSED_COST + TOKEN_COST + await cheapestFrom(db, generation, window, from + 1, memo);
   for (const option of options.slice(0, MAX_PATH_ALTERNATIVES)) {
@@ -1189,7 +1452,14 @@ async function hitsForCandidates(
 
 const CONTEXTUAL_MISC = new Set(["yoji", "id", "proverb"]);
 const SEARCH_ONLY_TAGS = new Set(["sK", "sk"]);
-const RARE_KANJI_TAGS = new Set(["rK", "oK"]);
+// Kanji spellings that do not represent how the word is normally written, which
+// is what makes a word "usually kana". `sK` belongs here as surely as `rK`: a
+// search-only form is not merely rare, it is one JMdict refuses to display at
+// all, so a word whose every kanji form is `sK` is written in kana and nothing
+// else. Leaving it out said カレー was not filed under カレー (its only kanji
+// forms, 咖哩 and 咖喱, are both `sK`), and a JMnedict "Curry" that IS written
+// カレー then took the rung and the word.
+const RARE_KANJI_TAGS = new Set(["rK", "oK", "sK"]);
 const CONTEXTUAL_FREQUENCY_LIMIT = 50_000;
 
 // A deinflected candidate must land on a term whose part-of-speech can actually
@@ -1356,6 +1626,18 @@ function contextualCompare(a: LookupHit, b: LookupHit): number {
   // inflection chain) over a longer, more contrived one landing on a commoner word.
   const inflections = a.candidate.reasons.length - b.candidate.reasons.length;
   if (inflections) return inflections;
+  // Everything above prices the CUT, and from here the cut is settled: same span,
+  // same spelling work, same inflection chain. What is left is which WORD it is,
+  // so the rest of this runs the ladder `byLadder` runs, starting at the rung
+  // that separates a spelling's own word from one it merely reads as.
+  //
+  // Without it こと resolved to 琴, the zither, 645 times in a 12,000-sentence
+  // sweep: 事 is filed under こと (JMdict lists the kana form, `uk`) and 琴 merely
+  // READS こと, they tie on every key above, they share a corpus rank because
+  // rank is keyed on spelling, and the comparison fell all the way through to
+  // `id.localeCompare`, where jmdict:1241450 sorts before jmdict:1313580.
+  const filed = filedRung(a, b);
+  if (filed) return filed;
   const common = Number(Boolean(matchingExpression(b)?.common)) - Number(Boolean(matchingExpression(a)?.common));
   if (common) return common;
   const aFrequency = frequencyForHit(a) ?? Number.POSITIVE_INFINITY;
@@ -1723,6 +2005,7 @@ async function examplesFor(
   return stored.filter((sentence): sentence is Stored<OfflineSentence> => !!sentence).map((sentence) => ({
     japanese: sentence.japanese,
     translation: withEnglishFallback(languages).map((language) => sentence.translations[language]).find(Boolean) ?? null,
+    ...(sentence.tokens ? { tokens: sentence.tokens.map((token) => ({ surface: token.surface })) } : {}),
   }));
 }
 
@@ -1872,12 +2155,29 @@ function validateKanji(kanji: OfflineKanji): void {
 }
 
 function validateSentence(sentence: OfflineSentence): void {
-  if (!exactKeys(sentence, ["type", "id", "japanese", "translations"]) || !plainString(sentence.id) || !plainString(sentence.japanese) ||
+  if (!exactKeys(sentence, ["type", "id", "japanese", "translations", "tokens"]) ||
+      !plainString(sentence.id) || !plainString(sentence.japanese) ||
       !sentence.translations || typeof sentence.translations !== "object" || Array.isArray(sentence.translations) ||
-      !Object.entries(sentence.translations).every(([language, text]) => ["eng", "spa"].includes(language) && plainString(text))) {
+      !Object.entries(sentence.translations).every(([language, text]) => ["eng", "spa"].includes(language) && plainString(text)) ||
+      !validSentenceTokens(sentence)) {
     throw new Error("Dictionary sentence record is invalid.");
   }
   rejectUnsafeStructuredContent(sentence);
+}
+
+// The shipped cut, if this pack carries one. Surfaces must rejoin to the line
+// exactly, or the tokens describe some other sentence and drawing the line
+// through them would silently show the learner text that is not there.
+function validSentenceTokens(sentence: OfflineSentence): boolean {
+  if (sentence.tokens === undefined) return true;
+  if (!Array.isArray(sentence.tokens) || sentence.tokens.length === 0) return false;
+
+  return sentence.tokens.every((token) =>
+    token && typeof token === "object" && !Array.isArray(token) &&
+    exactKeys(token, ["surface", "reading", "lemma", "pos"]) &&
+    plainString(token.surface) &&
+    (["reading", "lemma", "pos"] as const).every((key) => token[key] === undefined || plainString(token[key]))
+  ) && sentence.tokens.map((token) => token.surface).join("") === sentence.japanese;
 }
 
 function plainString(value: unknown): value is string {
