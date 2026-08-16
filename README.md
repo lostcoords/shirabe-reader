@@ -172,6 +172,53 @@ add-on ID, so it lives alongside a store-installed Shirabe Reader instead of
 replacing it. Chrome has no equivalent: its MV3 service worker can't hold the
 event-stream connection, so `dev:chrome` stays on web-ext.
 
+## Develop in your own Brave / Chrome
+
+`npm run dev:chrome` (and `npm run dev:brave`, which is the same thing pointed at
+Brave via `CHROMIUM_BINARY`) launches a browser on a throwaway dev profile. To
+read in the browser you actually use, load the build unpacked instead:
+
+```bash
+npm run build:chrome    # points at https://shirabe.org
+npm run watch:chrome    # points at https://shirabe.localhost, rebuilds on save
+```
+
+Then `brave://extensions` (or `chrome://extensions`) → **Developer mode** on →
+**Load unpacked** → choose `dist/chrome`.
+
+Which build depends on what you are testing. `build:chrome` bakes in production
+and needs no local server, so it is the one for checking what a release actually
+does across real pages. `watch:chrome` bakes in `https://shirabe.localhost` and
+is the one for editing extension code.
+
+An unpacked extension is not temporary the way a Firefox add-on is: it survives
+quitting the browser, so this is one-time setup. By default you then hit the
+reload arrow on its card after each rebuild.
+
+To skip that, let the watcher drive the browser over the DevTools protocol. The
+extension cannot listen for a rebuild the way Firefox's does (a service worker
+has no `EventSource`), but nothing says it has to: `Extensions.loadUnpacked` is
+the command web-ext sends, sending it twice for one path is a reload, and it
+works against any Chromium you started yourself:
+
+```bash
+# start Brave/Chrome once, with your own profile:
+'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser' --remote-debugging-port=9222
+npm run watch:brave      # = node build.mjs chrome --watch --cdp
+```
+
+The first build loads the extension, so you never touch **Load unpacked**. Tab
+refreshes are still yours: reloading the extension does not re-inject content
+scripts into pages that are already open.
+
+**That port is a real exposure.** Anything running locally that can reach 9222
+can drive the browser and read the session in it, which is why Chromium wants an
+explicit opt-in and why this is off unless you pass `--cdp`. Keep it to dev, and
+don't leave the browser started that way for ordinary browsing.
+
+Loading unpacked alongside a store-installed Shirabe Reader means two copies
+parsing the same page. Disable the store one while you test.
+
 ## Load it (Firefox)
 
 1. `npm run build:firefox`

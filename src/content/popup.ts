@@ -1,7 +1,7 @@
 import { send, type Rating } from "../common/messages.js";
 import { loadConfig, pricingUrl } from "../common/config.js";
 import { sendDictionary } from "../common/dictionary-port.js";
-import type { Definition, Example, Sense } from "../common/types.js";
+import type { Definition, Example, Sense, TokenCandidate } from "../common/types.js";
 import { applyStudyDetails, captureFor, grade, GRADES, markKnown, REVIEW_IN_READER, save, setScanOrigin, studyUrlForWord, type Outcome } from "./actions.js";
 import { renderCardForm } from "./card-form.js";
 import { refreshMetrics } from "./metrics-reporter.js";
@@ -1052,22 +1052,119 @@ function candidateRow(word: HTMLElement, def: Definition): HTMLElement | null {
 
   const row = document.createElement("div");
   row.className = "sb-candidates";
-  for (const candidate of candidates) {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "sb-candidate";
-    chip.dataset.entry = candidate.entry;
-    chip.textContent = candidate.reading && candidate.reading !== candidate.headword
-      ? `${candidate.headword}・${candidate.reading}`
-      : candidate.headword;
-    if (candidate.entry === def.entry) {
-      chip.classList.add("sb-candidate-on");
-      chip.setAttribute("aria-current", "true");
-    }
-    chip.addEventListener("click", () => pickCandidate(word, candidate.entry));
-    row.append(chip);
-  }
+  // One of several, exactly one selected: that is a radiogroup, and saying so
+  // buys arrow-key movement and a SINGLE tab stop instead of one per candidate.
+  row.role = "radiogroup";
+  row.setAttribute("aria-label", "Other words this could be");
+  drawChips(row, candidates, def, word, false);
   return row;
+}
+
+// A cap on the ROW, never on the answer: きみ resolves to a dozen, six of them
+// JMnedict entries all glossing "Kimi", and a dozen chips wrap into four lines
+// and push the senses off the bottom of the card. The rest are one click away.
+const PICKER_VISIBLE = 6;
+
+function drawChips(
+  row: HTMLElement,
+  candidates: TokenCandidate[],
+  def: Definition,
+  word: HTMLElement,
+  expanded: boolean,
+): void {
+  row.replaceChildren();
+  const picked = candidates.findIndex((candidate) => candidate.entry === def.entry);
+  const shown = visibleChips(candidates, picked, expanded);
+
+  for (const { candidate, index } of shown) {
+    const pill = document.createElement("button");
+    pill.type = "button";
+    pill.className = "sb-candidate";
+    pill.role = "radio";
+    pill.dataset.entry = candidate.entry;
+    pill.dataset.index = String(index);
+
+    pill.append(japanese("sb-candidate-word", candidate.headword));
+    if (candidate.reading && candidate.reading !== candidate.headword) {
+      pill.append(japanese("sb-candidate-reading", candidate.reading));
+    }
+    // Says WHY six near-identical chips are here: they are people, not readings
+    // of the word that was tapped.
+    if (isNameCandidate(candidate)) {
+      pill.classList.add("sb-candidate-name");
+      pill.append(chip("sb-candidate-kind", "name"));
+    }
+
+    const on = index === picked;
+    pill.classList.toggle("sb-candidate-on", on);
+    pill.setAttribute("aria-checked", String(on));
+    // Roving tabindex: the group is one stop, arrows move inside it.
+    pill.tabIndex = on ? 0 : -1;
+    pill.addEventListener("click", () => pickCandidate(word, candidate.entry));
+    pill.addEventListener("keydown", (event) => onChipKeydown(event, row, word));
+    row.append(pill);
+  }
+
+  const hidden = expanded ? 0 : Math.max(0, candidates.length - shown.length);
+  if (hidden > 0) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "sb-candidate sb-candidate-more";
+    more.textContent = `+${hidden}`;
+    more.setAttribute("aria-label", `Show ${hidden} more`);
+    more.addEventListener("click", () => drawChips(row, candidates, def, word, true));
+    row.append(more);
+  }
+}
+
+// The index travels WITH the candidate, which is why this is not a `slice` at
+// the call site: once the row is trimmed, the loop index and the position in the
+// full list stop agreeing, and a pick addresses the full list. A picked
+// candidate is always in the row, or expanding and collapsing again would leave
+// the card showing a word whose chip had gone.
+function visibleChips(
+  candidates: TokenCandidate[],
+  picked: number,
+  expanded: boolean,
+): { candidate: TokenCandidate; index: number }[] {
+  const all = candidates.map((candidate, index) => ({ candidate, index }));
+  if (expanded || all.length <= PICKER_VISIBLE) return all;
+
+  const head = all.slice(0, PICKER_VISIBLE);
+  if (!head.some((chip) => chip.index === picked)) {
+    const chosen = all[picked];
+    if (chosen) head[head.length - 1] = chosen;
+  }
+  return head;
+}
+
+// A JMnedict entry is a person or a place, not another reading of the word.
+// The handle already says so ("jmnedict:5000000"), so nothing has to be added
+// to the pack to tell them apart.
+function isNameCandidate(candidate: TokenCandidate): boolean {
+  return candidate.entry.startsWith("jmnedict:");
+}
+
+function onChipKeydown(event: KeyboardEvent, row: HTMLElement, word: HTMLElement): void {
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+  if (!step) return;
+
+  const chips = [...row.querySelectorAll<HTMLElement>(".sb-candidate:not(.sb-candidate-more)")];
+  const here = chips.indexOf(event.currentTarget as HTMLElement);
+  const next = chips[(here + step + chips.length) % chips.length];
+  if (!next?.dataset.entry) return;
+
+  event.preventDefault();
+  next.focus();
+  pickCandidate(word, next.dataset.entry);
+}
+
+// Japanese inside a chip, marked as such so the browser picks a JP font and a
+// screen reader the right voice: the surrounding page may declare anything.
+function japanese(className: string, text: string): HTMLElement {
+  const el = chip(className, text);
+  el.lang = "ja";
+  return el;
 }
 
 // Show the word the reader picked, by handle. Not a fresh lookup: they have
@@ -1158,7 +1255,11 @@ const CSS = `
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  width: min(360px, calc(100vw - 24px));
+  /* Wider than it was (360px): the picker put a second row of chips above the
+     senses on anything with three candidates, and a two-line gloss is the normal
+     case rather than the long one. Still capped to the viewport so a narrow
+     phone window is not pushed sideways. */
+  width: min(420px, calc(100vw - 24px));
   max-height: min(60vh, 460px);
   padding: 12px 14px;
   background: var(--sb-surface);
@@ -1230,26 +1331,57 @@ const CSS = `
 .sb-inflection { margin-bottom: 7px; color: var(--sb-ink-subtle); font-size: 12px; }
 
 /* The candidate picker: every word this span can name, the current one marked.
-   A row of chips rather than a list, because it is a choice between two or
-   three short labels and it sits above the definition it changes. */
-.sb-candidates { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+   A row of chips rather than a list, because it is a choice between short
+   labels and it sits above the definition it changes. Pinned (flex: 0 0 auto)
+   so a long list never eats the senses' share of a capped-height card, and
+   allowed to wrap, because a horizontal scroller hides the candidates a reader
+   most needs to see. */
+.sb-candidates { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+
+/* Quiet until picked. An unpicked chip is an alternative rather than an action,
+   so it must not compete with the headword, but it still has to look pressable,
+   which a bare word does not. */
 .sb-candidate {
   font: inherit;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
   line-height: 1.4;
-  padding: 2px 8px;
-  color: var(--sb-ink-subtle);
+  padding: 2px 7px;
+  color: var(--sb-ink-muted);
   background: transparent;
   border: 1px solid var(--sb-outline);
   border-radius: 999px;
   cursor: pointer;
+  transition: background-color .12s ease, color .12s ease, border-color .12s ease;
 }
-.sb-candidate:hover { color: var(--sb-ink); border-color: var(--sb-accent); }
+.sb-candidate:hover { background: var(--sb-surface-muted); color: var(--sb-ink); }
+.sb-candidate-word { font-size: 13px; font-weight: 600; }
+.sb-candidate-reading { font-size: 11px; opacity: .75; }
+
+/* The one the card is showing. A tint rather than a brighter neutral, so the
+   selected chip and the open word in the page say "this is what you are looking
+   at" the same way. */
 .sb-candidate-on {
   color: var(--sb-accent);
-  border-color: var(--sb-accent);
-  font-weight: 600;
+  background: var(--sb-accent-tint);
+  border-color: transparent;
 }
+.sb-candidate:focus-visible { outline: 2px solid var(--sb-accent); outline-offset: 2px; }
+
+/* A name, not a reading of the word that was tapped: a reason to SKIP the chip
+   rather than something to read, so it is quiet and the chip is dimmed. */
+.sb-candidate-kind {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  opacity: .55;
+}
+.sb-candidate-name:not(.sb-candidate-on) { opacity: .72; }
+
+/* The rest of the ranked list, one click away. A chip because it sits in the row
+   and takes the same click, but with no headword to show. */
+.sb-candidate-more { font-size: 12px; color: var(--sb-ink-subtle); }
 .sb-study-unavailable { flex: 0 0 auto; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--sb-outline); color: var(--sb-ink-subtle); font-size: 11px; }
 .sb-study-unavailable .sb-plans { font-size: 11px; }
 

@@ -40,9 +40,17 @@ test("the data collection declaration matches what the code actually sends", () 
   assert.match(listing, /No data is collected for ordinary use/);
 });
 
-test("localhost access is added only to watch builds", () => {
+test("localhost access follows the API actually baked in, not merely --watch", () => {
   const builder = readFileSync("build.mjs", "utf8");
-  assert.match(builder, /if \(watch\) base\.host_permissions\.push\("https:\/\/shirabe\.localhost\/\*"\)/);
+  // A watcher can now be pointed at production (--api), which is how unreleased
+  // extension code is tested against the live server. The dev origin has to
+  // follow the host that was baked in, or a prod-pointed watch build would ask
+  // for a localhost permission it never uses.
+  assert.match(builder, /if \(watch && localApi\) base\.host_permissions\.push\("https:\/\/shirabe\.localhost\/\*"\)/);
+  assert.match(builder, /const localApi = apiBase\.includes\("shirabe\.localhost"\)/);
+  // And a one-shot build is still production by default: the flag opens a door
+  // for the watcher without moving where a package points.
+  assert.match(builder, /: \(watch \? "https:\/\/shirabe\.localhost" : "https:\/\/shirabe\.org"\)/);
 });
 
 test("Firefox watch builds isolate development storage from the release add-on", () => {
@@ -373,7 +381,7 @@ test("missing offline storage self-heals and the word popup has a stable scrolla
   assert.match(background, /DictionaryNotInstalledError/);
   assert.match(background, /dictionaryInstalling: true/);
   assert.match(popup, /Preparing the offline dictionary/);
-  assert.match(popup, /width: min\(360px, calc\(100vw - 24px\)\)/);
+  assert.match(popup, /width: min\(420px, calc\(100vw - 24px\)\)/);
   assert.match(popup, /max-height: min\(60vh, 460px\)/);
   assert.doesNotMatch(popup, /\n  height: min\(460px/);
   assert.match(popup, /overflow-y: auto/);

@@ -19,10 +19,10 @@
 // background `scripts` array plus a `browser_specific_settings.gecko` block.
 import * as esbuild from "esbuild";
 import { spawn } from "node:child_process";
-import { rmSync, watch as watchFiles } from "node:fs";
+import { existsSync, rmSync, watch as watchFiles } from "node:fs";
 import { createServer } from "node:http";
 import { copyFile, cp, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -49,6 +49,19 @@ if (isMain && !["firefox", "chrome"].includes(target)) {
 export const RELEASE_OFF_HOSTS = ["*://shirabe.org/*", "*://*.shirabe.org/*"];
 export const DEV_OFF_HOSTS = [...RELEASE_OFF_HOSTS, "*://shirabe.localhost/*"];
 
+// Which server a build talks to. A watcher defaults to the local one, but a
+// watcher is also how you test UNRELEASED extension code against the server that
+// is already live, which is the shape of every pre-release check:
+// `--api=https://shirabe.org` gives you that with no local Rails. It has to be a
+// build flag rather than a Settings field because config.ts repairs a stored
+// apiBase back to the build-time default, precisely so a dev profile cannot get
+// stuck pointing at production.
+const apiArg = process.argv.find((arg) => arg.startsWith("--api="));
+const apiBase = apiArg
+  ? apiArg.slice("--api=".length).replace(/\/$/, "")
+  : (watch ? "https://shirabe.localhost" : "https://shirabe.org");
+const localApi = apiBase.includes("shirabe.localhost");
+
 const outputArg = process.argv.find((arg) => arg.startsWith("--outdir="));
 const outdir = outputArg
   ? join(root, outputArg.slice("--outdir=".length))
@@ -65,6 +78,28 @@ const watchLock = join(root, ".web-ext-profile", `${target}.watch.lock`);
 const RELOAD_PORT = 8473;
 const devReload = watch && !serve && target === "firefox";
 const reloadUrl = `http://127.0.0.1:${RELOAD_PORT}/reload`;
+
+// The Chromium half of the same idea, and it works the other way round: the
+// extension can't listen (a service worker has no EventSource), so the WATCHER
+// drives the browser instead, over the DevTools protocol. `Extensions.
+// loadUnpacked` is what web-ext sends, and sending it twice for the same path
+// is a reload, so load and reload are one call.
+//
+// Start Brave/Chrome yourself with --remote-debugging-port and keep your own
+// profile: unlike --serve, nothing here needs web-ext to own the browser.
+//
+// That port is not free of consequence: anything local that can reach it can
+// drive the browser and read the session. Dev builds only, and it is off unless
+// you ask for it.
+// Brave is what we read in; CHROMIUM_BINARY names any other Chromium.
+const DEFAULT_CHROMIUM = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
+const cdpArg = process.argv.find((arg) => arg === "--cdp" || arg.startsWith("--cdp="));
+const cdpPort = cdpArg ? Number(cdpArg.split("=")[1] ?? 9222) : null;
+const cdpReload = Boolean(watch && !serve && target !== "firefox" && cdpPort);
+// Until the browser is confirmed up, a rebuild has nowhere to go: the first
+// build fires one before ensureCdpBrowser has finished launching, and warning
+// about that would be crying wolf on the happy path.
+let cdpReady = false;
 
 // Each entry becomes a standalone classic (IIFE) bundle. Content scripts and
 // MV3 background workers can't be ES modules across both browsers, so we let
@@ -89,7 +124,7 @@ const buildOptions = {
   // Default API host baked in at build time: local server for dev/watch builds,
   // production for shipped one-shot builds. Overridable at runtime via Advanced.
   define: {
-    __DEFAULT_API_BASE__: JSON.stringify(watch ? "https://shirabe.localhost" : "https://shirabe.org"),
+    __DEFAULT_API_BASE__: JSON.stringify(apiBase),
     // Release list only, so production zips never embed a localhost host pattern.
     __SHIRABE_OFF_HOSTS__: JSON.stringify(watch ? DEV_OFF_HOSTS : RELEASE_OFF_HOSTS),
     __EXTENSION_VERSION__: JSON.stringify(baseManifest.version),
@@ -106,7 +141,7 @@ const buildOptions = {
     __DEV_RELOAD_URL__: JSON.stringify(devReload ? reloadUrl : ""),
   },
   // Rebuild finished and clean → tell any listening extension to reload itself.
-  plugins: devReload
+  plugins: devReload || cdpReload
     ? [{
       name: "dev-reload",
       setup: (build) => build.onEnd((result) => {
@@ -121,7 +156,7 @@ async function manifest() {
 
   // Store packages must never request a development origin. Watch builds add
   // the local Rails host because their baked-in API default points there.
-  if (watch) base.host_permissions.push("https://shirabe.localhost/*");
+  if (watch && localApi) base.host_permissions.push("https://shirabe.localhost/*");
   // Reaching the local reload stream is a fetch to another origin, so the watch
   // manifest has to ask for it. Never in a packaged build.
   if (devReload) base.host_permissions.push(`http://127.0.0.1:${RELOAD_PORT}/*`);
@@ -205,6 +240,48 @@ async function buildAll() {
   if (watch) watchStatic();
   if (devReload) startReloadServer();
   console.log(`✓ ${target} build → ${outdir}${watch ? " (watching)" : ""}`);
+  if (cdpReload) await ensureCdpBrowser();
+}
+
+// `--cdp` needs a browser listening on the debugging port, and the flag only
+// takes effect at startup: a browser already open without it cannot be given one
+// (a second launch just focuses the first). So: use one that answers, otherwise
+// start one, otherwise say plainly that the running browser has to be quit. The
+// alternative, quitting it ourselves, would throw away someone's tabs to save
+// them a keystroke.
+async function ensureCdpBrowser() {
+  if (await cdpAlive()) {
+    cdpReady = true;
+    console.log(`↻ attached to the browser on CDP :${cdpPort}`);
+    return announceRebuild();
+  }
+
+  const binary = process.env.CHROMIUM_BINARY ?? DEFAULT_CHROMIUM;
+  if (!existsSync(binary)) {
+    return console.warn(`↻ no browser on CDP :${cdpPort}, and none at ${binary}. Set CHROMIUM_BINARY, or start yours with --remote-debugging-port=${cdpPort}.`);
+  }
+
+  console.log(`↻ starting ${basename(binary)} on CDP :${cdpPort}`);
+  // Detached, and its output discarded: the browser outlives the watcher, so
+  // Ctrl-C here must not take the window down with it.
+  spawn(binary, [`--remote-debugging-port=${cdpPort}`], { detached: true, stdio: "ignore" }).unref();
+
+  for (let i = 0; i < 40; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    if (await cdpAlive()) {
+      cdpReady = true;
+      return announceRebuild();
+    }
+  }
+  console.warn(`↻ ${basename(binary)} did not open CDP :${cdpPort}. It is probably already running without the flag: quit it and restart this watcher.`);
+}
+
+async function cdpAlive() {
+  try {
+    return (await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).ok;
+  } catch {
+    return false;
+  }
 }
 
 // A one-route event stream the extension subscribes to. Every connected client
@@ -245,11 +322,44 @@ let announceTimer;
 // TS rebuilds and the static resync below can both land for a single save, so
 // coalesce them into one reload.
 function announceRebuild() {
-  if (!devReload) return;
+  if (!devReload && !cdpReload) return;
   clearTimeout(announceTimer);
   announceTimer = setTimeout(() => {
     for (const client of reloadClients) client.write("event: rebuilt\ndata: {}\n\n");
+    if (cdpReload) reloadOverCdp();
   }, 150);
+}
+
+// A dead browser, a closed port, a Chromium too old for the command: all of them
+// mean "no reload this time", never "take the watcher down with you".
+async function reloadOverCdp() {
+  if (!cdpReady) return;
+  let socket;
+  try {
+    const endpoint = await fetch(`http://127.0.0.1:${cdpPort}/json/version`).then((r) => r.json());
+    socket = new WebSocket(endpoint.webSocketDebuggerUrl);
+    await new Promise((resolve, reject) => {
+      socket.onopen = resolve;
+      socket.onerror = () => reject(new Error("DevTools socket refused the connection"));
+    });
+
+    const id = 1;
+    const answer = new Promise((resolve) => {
+      socket.addEventListener("message", (event) => {
+        const message = JSON.parse(event.data);
+        if (message.id === id) resolve(message);
+      });
+    });
+    socket.send(JSON.stringify({ id, method: "Extensions.loadUnpacked", params: { path: outdir } }));
+
+    const { error } = await answer;
+    if (error) console.warn(`↻ reload refused: ${error.message}`);
+    else console.log("↻ reloaded in the browser (refresh the tab for content scripts)");
+  } catch (error) {
+    console.warn(`↻ no browser on CDP :${cdpPort} (${error.message})`);
+  } finally {
+    socket?.close();
+  }
 }
 
 async function acquireWatchLock() {
@@ -337,6 +447,10 @@ async function startWebExt() {
     args.push("--firefox-profile", profileDir, "--pref", "security.enterprise_roots.enabled=true", "--devtools");
   } else {
     args.push("--chromium-profile", profileDir);
+    // Any Chromium will do, and web-ext defaults to Chrome. CHROMIUM_BINARY
+    // points it at the one you actually read in: `npm run dev:brave` sets it to
+    // Brave. Nothing about the build changes, only which browser opens it.
+    if (process.env.CHROMIUM_BINARY) args.push("--chromium-binary", process.env.CHROMIUM_BINARY);
   }
 
   const child = spawn("npx", args, { cwd: root, stdio: "inherit" });
