@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Definition, ParsedToken } from "../src/common/types.js";
-import type { Request } from "../src/common/messages.js";
+import type { Definition } from "../src/common/types.js";
+import { answers, asked, drawn, hover, settle } from "./support/popup-page.js";
 
 // The picker, and the reason it exists: きみ is 君, 黄身 or 黍, and only the
 // reader knows which they meant. Every rung the parser could climb has been
@@ -12,16 +12,9 @@ import type { Request } from "../src/common/messages.js";
 // the save posts as `dictionarySlug` + `sourceId`. Without that the save
 // re-derives the word from the lemma and can land on the one just rejected.
 //
-// ONE page for the whole file, because the popup is one reused shell held in
-// module state: a second window would render into the first one's shadow root
-// and every assertion after it would be about an element nobody can see.
-
-const HOST = "https://reader.test/page";
-
-// The popup renders after an async round trip (and a pick after a second one),
-// so a test lets the queue drain rather than assuming one tick.
-const settle = async () => { for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
-
+// The page, the stubbed background and the hover helper are shared with the
+// other popup suite: see test/support/popup-page.ts for why there is exactly one
+// of them for the whole run.
 function definition(entry: string, headword: string, reading: string, gloss: string): Definition {
   return {
     headword, reading, url: `https://shirabe.org/word/${headword}`, entry,
@@ -34,7 +27,7 @@ const candidate = (entry: string, headword: string, reading: string) => ({ entry
 
 // What the background worker would answer, keyed by the question asked, so a
 // test can assert on what was ASKED as well as on what rendered.
-const answers: Record<string, Definition | null> = {
+Object.assign(answers, {
   "lookup:きみ": definition("jmdict:1226580", "きみ", "きみ", "millet"),
   "entry:jmdict:1247250": definition("jmdict:1247250", "君", "きみ", "you"),
   "lookup:きみ2": definition("jmdict:1226580", "きみ", "きみ", "millet"),
@@ -44,64 +37,9 @@ const answers: Record<string, Definition | null> = {
   "lookup:きみ-many": definition("jmdict:900000", "語0", "ご0", "the first of many"),
   "lookup:きみ-deep": definition("jmdict:910009", "名9", "な9", "ranked tenth"),
   "lookup:きみ-name": definition("jmdict:1247250", "君", "きみ", "you"),
-};
-const asked: Request[] = [];
+});
 
-type Page = {
-  window: { document: Document };
-  word: typeof import("../src/content/word.js");
-  popup: typeof import("../src/content/popup.js");
-};
-
-// Built on first use, not at import: the suite bundles to CJS, where a
-// top-level await will not compile.
-let pending: Promise<Page> | null = null;
-const page = (): Promise<Page> => (pending ??= buildPage());
-
-async function buildPage(): Promise<Page> {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: HOST });
-  Object.assign(globalThis, {
-    window, document: window.document, HTMLElement: window.HTMLElement,
-    Node: window.Node, DOMRect: window.DOMRect, getComputedStyle: window.getComputedStyle.bind(window),
-    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
-  });
-
-  const { ext } = await import("../src/common/browser.js");
-  ext.runtime.sendMessage = (async (message: Request) => {
-    asked.push(message);
-    if (message.type === "lookup") return { ok: true, type: "lookup", definition: answers[`lookup:${message.query}`] ?? null };
-    if (message.type === "lookupEntry") return { ok: true, type: "lookupEntry", definition: answers[`entry:${message.entry}`] ?? null };
-    if (message.type === "states") return { ok: true, type: "states", states: {}, details: {} };
-    return { ok: true };
-  }) as typeof ext.runtime.sendMessage;
-
-  return {
-    window: window as unknown as { document: Document },
-    word: await import("../src/content/word.js"),
-    popup: await import("../src/content/popup.js"),
-  };
-}
-
-async function hover(token: Partial<ParsedToken>): Promise<HTMLElement> {
-  const { window, word: words, popup } = await page();
-  const node = words.renderToken({
-    start: 0, length: 2, surface: "きみ", reading: null, lemma: "きみ",
-    pos: "noun", content: true, state: "none", ...token,
-  } as ParsedToken, false);
-  window.document.body.append(node as never);
-
-  const word = node as unknown as HTMLElement;
-  popup.showNow(word);
-  await settle();
-  return word;
-}
-
-async function chips(): Promise<HTMLElement[]> {
-  const { window } = await page();
-  const host = window.document.querySelector(".sb-host") as unknown as { shadowRoot: ShadowRoot } | null;
-  return [ ...(host?.shadowRoot.querySelectorAll(".sb-candidate") ?? []) ] as HTMLElement[];
-}
+const chips = (): Promise<HTMLElement[]> => drawn(".sb-candidate");
 
 test("a span several words claim offers them all, the parser's answer marked", async () => {
   await hover({ entry: "jmdict:1226580", candidates: [ candidate("jmdict:1226580", "きみ", "きみ"), candidate("jmdict:1247250", "君", "きみ") ] });

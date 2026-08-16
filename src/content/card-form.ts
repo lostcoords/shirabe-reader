@@ -1,6 +1,7 @@
 import { send } from "../common/messages.js";
 import type { SentenceCapture } from "../common/messages.js";
 import type { Definition } from "../common/types.js";
+import { senseText } from "../common/senses.js";
 
 // The full capture form: the extension's front door to the same Card the web
 // app's save modal and new-card page build (docs/specs/srs.md §1.0, and
@@ -113,7 +114,11 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
   // sense and ticking none both save the whole word, so the control could not
   // change the outcome.
   const covered = coveredSenses(word);
-  const senses = definition.senses.map((sense, index) => ({ position: index, sense }));
+  // The sense's OWN position, not its place in this list. They agree today
+  // because a sense appears once; they did not when a card repeated its senses
+  // once per gloss language, and a save then scoped itself to sense numbers the
+  // word does not have.
+  const senses = definition.senses.map((sense) => ({ position: sense.position, sense }));
   const pickable = senses.length > 1;
   const senseBoxes: HTMLInputElement[] = [];
   if (senses.length) {
@@ -126,13 +131,13 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
         box.type = "checkbox";
         box.checked = true;
         box.dataset.position = String(position);
-        box.setAttribute("aria-label", `Include "${sense.glosses.join("; ")}" when saving`);
+        box.setAttribute("aria-label", `Include "${senseText(sense)}" when saving`);
         senseBoxes.push(box);
         row.append(box);
       } else if (pickable) {
         row.append(el("span", "sb-sense-saved-mark", "Saved"));
       }
-      row.append(el("span", "sb-form-gloss", sense.glosses.join("; ")));
+      row.append(el("span", "sb-form-gloss", senseText(sense)));
       list.append(row);
     }
     form.append(field("Meanings", list));
@@ -187,8 +192,11 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
       capturedAt: new Date().toISOString(),
       // The cut this line shipped with, so saving it keeps the words the
       // learner was shown rather than having the server read the line again on
-      // arrival with the other engine.
-      ...(example.tokens ? { tokens: example.tokens } : {}),
+      // arrival with the other engine. Surfaces only, deliberately: an example's
+      // tokens also carry the lemma the popup highlights with, and the save
+      // payload is validated against a schema that takes a surface and nothing
+      // else.
+      ...(example.tokens ? { tokens: example.tokens.map(({ surface }) => ({ surface })) } : {}),
     };
     // A single-meaning word has no meaning to choose first, so its common save
     // should still carry a sentence without a second decision.

@@ -129,7 +129,7 @@ export async function installTestPack(
   { contentRevision, terms }: { contentRevision: string; terms: number },
 ): Promise<void> {
   const manifest = {
-    schemaVersion: 4, buildRecipeVersion: 6, minimumExtensionVersion: "0.2.1", contentRevision,
+    schemaVersion: 5, buildRecipeVersion: 6, minimumExtensionVersion: "0.2.1", contentRevision,
     audio: {
       baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f",
       engineVersion: 1, salt: "test-salt", defaultVoice: "male",

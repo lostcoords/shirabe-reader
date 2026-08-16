@@ -1,7 +1,7 @@
 import { send, type Rating } from "../common/messages.js";
 import { loadConfig, pricingUrl } from "../common/config.js";
 import { sendDictionary } from "../common/dictionary-port.js";
-import type { Definition, Example, Sense, TokenCandidate } from "../common/types.js";
+import type { Definition, Example, GlossRow, KanjiDetail, Sense, TokenCandidate } from "../common/types.js";
 import { applyStudyDetails, captureFor, grade, GRADES, markKnown, REVIEW_IN_READER, save, setScanOrigin, studyUrlForWord, type Outcome } from "./actions.js";
 import { renderCardForm } from "./card-form.js";
 import { refreshMetrics } from "./metrics-reporter.js";
@@ -9,6 +9,9 @@ import { rangeFromCaret, selectionText } from "./dom-text.js";
 import { placeCard } from "./placement.js";
 import { appendFurigana, candidatesFor, hasKanji } from "./word.js";
 import { isR2AudioUrl } from "../common/audio.js";
+import { senseText } from "../common/senses.js";
+import { legendTerm, type LegendTerm } from "../common/legend.js";
+import type { GlossLanguage } from "../common/languages.js";
 import { toast } from "./toast.js";
 
 // One reused popup, shown next to whichever word the pointer (or keyboard) is
@@ -42,10 +45,19 @@ let historyBack: HTMLButtonElement | null = null;
 let historyForward: HTMLButtonElement | null = null;
 let currentDepth = 0;
 let dictionaryInstallPromise: Promise<void> | null = null;
+// The reader's gloss stack, for the legend text on a sense chip. English until
+// the config lands, which is also what an unconnected reader keeps.
+let readerLanguages: GlossLanguage[] = [ "eng" ];
 
-export function setWriteState(state: { canWrite: boolean; connected: boolean }): void {
+// What the popup needs to know about the READER, as opposed to the word: what
+// they may save, and which languages they read in. Pushed in whenever the
+// config is applied, rather than awaited at render time, because the card is
+// drawn synchronously and a promise here would draw it in English first and
+// correct itself a tick later.
+export function setWriteState(state: { canWrite: boolean; connected: boolean; languages?: GlossLanguage[] }): void {
   canWrite = state.canWrite;
   connected = state.connected;
+  if (state.languages?.length) readerLanguages = state.languages;
 }
 
 // The ticked sense positions to save, or undefined for the whole word (no
@@ -149,9 +161,20 @@ function installHoverGuards(): void {
   });
   // The pointer leaving the document fires no further mousemove, so the scan
   // path never gets another chance to close the card.
+  //
+  // Unless the pointer never went anywhere and another app took the screen: a
+  // launcher, a screenshot tool, a switch to another window. That reads to the
+  // page as a `mouseleave` too, and closing on it loses the definition somebody
+  // is reading the moment they reach for anything outside the browser. Focus is
+  // what tells the two apart, so a card only closes for a pointer that left
+  // while the page still had the keyboard.
   document.addEventListener("mouseleave", () => {
-    if (visible()) scheduleHide();
+    if (visible() && document.hasFocus()) scheduleHide();
   });
+  // Focus can also leave *after* the mouseleave that started the countdown, and
+  // the order is the OS's to decide, so the guard above cannot be the whole fix:
+  // a blur is proof after the fact that the pointer exit was an app switch.
+  window.addEventListener("blur", () => window.clearTimeout(hideTimer));
   document.addEventListener("mouseout", (e) => {
     // Only when actually crossing *out* of the safe zone (word/popup → elsewhere),
     // so moving around inside the popup or over other page content doesn't churn.
@@ -523,15 +546,20 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
   if (picker) body.append(picker);
   const badges = badgeRow(def);
   if (badges) body.append(badges);
+  if (def.kanji) body.append(kanjiReadings(def.kanji));
   if (def.pitch.length && def.reading) body.append(pitchRows(def.pitch, def.reading));
   // A picker only when the user can save and every sense is shown (2–8): so
   // "all ticked" unambiguously means the whole word.
   const pickable = canWrite && def.senses.length > 1 && def.senses.length <= 8;
   if (pickable) sensePickWord = word;
   body.append(sensesList(def.senses, pickable, coveredSenses(word)));
-  const kanji = kanjiStrip(def.headword, def.url);
+  const forms = formsRow(def.forms);
+  if (forms) body.append(forms);
+  // Not on a card that IS a character: its own chip would reopen the card it is
+  // already on.
+  const kanji = def.kanji ? null : kanjiStrip(def.headword);
   if (kanji) body.append(kanji);
-  const examples = examplesBlock(def.examples);
+  const examples = examplesBlock(def.examples, def);
   if (examples) body.append(examples);
 
   const rows: Node[] = [headRow(def), body];
@@ -540,28 +568,87 @@ function definitionRows(def: Definition | null, lemma: string, word: HTMLElement
   return rows;
 }
 
-// Kanji chips open the site's kanji page: richer than the offline KANJIDIC
-// slice, and the path we keep if the pack eventually drops kanji records.
-function kanjiStrip(headword: string, wordUrl: string): HTMLElement | null {
+// The word's kanji, each opening its own card HERE rather than a tab.
+//
+// The pack has carried KANJIDIC all along and the popup could already draw a
+// kanji card (`showTarget` takes `kind: "kanji"`, the worker answers it, the
+// renderer handles it): nothing ever asked for one. The strip linked out
+// instead, so the offline half of the feature was unreachable and the price of
+// asking "what is this character" was leaving the page you were reading.
+//
+// The site is still one step away, not gone: the kanji card that opens is headed
+// by a link to its full page, which is where strokes order, components and
+// example words live.
+function kanjiStrip(headword: string): HTMLElement | null {
   const characters = [...new Set([...headword].filter((character) => /\p{Script=Han}/u.test(character)))];
   if (!characters.length) return null;
-  const siteBase = wordUrl.replace(/\/word\/[^/?#]*$/, "");
+
   const strip = document.createElement("div");
   strip.className = "sb-kanji-strip";
   strip.setAttribute("aria-label", "Kanji details");
   for (const character of characters) {
-    const link = document.createElement("a");
-    link.className = "sb-btn sb-kanji-button";
-    link.href = `${siteBase}/kanji/${encodeURIComponent(character)}`;
-    link.target = "_blank";
-    link.rel = "noopener";
-    link.textContent = character;
-    link.title = `Open ${character} on Shirabe`;
-    link.setAttribute("aria-label", `Open kanji ${character} on Shirabe`);
-    strip.append(link);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "sb-btn sb-kanji-button";
+    button.textContent = character;
+    button.lang = "ja";
+    button.title = `What is ${character}?`;
+    button.setAttribute("aria-label", `Look up the kanji ${character}`);
+    button.addEventListener("click", () => nestedLookup(character, button.getBoundingClientRect(), currentDepth, "kanji"));
+    strip.append(button);
   }
   return strip;
 }
+
+// On and kun, apart and labelled, because which one a reading is decides how it
+// behaves in a compound. Two rows rather than one list: a learner reads down
+// this card looking for one of the two families, never for "the readings".
+function kanjiReadings(kanji: KanjiDetail): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "sb-kanji-readings";
+  for (const [ label, readings ] of [ [ "On", kanji.on ], [ "Kun", kanji.kun ] ] as const) {
+    if (!readings.length) continue;
+    const row = document.createElement("div");
+    row.className = "sb-kanji-row";
+    row.append(chip("sb-kanji-kind", label));
+    // Capped, because 生 has eleven kun readings and a card is not a reference
+    // page: the full list is one tap away on the kanji's own page.
+    for (const reading of readings.slice(0, KANJI_READINGS_SHOWN)) row.append(japanese("sb-kanji-reading", reading));
+    if (readings.length > KANJI_READINGS_SHOWN) row.append(chip("sb-kanji-more", `+${readings.length - KANJI_READINGS_SHOWN}`));
+    wrap.append(row);
+  }
+  const meta = [
+    kanji.strokes ? `${kanji.strokes} strokes` : null,
+    kanji.grade ? `Grade ${kanji.grade}` : null,
+  ].filter(Boolean).join(" · ");
+  if (meta) wrap.append(block("sb-kanji-meta", meta));
+  return wrap;
+}
+
+const KANJI_READINGS_SHOWN = 6;
+
+// "Also written": the other spellings of the same word.
+//
+// The question a reader asks the moment the headword is not what they tapped.
+// 開く leads its entry and 空く does not, so somebody who met 空く was shown a
+// card about a word they appear never to have seen. A rare spelling is dimmed
+// rather than dropped: it is exactly the one a reader cannot place, and the
+// dictionary's judgement of it is part of the answer.
+function formsRow(forms: Definition["forms"]): HTMLElement | null {
+  if (!forms?.length) return null;
+
+  const row = document.createElement("div");
+  row.className = "sb-forms";
+  row.append(chip("sb-forms-label", "Also written"));
+  for (const form of forms.slice(0, FORMS_SHOWN)) {
+    const spelling = japanese(form.rare ? "sb-form sb-form-rare" : "sb-form", form.text);
+    if (form.rare) spelling.title = "Rarely written this way";
+    row.append(spelling);
+  }
+  return row;
+}
+
+const FORMS_SHOWN = 8;
 
 // What sits where the Save/Known controls would be. Signed in without Pro is
 // the case worth getting right: the reader isn't missing a connection, they're
@@ -771,8 +858,8 @@ function pitchGraph(reading: string, downstep: number): SVGSVGElement {
   return svg;
 }
 
-// Numbered senses: source label (lang · dict), POS chips, misc/field/dialect
-// tags, then glosses: the same anatomy as a web meaning.
+// Numbered senses: POS and qualifier chips, a gloss row per language, the usage
+// note and the cross references: the same anatomy as a web meaning.
 // Which meanings this word already has a card for: "all" when a whole-word card
 // covers every one of them. Stamped by applyStudyDetails from the word's state.
 function coveredSenses(word: HTMLElement): Set<number> | "all" {
@@ -781,67 +868,302 @@ function coveredSenses(word: HTMLElement): Set<number> | "all" {
   return new Set((raw ?? "").split(",").filter(Boolean).map(Number));
 }
 
+// The card is 460px tall at most and a sense now draws its chips, a row per
+// language, its usage note and its cross references: eight of those and the
+// examples are somewhere below the fold, past meanings the reader has already
+// decided are not the one. So the list leads with four and counts the rest.
+//
+// The count is the point. `senses.slice(0, 8)` dropped everything past the
+// eighth and said nothing, which reads as "this word has eight meanings"; a card
+// that truncates has to admit it.
+//
+// Never while the picker is up. That picker is a form, and its answer is which
+// meanings to save: a hidden sense would be a box the reader never saw and a
+// save silently scoped to the ones they did. `pickable` is already capped at
+// eight senses, so the form stays a readable length by itself.
+const SENSES_SHOWN = 4;
+
 function sensesList(senses: Sense[], pickable = false, covered: Set<number> | "all" = new Set()): Node {
   const list = document.createElement("ol");
   list.className = pickable ? "sb-senses sb-senses-pick" : "sb-senses";
-  for (const sense of senses.slice(0, 8)) {
-    const li = document.createElement("li");
-    // With a picker, the checkbox is the row's first flex child and the sense
-    // body is wrapped so it stays one column; without it, content sits directly
-    // on the <li> (the numbered list marker).
-    const body = pickable ? document.createElement("div") : li;
-    // A meaning you already have a card for is not on offer: saving it again
-    // would land on the card that exists, so the row says so instead of inviting
-    // a second click. `pickedPositions` reads only the boxes that are left, so an
-    // all-covered word simply has no picker to disagree with.
-    const saved = covered === "all" || covered.has(sense.position);
-    if (saved) li.classList.add("sb-sense-saved");
-    if (pickable && !saved) {
-      const box = document.createElement("input");
-      box.type = "checkbox";
-      box.checked = true;
-      box.className = "sb-sense-pick";
-      box.dataset.position = String(sense.position);
-      // Reference the gloss, not a sense number: the picker hides the list's
-      // ordinals, so a number here would have no visible counterpart.
-      box.setAttribute("aria-label", `Include "${sense.glosses.join("; ")}" when saving`);
-      sensePicks.push(box);
-      li.append(box);
-    } else if (pickable) {
-      li.append(chip("sb-sense-saved-mark", "Saved"));
-    }
-    if (sense.source) body.append(block("sb-source", sense.source));
-    if (sense.partsOfSpeech.length) body.append(block("sb-pos", sense.partsOfSpeech.join(", ")));
-    if (sense.tags.length) {
-      const tags = document.createElement("i");
-      tags.className = "sb-tags";
-      tags.textContent = `${sense.tags.join(", ")} `;
-      body.append(tags);
-    }
-    body.append(sense.glosses.join("; "));
-    if (pickable) li.append(body);
-    list.append(li);
+  const shown = pickable ? senses : senses.slice(0, SENSES_SHOWN);
+  for (const sense of shown) list.append(senseItem(sense, pickable, covered));
+  if (shown.length < senses.length) {
+    const rest = senses.length - shown.length;
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "sb-more-senses";
+    more.textContent = `+${rest} more ${rest === 1 ? "meaning" : "meanings"}`;
+    more.addEventListener("click", () => {
+      // Rebuilt rather than appended to, so the numbering, the covered marks and
+      // the picker state all come from one place: this is the same call with
+      // nothing held back.
+      more.replaceWith(...senses.slice(shown.length).map((sense) => senseItem(sense, false, covered)));
+    });
+    list.append(more);
   }
   return list;
 }
 
-// A couple of example sentences with translations (from include=sentences).
-function examplesBlock(examples: Example[]): Node | null {
+function senseItem(sense: Sense, pickable: boolean, covered: Set<number> | "all"): HTMLElement {
+  const li = document.createElement("li");
+  // With a picker, the checkbox is the row's first flex child and the sense
+  // body is wrapped so it stays one column; without it, content sits directly
+  // on the <li> (the numbered list marker).
+  const body = pickable ? document.createElement("div") : li;
+  // A meaning you already have a card for is not on offer: saving it again
+  // would land on the card that exists, so the row says so instead of inviting
+  // a second click. `pickedPositions` reads only the boxes that are left, so an
+  // all-covered word simply has no picker to disagree with.
+  const saved = covered === "all" || covered.has(sense.position);
+  if (saved) li.classList.add("sb-sense-saved");
+  if (pickable && !saved) {
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = true;
+    box.className = "sb-sense-pick";
+    box.dataset.position = String(sense.position);
+    // Reference the gloss, not a sense number: the picker hides the list's
+    // ordinals, so a number here would have no visible counterpart.
+    box.setAttribute("aria-label", `Include "${senseText(sense)}" when saving`);
+    sensePicks.push(box);
+    li.append(box);
+  } else if (pickable) {
+    li.append(chip("sb-sense-saved-mark", "Saved"));
+  }
+  if (sense.dictionary) body.append(block("sb-source", sense.dictionary));
+  const labels = senseChips(sense);
+  if (labels) body.append(labels);
+  for (const row of sense.glosses) body.append(glossRow(row, sense.glosses.length > 1));
+  for (const note of sense.notes ?? []) body.append(block("sb-sense-note", note));
+  const xrefs = xrefRow(sense.xrefs);
+  if (xrefs) body.append(xrefs);
+  if (pickable) li.append(body);
+  return li;
+}
+
+// Chips rather than a run-on line of prose, and coloured by family, because
+// "Godan verb" and "Usually kana" are different kinds of claim: one says what the
+// word IS and the other how it is USED, and a single grey line made them read as
+// one list of adjectives about the word.
+// A chip the Legend can explain OPENS, in the card, offline: "Na-adjective" is
+// a term a beginner has to look up somewhere, and the somewhere used to be a
+// different site. The explanation is the website's own (see common/legend.ts),
+// and a code the book has nothing to say about stays a plain chip rather than a
+// button that disappoints.
+function senseChips(sense: Sense): HTMLElement | null {
+  const labels = [ ...sense.partsOfSpeech, ...sense.tags ];
+  if (!labels.length) return null;
+
+  const row = document.createElement("div");
+  row.className = "sb-sense-chips";
+  const panel = document.createElement("div");
+  panel.className = "sb-legend";
+  panel.hidden = true;
+
+  for (const label of labels) {
+    const term = legendTerm(label.code, label.category === "pos" ? "pos" : "usage", readerLanguages);
+    if (!term) {
+      const pill = chip(`sb-sense-chip sb-sense-chip-${label.category}`, label.label);
+      // The raw JMdict code, for a reader cross-referencing the dictionary itself.
+      if (label.code) pill.title = label.code;
+      row.append(pill);
+      continue;
+    }
+
+    const pill = document.createElement("button");
+    pill.type = "button";
+    pill.className = `sb-sense-chip sb-sense-chip-${label.category} sb-sense-chip-open`;
+    pill.textContent = label.label;
+    pill.title = `${label.code}: what this means`;
+    pill.setAttribute("aria-expanded", "false");
+    pill.addEventListener("click", () => {
+      // A second tap on the open chip closes it, and any other chip replaces
+      // what is in the panel: one explanation at a time, in one place, so the
+      // card never grows a stack of them the reader has to dismiss.
+      const reopening = pill.getAttribute("aria-expanded") === "true";
+      for (const other of row.querySelectorAll("[aria-expanded]")) other.setAttribute("aria-expanded", "false");
+      panel.hidden = reopening;
+      if (reopening) return;
+      pill.setAttribute("aria-expanded", "true");
+      panel.replaceChildren(...legendEntry(term));
+    });
+    row.append(pill);
+  }
+
+  const wrap = document.createElement("div");
+  wrap.append(row, panel);
+  return wrap;
+}
+
+// One Legend entry, as the book prints it: the term (with its Japanese name
+// beside it), what it means, and an example when the entry has one.
+function legendEntry(term: LegendTerm): Node[] {
+  const head = document.createElement("div");
+  head.className = "sb-legend-head";
+  head.append(chip("sb-legend-term", term.label));
+  if (term.jp) head.append(japanese("sb-legend-jp", term.jp));
+
+  const nodes: Node[] = [ head, block("sb-legend-body", term.body) ];
+  if (term.example) nodes.push(block("sb-legend-example", term.example));
+  return nodes;
+}
+
+// What this sense points at, and each target OPENS: a cross reference names a
+// word, and a word the reader cannot look up is a word they have to go and type
+// somewhere. Grouped by what the link means, because "related to" and "the
+// opposite of" are not the same information and a mixed row would say neither.
+//
+// Antonyms first when a sense has both. An opposite is the sharper fact: it
+// tells you what the word is by telling you what it is not, and there are far
+// fewer of them.
+function xrefRow(xrefs: Sense["xrefs"]): HTMLElement | null {
+  if (!xrefs?.length) return null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "sb-xrefs";
+  for (const [ kind, label ] of [ [ "antonym", "Opposite" ], [ "related", "See also" ] ] as const) {
+    const group = xrefs.filter((xref) => xref.kind === kind).slice(0, XREFS_SHOWN);
+    if (!group.length) continue;
+
+    const row = document.createElement("div");
+    row.className = "sb-xref-row";
+    row.append(chip("sb-xref-label", label));
+    for (const xref of group) {
+      const link = japanese("sb-xref", xref.text);
+      link.tabIndex = -1;
+      link.setAttribute("role", "link");
+      link.title = xref.reading ? `${xref.text} (${xref.reading})` : `Look up ${xref.text}`;
+      const open = () => nestedLookup(xref.text, link.getBoundingClientRect(), currentDepth);
+      link.addEventListener("click", open);
+      link.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
+      });
+      row.append(link);
+    }
+    rove(row.querySelectorAll<HTMLElement>(".sb-xref"));
+    wrap.append(row);
+  }
+  return wrap.children.length ? wrap : null;
+}
+
+// A sense with sixteen related words is a list nobody reads to the end, and the
+// word's own page is where a reader goes for the whole set.
+const XREFS_SHOWN = 6;
+
+// One meaning, on its own line, behind the two-letter tag for the language it
+// is in. The tag only appears when there is a second row to tell it apart from:
+// a reader with one language would otherwise be told EN on every line of every
+// card they ever open.
+function glossRow(row: GlossRow, tagged: boolean): HTMLElement {
+  const line = document.createElement("div");
+  line.className = "sb-gloss-row";
+  line.lang = row.lang === "spa" ? "es" : "en";
+  if (tagged) {
+    const tag = chip("sb-gloss-lang", row.tag);
+    tag.lang = "en";
+    line.append(tag);
+  }
+  line.append(row.text);
+  return line;
+}
+
+// A couple of example sentences with translations, cut into the same words the
+// site read the line with (`Example.tokens`, shipped in the pack).
+//
+// Two things that cut buys, and both are what a reader asks of an example. The
+// word being looked up is MARKED, so a line that says it twice, or says it in a
+// form the headword does not spell, still points at itself: without that the
+// example is a wall of Japanese with the answer hidden in it. And every other
+// word is CLICKABLE, because the sentence a word is explained with is exactly
+// where the next unknown word turns up, and sending the reader to select it by
+// hand is asking them to leave the card to read the card.
+//
+// A pack built before recipe 10 ships no tokens, and the line renders as the
+// plain string it always did.
+function examplesBlock(examples: Example[], def: Definition): Node | null {
   if (!examples.length) return null;
   const wrap = document.createElement("div");
   wrap.className = "sb-examples";
+  const names = wordSpellings(def);
   for (const ex of examples) {
     const fig = document.createElement("div");
     fig.className = "sb-example";
     const jp = document.createElement("div");
     jp.className = "sb-example-jp";
     jp.lang = "ja";
-    jp.textContent = ex.japanese;
+    if (ex.tokens?.length) jp.append(...ex.tokens.map((token) => exampleToken(token, names)));
+    else jp.textContent = ex.japanese;
+    // A sentence is ONE tab stop, and the arrows walk it from there. Twenty
+    // words in a line means twenty stops otherwise, and two examples put forty
+    // between the reader and the Save button: the same roving-tabindex shape the
+    // candidate row uses, and for the same reason.
+    rove(jp.querySelectorAll<HTMLElement>(".sb-example-token"));
     fig.append(jp);
     if (ex.translation) fig.append(block("sb-example-tr", ex.translation));
     wrap.append(fig);
   }
   return wrap;
+}
+
+// Every spelling that IS the word on this card, for marking it inside an
+// example. The headword and its reading are the word itself; `sourceForm` is the
+// surface the reader hovered to get here, which is the one an example is most
+// likely to repeat and the one the headword often cannot spell (帰った → 帰る).
+function wordSpellings(def: Definition): Set<string> {
+  return new Set([ def.headword, def.reading, def.sourceForm ].filter((text): text is string => !!text));
+}
+
+// One word of an example. A span rather than a button: a sentence of buttons
+// reads as a toolbar to a screen reader, and this is a line of Japanese whose
+// words happen to open. The lemma decides the MARK (食べました is 食べる, which no
+// comparison of surfaces could tell you) and the surface decides the LOOKUP,
+// so clicking a conjugated word shows it conjugated, inflection chain and all.
+function exampleToken(token: { surface: string; lemma?: string }, names: Set<string>): Node {
+  const marked = names.has(token.surface) || (!!token.lemma && names.has(token.lemma));
+  const span = document.createElement("span");
+  span.className = marked ? "sb-example-token sb-example-hit" : "sb-example-token";
+  span.textContent = token.surface;
+  // Punctuation and whitespace are tokens too, and neither is a word to look up.
+  if (!/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(token.surface)) {
+    span.className = "sb-example-gap";
+    return span;
+  }
+  span.tabIndex = -1; // `rove` promotes the first one: the line is one tab stop
+  span.setAttribute("role", "link");
+  span.title = `Look up ${token.surface}`;
+  const open = () => nestedLookup(token.surface, span.getBoundingClientRect(), currentDepth);
+  span.addEventListener("click", open);
+  span.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
+  });
+  return span;
+}
+
+// A row of things that is ONE tab stop, walked with the arrows: the first is
+// tabbable, the rest are reachable only from inside it, and focus moves the
+// stop along with it. Opening is still a deliberate Enter, so arrowing across a
+// sentence reads it rather than firing a lookup per word.
+function rove(items: Iterable<HTMLElement>): void {
+  const row = [ ...items ];
+  const first = row[0];
+  if (!first) return;
+
+  first.tabIndex = 0;
+  for (const item of row) {
+    item.addEventListener("keydown", (event) => {
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+      if (!step) return;
+      const here = row.indexOf(item);
+      const next = row[(here + step + row.length) % row.length];
+      if (!next) return;
+      event.preventDefault();
+      event.stopPropagation(); // the card scrolls on Arrow keys; this row is steering
+      item.tabIndex = -1;
+      next.tabIndex = 0;
+      next.focus();
+    });
+  }
 }
 
 // The clip is fetched by the background worker and returned as a data: URL:
@@ -1237,6 +1559,11 @@ const CSS = `
   --sb-accent-tint-strong: light-dark(#cfe7f6, oklch(32% 0.1 245));
   --sb-accent-border: light-dark(#7eb8d9, oklch(60% 0.1 245));
   --sb-source: light-dark(#0369a1, oklch(72% 0.15 245));
+  /* The two qualifier families, apart from the POS accent and from each other:
+     a field of study ("Computing") and a dialect ("Kansai-ben") say different
+     things about a sense than its part of speech does. */
+  --sb-field: light-dark(#2563eb, oklch(72% 0.14 260));
+  --sb-dialect: light-dark(#7c3aed, oklch(74% 0.14 300));
   --sb-common-bg: light-dark(#dcfce7, oklch(26% 0.09 155));
   --sb-common-fg: light-dark(#166534, oklch(83% 0.19 155));
   --sb-jlpt-bg: light-dark(#e2f1fa, oklch(26% 0.08 245));
@@ -1431,8 +1758,58 @@ const CSS = `
   text-decoration: none;
 }
 .sb-btn.sb-kanji-button:hover { background: var(--sb-accent-tint); border-color: var(--sb-accent-border); }
+/* On and kun as labelled rows. The kind sits in a fixed-width chip so the two
+   rows' readings line up under each other and the eye can run down one family. */
+.sb-kanji-readings { margin: 6px 0; }
+.sb-kanji-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; margin-top: 3px; }
+.sb-kanji-kind {
+  min-width: 2.2em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--sb-ink-muted);
+}
+.sb-kanji-reading { font-size: 13px; color: var(--sb-ink); }
+.sb-kanji-more { font-size: 11px; color: var(--sb-ink-faint); }
+.sb-kanji-meta { margin-top: 4px; font-size: 11px; color: var(--sb-ink-muted); }
+/* "Also written". The label reads as a caption rather than a chip: it names the
+   row, and boxing it would make it look like one of the spellings. */
+.sb-forms {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 8px;
+}
+.sb-forms-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--sb-ink-muted);
+}
+.sb-form { font-size: 14px; color: var(--sb-ink); }
+/* Rare spellings are the ones a reader cannot place, so they are shown: dimmed
+   is the dictionary's judgement of them, not a way of hiding them. */
+.sb-form-rare { color: var(--sb-ink-faint); }
 
 .sb-senses { margin: 0; padding-left: 18px; }
+/* The truncation, said out loud. A link rather than a button-looking control:
+   it reveals what is already on the card, it does not go anywhere. */
+.sb-more-senses {
+  display: block;
+  margin: 4px 0 0 -18px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sb-accent);
+  cursor: pointer;
+  text-underline-offset: 2px;
+}
+.sb-more-senses:hover { text-decoration: underline; }
 .sb-senses li { margin: 4px 0; }
 /* Sense picker: drop the list marker, lay checkbox + sense body side by side. */
 .sb-senses-pick { padding-left: 2px; list-style: none; }
@@ -1453,16 +1830,130 @@ const CSS = `
   font-weight: 600;
 }
 .sb-source { font-size: 11px; font-weight: 600; color: var(--sb-source); }
-.sb-pos {
-  display: block; font-size: 11px; font-weight: 600; color: var(--sb-ink-subtle);
+/* Chips rather than a run-on line of prose. JMdict's own labels repeat
+   themselves ("noun (common) (futsuumeishi)"), so the chip prints the short form
+   keyed off the code and keeps the code itself in its tooltip. Coloured by
+   category, so a usage qualifier never reads as a part of speech: the same split
+   shirabe.org makes between its POS and qualifier chips. */
+.sb-sense-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 3px; }
+.sb-sense-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, currentColor 26%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--sb-ink-faint);
 }
-.sb-tags { color: var(--sb-ink-faint); }
+.sb-sense-chip-pos { color: var(--sb-accent); }
+/* A chip that explains itself. It carries no extra ornament: the whole row is
+   already chips, and marking half of them differently would say "these are a
+   different kind of label", which is exactly what the colours already say and
+   this does not. The pointer and the hover tint are the affordance. */
+.sb-sense-chip-open {
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+.sb-sense-chip-open:hover { filter: brightness(1.08); }
+.sb-sense-chip-open[aria-expanded="true"] { background: color-mix(in srgb, currentColor 22%, transparent); }
+.sb-legend {
+  margin: 4px 0 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--sb-outline);
+  border-radius: 8px;
+  background: var(--sb-surface-muted);
+}
+.sb-legend-head { display: flex; align-items: baseline; gap: 6px; }
+.sb-legend-term { font-size: 12px; font-weight: 600; color: var(--sb-ink); }
+.sb-legend-jp { font-size: 11px; color: var(--sb-ink-muted); }
+.sb-legend-body { margin-top: 3px; font-size: 12px; color: var(--sb-ink-subtle); }
+.sb-legend-example { margin-top: 3px; font-size: 11px; color: var(--sb-ink-muted); }
+.sb-sense-chip-field { color: var(--sb-field); }
+.sb-sense-chip-dialect { color: var(--sb-dialect); }
+/* One meaning per line, behind the tag for the language it is in. The tag is a
+   quiet outline rather than a filled badge: it repeats on every row of every
+   sense, and a reader who wants one language has to be able to skip it without
+   reading it. */
+/* A usage note is an aside about the sense above it, and italic is how the
+   dictionary itself sets one: it must not read as another meaning. */
+.sb-sense-note {
+  margin-top: 2px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--sb-ink-muted);
+}
+/* Cross references: a label naming what the link means, then the words. Each
+   word is a lookup, so it is tinted like one; the row is one tab stop. */
+.sb-xrefs { margin-top: 3px; }
+.sb-xref-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; margin-top: 2px; }
+.sb-xref-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--sb-ink-muted);
+}
+.sb-xref {
+  border-radius: 3px;
+  font-size: 13px;
+  color: var(--sb-accent);
+  cursor: pointer;
+  text-underline-offset: 2px;
+}
+.sb-xref:hover { background: var(--sb-accent-tint); text-decoration: underline; }
+.sb-xref:focus-visible { outline: 2px solid var(--sb-accent-border); outline-offset: 1px; }
+.sb-gloss-row { display: block; }
+.sb-gloss-row + .sb-gloss-row { margin-top: 2px; }
+.sb-gloss-lang {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 1.55em;
+  margin-right: 6px;
+  padding: 1px 4px;
+  border: 1px solid var(--sb-outline-strong);
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.4;
+  color: var(--sb-ink-muted);
+  vertical-align: 1px;
+}
 
 .sb-examples { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--sb-divider); }
 .sb-example { margin: 6px 0; }
 .sb-example-jp { color: var(--sb-ink); }
 .sb-example-tr { font-size: 13px; color: var(--sb-ink-subtle); }
-/* Clickable sentence tokens: subtle until hovered; the searched word tinted. */
+/* Clickable sentence tokens: subtle until hovered; the searched word tinted.
+   Nothing is drawn around a word at rest, because a line with a box on every
+   word stops reading as a sentence. The underline appears under the pointer,
+   which is the only moment "this opens" is a useful thing to say. */
+.sb-example-token {
+  border-radius: 3px;
+  cursor: pointer;
+  text-underline-offset: 2px;
+}
+.sb-example-token:hover { background: var(--sb-accent-tint); text-decoration: underline; }
+.sb-example-token:focus-visible {
+  outline: 2px solid var(--sb-accent-border);
+  outline-offset: 1px;
+}
+/* The word this card is about. Tinted rather than boxed or bolded: the line has
+   to stay a line, and a reader scanning for "where is my word" finds a colour
+   before they find a weight. */
+.sb-example-hit {
+  background: var(--sb-accent-tint-strong);
+  color: var(--sb-accent);
+  font-weight: 600;
+}
+.sb-example-hit:hover { background: var(--sb-accent-tint-strong); }
+/* Punctuation and spacing: part of the line, never a lookup. */
+.sb-example-gap { cursor: default; }
 
 .sb-actions { flex: 0 0 auto; margin-top: 12px; }
 .sb-membership { margin-bottom: 6px; color: var(--sb-ink-muted); font-size: 11px; }

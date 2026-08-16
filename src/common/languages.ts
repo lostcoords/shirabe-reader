@@ -9,6 +9,11 @@ export type GlossLanguage = "eng" | "spa";
 
 export const GLOSS_LABELS: Record<GlossLanguage, string> = { eng: "English", spa: "Español" };
 
+// The tag that sits in front of a meaning when a word is glossed in more than
+// one language. Two letters, because it repeats on every row of every sense and
+// its whole job is to be skipped by the reader who only wants one of them.
+export const GLOSS_TAGS: Record<GlossLanguage, string> = { eng: "EN", spa: "ES" };
+
 // Locales::GLOSS_TO_DB, narrowed to what a pack can contain.
 const UI_TO_GLOSS: Record<string, GlossLanguage> = { en: "eng", es: "spa" };
 const GLOSS_TO_UI: Record<GlossLanguage, string> = { eng: "en", spa: "es" };

@@ -3,6 +3,8 @@
 // Offline packs store raw codes (v5r, vi, uk…); the API returns full entity
 // strings. Both paths resolve through here so the popup matches the site.
 
+import type { SenseChip } from "./types.js";
+
 // Fixed POS codes → short chip text. Verbs collapse by class via posLabel's
 // prefixes; everything else falls back to the full JMdict label (stripped) or
 // the raw code.
@@ -149,28 +151,33 @@ export function tagLabel(code: string, full?: string): string {
   return code;
 }
 
-/** Map a list of POS codes (offline pack) to display labels, de-duped in order. */
-export function posLabels(codes: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const code of codes) {
-    const label = posLabel(code);
-    if (!label || seen.has(label)) continue;
-    seen.add(label);
-    out.push(label);
-  }
-  return out;
+/** Map a list of POS codes (offline pack) to chips, de-duped by label in order.
+    De-duped by LABEL rather than by code, because JMdict splits finer than a
+    reader can tell apart: adv + adv-to both say "Adverb", and drawing that chip
+    twice says nothing the second time. */
+export function posChips(codes: readonly string[]): SenseChip[] {
+  return chips(codes, posLabel, "pos");
 }
 
-/** Map misc/field/dialect codes to display labels, de-duped in order. */
-export function tagLabels(codes: readonly string[]): string[] {
+/** Map a sense's misc/field/dialect codes to chips, each keeping the family it
+    came from: a field ("Computing") and a usage note ("Usually kana") are
+    different kinds of claim and are coloured apart. */
+export function tagChips(groups: { fields?: readonly string[]; misc?: readonly string[]; dialects?: readonly string[] }): SenseChip[] {
+  return [
+    ...chips(groups.fields ?? [], tagLabel, "field"),
+    ...chips(groups.misc ?? [], tagLabel, "misc"),
+    ...chips(groups.dialects ?? [], tagLabel, "dialect"),
+  ];
+}
+
+function chips(codes: readonly string[], label: (code: string) => string, category: SenseChip["category"]): SenseChip[] {
   const seen = new Set<string>();
-  const out: string[] = [];
+  const out: SenseChip[] = [];
   for (const code of codes) {
-    const label = tagLabel(code);
-    if (!label || seen.has(label)) continue;
-    seen.add(label);
-    out.push(label);
+    const text = label(code);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    out.push({ label: text, code, category });
   }
   return out;
 }

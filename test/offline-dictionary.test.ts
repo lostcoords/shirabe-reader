@@ -7,7 +7,7 @@ import { gzipSync } from "node:zlib";
 import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, lookupVariants, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
 
 const records = [
-  { type: "header", schemaVersion: 4, languages: ["eng", "spa"], source: "Shirabe open-core" },
+  { type: "header", schemaVersion: 5, languages: ["eng", "spa"], source: "Shirabe open-core" },
   {
     type: "term", id: "jmdict:1", dictionary: "jmdict", headword: "食べる",
     expressions: [{ text: "食べる", script: "mixed", common: true, tags: [] }],
@@ -207,7 +207,7 @@ const counts = {
 
 function manifest(revision: string, sha256 = checksum) {
   return {
-    schemaVersion: 4, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
+    schemaVersion: 5, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
     audio: { baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f", engineVersion: 1, salt: "test-salt", defaultVoice: "male", voices: { male: 1_628_969_216, female: 345_585_728 } },
     artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
     bytes: compressed.byteLength, sha256, counts, languages: ["eng", "spa"],
@@ -244,8 +244,8 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal(definition?.sourceForm, "食べました");
   assert.equal(definition?.entry, "jmdict:1",
     "a hit names the entry it came from, so a card saved off it links instead of landing an orphan");
-  assert.deepEqual(definition?.senses[0]?.glosses, ["comer"]);
-  assert.deepEqual(definition?.senses[0]?.partsOfSpeech, ["Ichidan verb", "Transitive verb"],
+  assert.deepEqual(definition?.senses[0]?.glosses, [{ lang: "spa", tag: "ES", text: "comer" }]);
+  assert.deepEqual(definition?.senses[0]?.partsOfSpeech.map((chip) => chip.label), ["Ichidan verb", "Transitive verb"],
     "offline POS codes resolve to the same short labels as the site");
   assert.deepEqual(definition?.pitch.map((pitch) => pitch.downstep), [2], "alternate-spelling pitch rows do not leak into the displayed headword");
   // The clip URL is no longer shipped per row (that was 40% of the pack): it is
@@ -277,7 +277,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   // the token surface must keep its original width.
   const fullWidth = await lookupOffline("Ｔシャツ", ["eng"], "https://shirabe.test");
   assert.equal(fullWidth?.headword, "Ｔシャツ");
-  assert.deepEqual(fullWidth?.senses[0]?.glosses, ["T-shirt"]);
+  assert.deepEqual(fullWidth?.senses[0]?.glosses, [{ lang: "eng", tag: "EN", text: "T-shirt" }]);
   assert.equal((await lookupOffline("Tシャツ", ["eng"], "https://shirabe.test"))?.headword, "Ｔシャツ");
   const shirtTokens = await parseOffline("Ｔシャツを買った。", ["eng"], "https://shirabe.test");
   assert.ok(shirtTokens.some((token) => token.lemma === "Ｔシャツ" && token.surface === "Ｔシャツ"));
@@ -294,8 +294,9 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     lemma: "一石二鳥", entry: "jmdict:12", pos: "exp", content: true, state: "none", frequency: 80_000,
   });
   const expressionLookup = await lookupOffline("一石二鳥", ["eng"], "https://shirabe.test");
-  assert.deepEqual(expressionLookup?.senses[0]?.partsOfSpeech, ["Expression"]);
-  assert.deepEqual(expressionLookup?.senses[0]?.tags, ["Yojijukugo"]);
+  assert.deepEqual(expressionLookup?.senses[0]?.partsOfSpeech.map((chip) => chip.label), ["Expression"]);
+  assert.deepEqual(expressionLookup?.senses[0]?.tags, [{ label: "Yojijukugo", code: "yoji", category: "misc" }],
+    "a qualifier keeps its family, which is what colours it apart from the part of speech");
   assert.equal((await lookupOffline("明日天気", ["eng"], "https://shirabe.test"))?.headword, "明日天気",
     "an explicit lookup must preserve an obscure exact dictionary entry");
 
@@ -336,22 +337,22 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     "uk on a non-primary sense does not flip the headword to kana");
 
   // Language ORDER is the contract: the reader's stack decides which meaning
-  // block renders first, exactly as the web walks Locales.source_stack_for in
-  // WordCard#build_meanings. One block per language, preferred first.
+  // reads first, exactly as the web walks Locales.source_stack_for in
+  // WordCard#build_meanings. The senses appear ONCE, each carrying its meaning
+  // in every language asked for, preferred first: this used to be the whole
+  // list of senses per language, so an eight-sense word rendered sixteen.
   const spanishFirst = await lookupOffline("食べる", ["spa", "eng"], "https://shirabe.test");
-  assert.deepEqual(spanishFirst?.senses.map((sense) => [sense.source, sense.glosses]), [
-    ["Español · JMdict", ["comer"]],
-    ["English · JMdict", ["to eat"]],
+  assert.deepEqual(spanishFirst?.senses.map((sense) => sense.glosses), [
+    [{ lang: "spa", tag: "ES", text: "comer" }, { lang: "eng", tag: "EN", text: "to eat" }],
   ]);
   const englishFirst = await lookupOffline("食べる", ["eng", "spa"], "https://shirabe.test");
-  assert.deepEqual(englishFirst?.senses.map((sense) => [sense.source, sense.glosses]), [
-    ["English · JMdict", ["to eat"]],
-    ["Español · JMdict", ["comer"]],
+  assert.deepEqual(englishFirst?.senses.map((sense) => sense.glosses), [
+    [{ lang: "eng", tag: "EN", text: "to eat" }, { lang: "spa", tag: "ES", text: "comer" }],
   ]);
   // A single language does not mix in the other: the server's default is one
   // language, and English is only a per-sense fallback when a gloss is missing.
-  assert.deepEqual((await lookupOffline("食べる", ["spa"], "https://shirabe.test"))?.senses.map((sense) => sense.source), ["Español · JMdict"]);
-  assert.deepEqual((await lookupOffline("食べる", ["eng"], "https://shirabe.test"))?.senses.map((sense) => sense.source), ["English · JMdict"]);
+  assert.deepEqual((await lookupOffline("食べる", ["spa"], "https://shirabe.test"))?.senses.flatMap((sense) => sense.glosses.map((row) => row.lang)), ["spa"]);
+  assert.deepEqual((await lookupOffline("食べる", ["eng"], "https://shirabe.test"))?.senses.flatMap((sense) => sense.glosses.map((row) => row.lang)), ["eng"]);
 
   // Words and kanji are separate corpora, as on the web: a word search answers
   // with the word 猫/ねこ, and never with a kanji: 亜 has a KANJIDIC entry but no
@@ -359,7 +360,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   const cat = await lookupOffline("猫", ["eng"], "https://shirabe.test");
   assert.equal(cat?.headword, "猫");
   assert.equal(cat?.reading, "ねこ", "a single kanji that is also a word must answer with the word");
-  assert.deepEqual(cat?.senses[0]?.glosses, ["cat"]);
+  assert.deepEqual(cat?.senses[0]?.glosses, [{ lang: "eng", tag: "EN", text: "cat" }]);
   assert.equal(await lookupOffline("亜", ["eng"], "https://shirabe.test"), null, "word search must never answer with a kanji entry");
 
   // The kanji breakdown is the explicit path, and KANJIDIC lists pinyin/korean/
@@ -367,7 +368,13 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   const sub = await lookupKanjiOffline("亜", ["eng"], "https://shirabe.test");
   assert.equal(sub?.headword, "亜");
   assert.equal(sub?.reading, "ア", "kanji readings must be Japanese, never pinyin/korean/vietnamese");
-  assert.deepEqual(sub?.senses[0]?.glosses, ["sub-"]);
+  assert.deepEqual(sub?.senses[0]?.glosses, [{ lang: "eng", tag: "EN", text: "sub-" }]);
+  // On and kun stay APART on a kanji card: which family a reading belongs to is
+  // most of what a learner is asking it. The other families KANJIDIC ships
+  // (pinyin, korean, vietnamese) are not Japanese and never appear.
+  assert.deepEqual(sub?.kanji, { on: ["ア"], kun: ["つ.ぐ"], strokes: 7 });
+  assert.deepEqual((await lookupKanjiOffline("猫", ["eng"], "https://shirabe.test"))?.kanji,
+    { on: ["ビョウ"], kun: ["ねこ"], strokes: 11 });
   assert.equal((await lookupKanjiOffline("猫", ["eng"], "https://shirabe.test"))?.reading, "ビョウ");
   assert.equal(await lookupKanjiOffline("食べる", ["eng"], "https://shirabe.test"), null, "the kanji path takes a single character");
 
@@ -562,8 +569,8 @@ test("a narrow spelling reaches the wide one the dictionary files it under", () 
 
 test("a parsed token's part of speech is the JMdict code, not the label the popup prints", () => {
   const source = readFileSync("src/common/offline-dictionary.ts", "utf8");
-  // A definition is built for display, so its `partsOfSpeech` are already run
-  // through posLabels: "Godan verb", which matches none of the code selectors
+  // A definition is built for display, so its `partsOfSpeech` are already
+  // chips reading "Godan verb", which matches none of the code selectors
   // in content.css and colours nothing. Everything downstream (underline hues,
   // the i+1 function-word test, counters) matches on codes.
   assert.match(source, /posCodes: sense\.partsOfSpeech/);

@@ -78,7 +78,7 @@ function boot(): void {
     document.documentElement.dataset.sbPosColoring = config.posColoring;
     setMetricsOptions({ includesLearning: config.iPlusOneIncludesLearning, frequencyMax: config.iPlusOneFrequencyMax });
     setSentenceAudioEnabled(config.mineSentenceAudio);
-    setWriteState({ canWrite: canWriteSrs(config), connected: isConnected(config) });
+    setWriteState({ canWrite: canWriteSrs(config), connected: isConnected(config), languages: config.languages });
 
     const resolution = resolveHostMode(location.href, {
       disabledHosts: config.disabledHosts,

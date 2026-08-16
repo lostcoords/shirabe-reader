@@ -29,7 +29,7 @@ function term(id: string, headword: string, kanji: string | null, kana: string, 
   });
 }
 
-const HEADER = JSON.stringify({ type: "header", schemaVersion: 4, languages: [ "eng", "spa" ], source: "Shirabe candidates" });
+const HEADER = JSON.stringify({ type: "header", schemaVersion: 5, languages: [ "eng", "spa" ], source: "Shirabe candidates" });
 
 // The revision has to differ per pack: the installer treats a repeated one as
 // "already have this" and keeps whatever is installed, so two tests sharing a
@@ -161,7 +161,7 @@ test("a picked word is fetched by its handle, not looked up again", async () => 
 
   assert.equal(picked?.entry, "jmdict:1247250");
   assert.equal(picked?.headword, "君");
-  assert.deepEqual(picked?.senses.map((sense) => sense.glosses).flat(), [ "you" ],
+  assert.deepEqual(picked?.senses.flatMap((sense) => sense.glosses.map((row) => row.text)), [ "you" ],
     "the definition comes back whole, so the popup renders a pick like any other word");
 });
 

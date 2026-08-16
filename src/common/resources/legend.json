@@ -1,0 +1,868 @@
+{
+  "codes": {
+    "pos": {
+      "adj-f": "adjective",
+      "adj-i": "i-adjective",
+      "adj-ix": "i-adjective",
+      "adj-ku": "adjective",
+      "adj-na": "na-adjective",
+      "adj-nari": "adjective",
+      "adj-no": "no-adjective",
+      "adj-pn": "prenominal-adjective",
+      "adj-shiku": "adjective",
+      "adj-t": "taru-adjective",
+      "adv": "adverb",
+      "adv-to": "to-adverb",
+      "aux": "auxiliary",
+      "aux-adj": "auxiliary",
+      "aux-v": "auxiliary",
+      "conj": "conjunction",
+      "cop": "copula",
+      "ctr": "counter",
+      "exp": "expression",
+      "int": "interjection",
+      "n": "noun",
+      "n-pref": "noun-prefix",
+      "n-suf": "noun-suffix",
+      "num": "counter",
+      "pn": "pronoun",
+      "pref": "prefix",
+      "prt": "particle",
+      "suf": "suffix",
+      "v-unspec": "verb",
+      "v1": "ichidan-verb",
+      "v1-s": "ichidan-verb",
+      "v2a-s": "verb",
+      "v2b-k": "verb",
+      "v2d-s": "verb",
+      "v2g-k": "verb",
+      "v2g-s": "verb",
+      "v2h-k": "verb",
+      "v2h-s": "verb",
+      "v2k-k": "verb",
+      "v2k-s": "verb",
+      "v2m-s": "verb",
+      "v2n-s": "verb",
+      "v2r-k": "verb",
+      "v2r-s": "verb",
+      "v2s-s": "verb",
+      "v2t-k": "verb",
+      "v2t-s": "verb",
+      "v2w-s": "verb",
+      "v2y-k": "verb",
+      "v2y-s": "verb",
+      "v2z-s": "verb",
+      "v4b": "verb",
+      "v4g": "verb",
+      "v4h": "verb",
+      "v4k": "verb",
+      "v4m": "verb",
+      "v4r": "verb",
+      "v4s": "verb",
+      "v4t": "verb",
+      "v5aru": "godan-verb",
+      "v5b": "godan-verb",
+      "v5g": "godan-verb",
+      "v5k": "godan-verb",
+      "v5k-s": "godan-verb",
+      "v5m": "godan-verb",
+      "v5n": "godan-verb",
+      "v5r": "godan-verb",
+      "v5r-i": "godan-verb",
+      "v5s": "godan-verb",
+      "v5t": "godan-verb",
+      "v5u": "godan-verb",
+      "v5u-s": "godan-verb",
+      "vi": "intransitive-verb",
+      "vk": "verb",
+      "vn": "verb",
+      "vr": "verb",
+      "vs": "suru-verb",
+      "vs-c": "suru-verb",
+      "vs-i": "suru-verb",
+      "vs-s": "suru-verb",
+      "vt": "transitive-verb",
+      "vz": "verb"
+    },
+    "usage": {
+      "abbr": "abbreviation",
+      "arch": "archaic",
+      "char": "name-entity",
+      "chn": "childish",
+      "col": "colloquial",
+      "company": "name-entity",
+      "creat": "name-entity",
+      "dated": "dated",
+      "dei": "name-entity",
+      "derog": "derogatory",
+      "doc": "name-entity",
+      "euph": "euphemistic",
+      "ev": "name-entity",
+      "fam": "familiar",
+      "fem": "feminine",
+      "fict": "name-entity",
+      "form": "formal",
+      "given": "name-entity",
+      "group": "name-entity",
+      "hist": "historical",
+      "hon": "honorific",
+      "hum": "humble",
+      "id": "idiomatic",
+      "joc": "jocular",
+      "leg": "name-entity",
+      "m-sl": "manga-slang",
+      "male": "masculine",
+      "myth": "name-entity",
+      "net-sl": "internet-slang",
+      "obj": "name-entity",
+      "obs": "obsolete",
+      "on-mim": "onomatopoeic",
+      "organization": "name-entity",
+      "person": "name-entity",
+      "place": "name-entity",
+      "poet": "poetic",
+      "pol": "polite",
+      "product": "name-entity",
+      "proverb": "proverb",
+      "quote": "name-entity",
+      "rare": "rare",
+      "relig": "name-entity",
+      "sens": "sensitive",
+      "serv": "name-entity",
+      "ship": "name-entity",
+      "sl": "slang",
+      "surname": "name-entity",
+      "uk": "kana-alone",
+      "unclass": "name-entity",
+      "vulg": "vulgar",
+      "work": "name-entity",
+      "yoji": "yojijukugo"
+    }
+  },
+  "terms": {
+    "abbreviation": {
+      "en": {
+        "label": "Abbreviation",
+        "jp": "略語",
+        "body": "A shortened form of a longer word or phrase."
+      },
+      "es": {
+        "label": "Abreviatura",
+        "jp": "略語",
+        "body": "Forma abreviada de una palabra o expresión más larga."
+      }
+    },
+    "adjective": {
+      "en": {
+        "label": "Adjective",
+        "jp": "形容詞",
+        "body": "A word that describes a noun. Japanese has two main kinds (い-adjectives and な-adjectives) that conjugate differently, plus a few rarer types that simply attach to a noun.",
+        "example": "新しい (あたらしい). New"
+      },
+      "es": {
+        "label": "Adjetivo",
+        "jp": "形容詞",
+        "body": "Una palabra que describe a un sustantivo. El japonés tiene dos tipos principales (adjetivos en い y adjetivos en な) que se conjugan distinto, además de algunos tipos poco comunes que simplemente se unen al sustantivo.",
+        "example": "新しい (あたらしい). Nuevo"
+      }
+    },
+    "adverb": {
+      "en": {
+        "label": "Adverb",
+        "jp": "副詞",
+        "body": "A word that modifies a verb, an adjective or another adverb. Describing how, when or to what degree something happens.",
+        "example": "ゆっくり. Slowly"
+      },
+      "es": {
+        "label": "Adverbio",
+        "jp": "副詞",
+        "body": "Una palabra que modifica a un verbo, un adjetivo u otro adverbio, describiendo cómo, cuándo o en qué medida ocurre algo.",
+        "example": "ゆっくり. Despacio"
+      }
+    },
+    "archaic": {
+      "en": {
+        "label": "Archaic",
+        "body": "Old language no longer in everyday use, though still met in classical texts and set phrases."
+      },
+      "es": {
+        "label": "Arcaísmo",
+        "body": "Lenguaje antiguo que ya no se usa a diario, aunque aparece en textos clásicos y frases hechas."
+      }
+    },
+    "auxiliary": {
+      "en": {
+        "label": "Auxiliary",
+        "jp": "助動詞",
+        "body": "A helper word that attaches to a verb or adjective to add meaning. Tense, negation, politeness, desire and so on.",
+        "example": "〜たい. Want to (do)"
+      },
+      "es": {
+        "label": "Auxiliar",
+        "jp": "助動詞",
+        "body": "Una palabra auxiliar que se une a un verbo o adjetivo para añadir significado: tiempo, negación, cortesía, deseo, etc.",
+        "example": "〜たい. Querer (hacer)"
+      }
+    },
+    "childish": {
+      "en": {
+        "label": "Children's language",
+        "jp": "児童語",
+        "body": "Baby-talk. Words used by, or when speaking to, young children."
+      },
+      "es": {
+        "label": "Lenguaje infantil",
+        "jp": "児童語",
+        "body": "Habla infantil. Palabras propias de los niños o dirigidas a ellos."
+      }
+    },
+    "colloquial": {
+      "en": {
+        "label": "Colloquial",
+        "jp": "口語",
+        "body": "Informal language of everyday conversation, rather than writing or formal speech."
+      },
+      "es": {
+        "label": "Coloquial",
+        "jp": "口語",
+        "body": "Lenguaje informal propio de la conversación cotidiana, no del texto escrito ni del habla formal."
+      }
+    },
+    "conjunction": {
+      "en": {
+        "label": "Conjunction",
+        "jp": "接続詞",
+        "body": "A word that links clauses or sentences, like 'and', 'but' or 'so'.",
+        "example": "でも. But, however"
+      },
+      "es": {
+        "label": "Conjunción",
+        "jp": "接続詞",
+        "body": "Una palabra que enlaza cláusulas u oraciones, como 'y', 'pero' o 'así que'.",
+        "example": "でも. Pero, sin embargo"
+      }
+    },
+    "copula": {
+      "en": {
+        "label": "Copula",
+        "jp": "繋辞",
+        "body": "The word that links a subject to what it is: だ, its polite form です, and the forms they inflect into.",
+        "example": "だ. To be → 学生だ (is a student)"
+      },
+      "es": {
+        "label": "Cópula",
+        "jp": "繋辞",
+        "body": "La palabra que une el sujeto con lo que es: だ, su forma cortés です y las formas en las que se conjugan.",
+        "example": "だ. Ser → 学生だ (es estudiante)"
+      }
+    },
+    "counter": {
+      "en": {
+        "label": "Counter & numbers",
+        "jp": "助数詞",
+        "body": "Japanese counts things with a number plus a counter word that matches the kind of object. Flat things, long things, animals and so on. Plain number words live here too.",
+        "example": "三匹 (さんびき). Three (small animals)"
+      },
+      "es": {
+        "label": "Contador y números",
+        "jp": "助数詞",
+        "body": "El japonés cuenta las cosas con un número más una palabra contadora que coincide con el tipo de objeto: cosas planas, largas, animales, etc. Aquí también viven los números a secas.",
+        "example": "三匹 (さんびき). Tres (animales pequeños)"
+      }
+    },
+    "dated": {
+      "en": {
+        "label": "Dated",
+        "jp": "古風",
+        "body": "An older term that still turns up, but feels out of date in modern speech. More recent than archaic, less dead than obsolete."
+      },
+      "es": {
+        "label": "Anticuado",
+        "jp": "古風",
+        "body": "Un término antiguo que aún aparece, pero suena anticuado en el habla moderna. Más reciente que un arcaísmo, menos muerto que un obsoleto."
+      }
+    },
+    "derogatory": {
+      "en": {
+        "label": "Derogatory",
+        "body": "Expresses contempt or a low opinion of someone or something."
+      },
+      "es": {
+        "label": "Despectivo",
+        "body": "Expresa desprecio o una opinión negativa de alguien o algo."
+      }
+    },
+    "euphemistic": {
+      "en": {
+        "label": "Euphemistic",
+        "jp": "婉曲",
+        "body": "A mild or indirect word standing in for one that is harsh, blunt or taboo."
+      },
+      "es": {
+        "label": "Eufemístico",
+        "jp": "婉曲",
+        "body": "Palabra suave o indirecta que sustituye a otra brusca, cruda o tabú."
+      }
+    },
+    "expression": {
+      "en": {
+        "label": "Expression",
+        "jp": "表現",
+        "body": "A fixed phrase, idiom or set expression whose meaning is best learned as a whole rather than word by word.",
+        "example": "お早う (おはよう). Good morning"
+      },
+      "es": {
+        "label": "Expresión",
+        "jp": "表現",
+        "body": "Una frase hecha, modismo o expresión fija cuyo significado se aprende mejor como un todo que palabra por palabra.",
+        "example": "お早う (おはよう). Buenos días"
+      }
+    },
+    "familiar": {
+      "en": {
+        "label": "Familiar",
+        "body": "Casual language used with people you're close to; it can sound rude to strangers."
+      },
+      "es": {
+        "label": "Familiar",
+        "body": "Lenguaje cercano que se usa con personas de confianza; puede sonar grosero con desconocidos."
+      }
+    },
+    "feminine": {
+      "en": {
+        "label": "Feminine",
+        "jp": "女性語",
+        "body": "Language typically used by women."
+      },
+      "es": {
+        "label": "Femenino",
+        "jp": "女性語",
+        "body": "Lenguaje usado normalmente por mujeres."
+      }
+    },
+    "formal": {
+      "en": {
+        "label": "Formal",
+        "jp": "文語・改まった言い方",
+        "body": "Formal or literary language. Suited to writing, speeches and careful speech rather than casual conversation."
+      },
+      "es": {
+        "label": "Formal",
+        "jp": "文語・改まった言い方",
+        "body": "Lenguaje formal o literario. Propio de la escritura, los discursos y el habla cuidadosa, no de la conversación casual."
+      }
+    },
+    "godan-verb": {
+      "en": {
+        "label": "Godan verb",
+        "jp": "五段動詞",
+        "body": "A 'group 1' verb whose final sound shifts across the five vowel rows as it conjugates. The largest and most varied verb group.",
+        "example": "飲む (のむ). To drink"
+      },
+      "es": {
+        "label": "Verbo godan",
+        "jp": "五段動詞",
+        "body": "Un verbo del 'grupo 1' cuyo sonido final cambia entre las cinco filas vocálicas al conjugarse. El grupo de verbos más grande y variado.",
+        "example": "飲む (のむ). Beber"
+      }
+    },
+    "historical": {
+      "en": {
+        "label": "Historical",
+        "jp": "歴史用語",
+        "body": "A term tied to a past era, institution or practice. Still useful for reading history, but not everyday modern vocabulary."
+      },
+      "es": {
+        "label": "Histórico",
+        "jp": "歴史用語",
+        "body": "Un término ligado a una época, institución o práctica del pasado. Útil para leer historia, pero no es vocabulario cotidiano moderno."
+      }
+    },
+    "honorific": {
+      "en": {
+        "label": "Honorific",
+        "jp": "尊敬語",
+        "body": "Respectful language (sonkeigo) that raises the person you're speaking about."
+      },
+      "es": {
+        "label": "Honorífico",
+        "jp": "尊敬語",
+        "body": "Lenguaje respetuoso (sonkeigo) que ensalza a la persona de la que se habla."
+      }
+    },
+    "humble": {
+      "en": {
+        "label": "Humble",
+        "jp": "謙譲語",
+        "body": "Humble language (kenjougo) that lowers yourself to show respect to the listener."
+      },
+      "es": {
+        "label": "Humilde",
+        "jp": "謙譲語",
+        "body": "Lenguaje humilde (kenjougo) que rebaja al hablante para mostrar respeto al oyente."
+      }
+    },
+    "i-adjective": {
+      "en": {
+        "label": "I-adjective",
+        "jp": "い形容詞",
+        "body": "An adjective ending in い that conjugates on its own (including for past tense and negation) without needing です to do the work. Also called keiyoushi.",
+        "example": "高い (たかい). Tall, expensive"
+      },
+      "es": {
+        "label": "Adjetivo en i",
+        "jp": "い形容詞",
+        "body": "Un adjetivo terminado en い que se conjuga por sí mismo (incluso en pasado y negación) sin necesitar です. También llamado keiyoushi.",
+        "example": "高い (たかい). Alto, caro"
+      }
+    },
+    "ichidan-verb": {
+      "en": {
+        "label": "Ichidan verb",
+        "jp": "一段動詞",
+        "body": "A 'group 2' verb with a stable stem: drop the final る and add endings directly. Most verbs ending in -iru or -eru are ichidan, which makes them the easy ones to conjugate.",
+        "example": "見る (みる). To see"
+      },
+      "es": {
+        "label": "Verbo ichidan",
+        "jp": "一段動詞",
+        "body": "Un verbo del 'grupo 2' con raíz estable: se quita la る final y se añaden las terminaciones directamente. La mayoría de los verbos terminados en -iru o -eru son ichidan, los más fáciles de conjugar.",
+        "example": "見る (みる). Ver"
+      }
+    },
+    "idiomatic": {
+      "en": {
+        "label": "Idiomatic",
+        "jp": "慣用句",
+        "body": "A set phrase whose meaning isn't obvious from the individual words."
+      },
+      "es": {
+        "label": "Idiomático",
+        "jp": "慣用句",
+        "body": "Frase hecha cuyo significado no se deduce de las palabras que la forman."
+      }
+    },
+    "interjection": {
+      "en": {
+        "label": "Interjection",
+        "jp": "感動詞",
+        "body": "An exclamation or filler that expresses emotion or reaction, standing apart from the sentence's grammar.",
+        "example": "ああ. Ah, oh"
+      },
+      "es": {
+        "label": "Interjección",
+        "jp": "感動詞",
+        "body": "Una exclamación o muletilla que expresa emoción o reacción, al margen de la gramática de la oración.",
+        "example": "ああ. Ah, oh"
+      }
+    },
+    "internet-slang": {
+      "en": {
+        "label": "Internet slang",
+        "jp": "ネットスラング",
+        "body": "Slang that grew online (chat, forums, social media) and may still feel informal or niche off the internet."
+      },
+      "es": {
+        "label": "Jerga de internet",
+        "jp": "ネットスラング",
+        "body": "Jerga nacida en internet (chats, foros, redes sociales) que fuera de la red puede sonar informal o de nicho."
+      }
+    },
+    "intransitive-verb": {
+      "en": {
+        "label": "Intransitive verb",
+        "jp": "自動詞",
+        "body": "A verb that describes something happening on its own, with no direct object. Its subject is marked with が.",
+        "example": "開く (あく). (something) opens"
+      },
+      "es": {
+        "label": "Verbo intransitivo",
+        "jp": "自動詞",
+        "body": "Un verbo que describe algo que ocurre por sí solo, sin objeto directo. Su sujeto se marca con が.",
+        "example": "開く (あく). (algo) se abre"
+      }
+    },
+    "jocular": {
+      "en": {
+        "label": "Jocular",
+        "body": "Humorous or playful language, meant as a joke."
+      },
+      "es": {
+        "label": "Jocoso",
+        "body": "Lenguaje humorístico o desenfadado, dicho en broma."
+      }
+    },
+    "kana-alone": {
+      "en": {
+        "label": "Usually kana",
+        "jp": "仮名書き",
+        "body": "Normally written in kana even though a kanji spelling exists. The kanji is rare in everyday text."
+      },
+      "es": {
+        "label": "Normalmente en kana",
+        "jp": "仮名書き",
+        "body": "Se escribe normalmente en kana aunque exista una grafía en kanji, poco frecuente en el uso diario."
+      }
+    },
+    "manga-slang": {
+      "en": {
+        "label": "Manga slang",
+        "jp": "漫画スラング",
+        "body": "Informal wording typical of manga and anime dialogue. Playful, exaggerated or subculture-flavoured."
+      },
+      "es": {
+        "label": "Jerga del manga",
+        "jp": "漫画スラング",
+        "body": "Lenguaje informal típico del diálogo de manga y anime. Juguetón, exagerado o de subcultura."
+      }
+    },
+    "masculine": {
+      "en": {
+        "label": "Masculine",
+        "jp": "男性語",
+        "body": "Language typically used by men."
+      },
+      "es": {
+        "label": "Masculino",
+        "jp": "男性語",
+        "body": "Lenguaje usado normalmente por hombres."
+      }
+    },
+    "na-adjective": {
+      "en": {
+        "label": "Na-adjective",
+        "jp": "な形容詞",
+        "body": "An adjective that takes な to attach to a noun and otherwise behaves much like a noun. Also called keiyodoshi or adjectival noun.",
+        "example": "静か (しずか). Quiet"
+      },
+      "es": {
+        "label": "Adjetivo en na",
+        "jp": "な形容詞",
+        "body": "Un adjetivo que toma な para unirse a un sustantivo y, por lo demás, se comporta como un sustantivo. También llamado keiyodoshi o sustantivo adjetival.",
+        "example": "静か (しずか). Tranquilo"
+      }
+    },
+    "name-entity": {
+      "en": {
+        "label": "Name / entity",
+        "jp": "固有名詞",
+        "body": "A proper name or named entity rather than a common word: a person, place, company, work of art, product, character, and similar. The chip names the subtype (company, place, work…); treat it as a label for that entity, not everyday vocabulary to study as a word."
+      },
+      "es": {
+        "label": "Nombre / entidad",
+        "jp": "固有名詞",
+        "body": "Un nombre propio o entidad con nombre, no una palabra común: persona, lugar, empresa, obra, producto, personaje y similares. La etiqueta nombra el subtipo (empresa, topónimo, obra…); trátalo como la etiqueta de esa entidad, no como vocabulario cotidiano que estudiar como palabra."
+      }
+    },
+    "no-adjective": {
+      "en": {
+        "label": "No-adjective",
+        "jp": "の形容詞",
+        "body": "A noun that describes another noun by taking の, the way a な-adjective takes な. Plenty of words are both.",
+        "example": "普通 (ふつう). Ordinary → 普通の日 (an ordinary day)"
+      },
+      "es": {
+        "label": "Adjetivo en no",
+        "jp": "の形容詞",
+        "body": "Un sustantivo que describe a otro sustantivo tomando の, igual que uno en な toma な. Muchas palabras son las dos cosas.",
+        "example": "普通 (ふつう). Normal → 普通の日 (un día normal)"
+      }
+    },
+    "noun": {
+      "en": {
+        "label": "Noun",
+        "jp": "名詞",
+        "body": "A word that names a person, place, thing or idea. Japanese nouns don't change for number or gender, and there are no articles like 'a' or 'the'.",
+        "example": "本 (ほん). Book"
+      },
+      "es": {
+        "label": "Sustantivo",
+        "jp": "名詞",
+        "body": "Una palabra que nombra a una persona, lugar, cosa o idea. Los sustantivos japoneses no cambian por número ni género, y no existen artículos como 'un' o 'el'.",
+        "example": "本 (ほん). Libro"
+      }
+    },
+    "noun-prefix": {
+      "en": {
+        "label": "Noun (prefix)",
+        "jp": "接頭語的名詞",
+        "body": "A noun that also attaches to the front of another word to build a new one, keeping its own meaning.",
+        "example": "全 (ぜん). Whole → 全世界 (the whole world)"
+      },
+      "es": {
+        "label": "Sustantivo (prefijo)",
+        "jp": "接頭語的名詞",
+        "body": "Un sustantivo que además se pega delante de otra palabra para formar una nueva, sin perder su significado.",
+        "example": "全 (ぜん). Entero → 全世界 (el mundo entero)"
+      }
+    },
+    "noun-suffix": {
+      "en": {
+        "label": "Noun (suffix)",
+        "jp": "接尾語的名詞",
+        "body": "A noun that also attaches to the end of another word to build a new one.",
+        "example": "中 (ちゅう). During → 授業中 (during class)"
+      },
+      "es": {
+        "label": "Sustantivo (sufijo)",
+        "jp": "接尾語的名詞",
+        "body": "Un sustantivo que además se pega al final de otra palabra para formar una nueva.",
+        "example": "中 (ちゅう). Durante → 授業中 (durante la clase)"
+      }
+    },
+    "obsolete": {
+      "en": {
+        "label": "Obsolete",
+        "body": "A word or sense that has fallen out of use entirely."
+      },
+      "es": {
+        "label": "Obsoleto",
+        "body": "Palabra o acepción que ha caído completamente en desuso."
+      }
+    },
+    "onomatopoeic": {
+      "en": {
+        "label": "Onomatopoeic",
+        "jp": "擬音・擬態語",
+        "body": "A sound-symbolic word. Mimicking a sound (giongo) or evoking a state or feeling (gitaigo)."
+      },
+      "es": {
+        "label": "Onomatopéyico",
+        "jp": "擬音・擬態語",
+        "body": "Palabra sonora que imita un sonido (giongo) o evoca un estado o sensación (gitaigo)."
+      }
+    },
+    "particle": {
+      "en": {
+        "label": "Particle",
+        "jp": "助詞",
+        "body": "A short grammatical marker that shows a word's role in the sentence. Subject, object, topic, direction and so on. Particles are the glue of Japanese grammar.",
+        "example": "を. Marks the direct object"
+      },
+      "es": {
+        "label": "Partícula",
+        "jp": "助詞",
+        "body": "Un breve marcador gramatical que indica el papel de una palabra en la oración: sujeto, objeto, tema, dirección, etc. Las partículas son el pegamento de la gramática japonesa.",
+        "example": "を. Marca el objeto directo"
+      }
+    },
+    "poetic": {
+      "en": {
+        "label": "Poetic",
+        "jp": "詩的表現",
+        "body": "Language of poetry and literary style. Elevated, figurative or archaic-sounding wording you meet more in verse and prose than in speech."
+      },
+      "es": {
+        "label": "Poético",
+        "jp": "詩的表現",
+        "body": "Lenguaje de la poesía y el estilo literario. Formulaciones elevadas, figuradas o de tono arcaico que se encuentran más en verso y prosa que en el habla."
+      }
+    },
+    "polite": {
+      "en": {
+        "label": "Polite",
+        "jp": "丁寧語",
+        "body": "Polite language (teineigo), such as the です／ます style, used to be courteous to the listener."
+      },
+      "es": {
+        "label": "Cortés",
+        "jp": "丁寧語",
+        "body": "Lenguaje cortés (teineigo), como el estilo です／ます, para hablar con educación al oyente."
+      }
+    },
+    "prefix": {
+      "en": {
+        "label": "Prefix",
+        "jp": "接頭辞",
+        "body": "An element attached to the front of a word to change its meaning, like お for politeness or 不 for negation.",
+        "example": "お茶 (おちゃ). (honorific) tea"
+      },
+      "es": {
+        "label": "Prefijo",
+        "jp": "接頭辞",
+        "body": "Un elemento que se añade delante de una palabra para cambiar su significado, como お para la cortesía o 不 para la negación.",
+        "example": "お茶 (おちゃ). Té (con prefijo honorífico)"
+      }
+    },
+    "prenominal-adjective": {
+      "en": {
+        "label": "Pre-noun adjective",
+        "jp": "連体詞",
+        "body": "A word that only ever sits in front of a noun. It never conjugates and never stands on its own.",
+        "example": "この. This → この本 (this book)"
+      },
+      "es": {
+        "label": "Adjetivo prenominal",
+        "jp": "連体詞",
+        "body": "Una palabra que solo aparece delante de un sustantivo. Ni se conjuga ni se sostiene sola.",
+        "example": "この. Este → この本 (este libro)"
+      }
+    },
+    "pronoun": {
+      "en": {
+        "label": "Pronoun",
+        "jp": "代名詞",
+        "body": "A word that stands in for a noun, like 'I', 'you' or 'this'. Japanese uses pronouns far less than English. The subject is usually dropped when it's clear from context.",
+        "example": "彼 (かれ). He"
+      },
+      "es": {
+        "label": "Pronombre",
+        "jp": "代名詞",
+        "body": "Una palabra que sustituye a un sustantivo, como 'yo', 'tú' o 'esto'. El japonés usa pronombres mucho menos que el español: el sujeto suele omitirse cuando se entiende por el contexto.",
+        "example": "彼 (かれ). Él"
+      }
+    },
+    "proverb": {
+      "en": {
+        "label": "Proverb",
+        "jp": "諺",
+        "body": "A short, well-known saying that expresses a general truth or piece of advice."
+      },
+      "es": {
+        "label": "Refrán",
+        "jp": "諺",
+        "body": "Dicho breve y conocido que expresa una verdad general o un consejo."
+      }
+    },
+    "rare": {
+      "en": {
+        "label": "Rare",
+        "body": "Seldom used. You'll meet it occasionally, but it isn't the everyday choice."
+      },
+      "es": {
+        "label": "Poco común",
+        "body": "De uso poco frecuente; aparece de vez en cuando, pero no es la opción habitual."
+      }
+    },
+    "sensitive": {
+      "en": {
+        "label": "Sensitive",
+        "jp": "差別語・要注意",
+        "body": "A term that can offend or touch on delicate topics. Race, disability, death and the like. Use carefully, or prefer a neutral alternative."
+      },
+      "es": {
+        "label": "Delicado",
+        "jp": "差別語・要注意",
+        "body": "Un término que puede ofender o tocar temas delicados. Raza, discapacidad, muerte y similares. Úsalo con cuidado, o prefiere una alternativa neutra."
+      }
+    },
+    "slang": {
+      "en": {
+        "label": "Slang",
+        "jp": "俗語",
+        "body": "Very informal language, often tied to a particular group or generation."
+      },
+      "es": {
+        "label": "Argot",
+        "jp": "俗語",
+        "body": "Lenguaje muy informal, a menudo ligado a un grupo o generación concretos."
+      }
+    },
+    "suffix": {
+      "en": {
+        "label": "Suffix",
+        "jp": "接尾辞",
+        "body": "An element attached to the end of a word to change its meaning or role, like 〜的 ('-ish/-al') or the honorific 〜さん on a name.",
+        "example": "本屋 (ほんや). Bookshop (〜屋 = shop)"
+      },
+      "es": {
+        "label": "Sufijo",
+        "jp": "接尾辞",
+        "body": "Un elemento que se añade al final de una palabra para cambiar su significado o función, como 〜的 ('-ico/-al') o el honorífico 〜さん en un nombre.",
+        "example": "本屋 (ほんや). Librería (〜屋 = tienda)"
+      }
+    },
+    "suru-verb": {
+      "en": {
+        "label": "Suru verb",
+        "jp": "する動詞",
+        "body": "A noun that becomes a verb by adding する ('to do'). A hugely productive pattern. Most borrowed and abstract actions work this way.",
+        "example": "勉強する (べんきょうする). To study"
+      },
+      "es": {
+        "label": "Verbo suru",
+        "jp": "する動詞",
+        "body": "Un sustantivo que se convierte en verbo añadiendo する ('hacer'). Un patrón muy productivo: así funcionan la mayoría de las acciones abstractas y prestadas.",
+        "example": "勉強する (べんきょうする). Estudiar"
+      }
+    },
+    "taru-adjective": {
+      "en": {
+        "label": "Taru-adjective",
+        "jp": "たる形容詞",
+        "body": "A formal, mostly written adjective. It takes たる before a noun and と before a verb.",
+        "example": "堂々 (どうどう). Dignified → 堂々たる態度 (a dignified manner)"
+      },
+      "es": {
+        "label": "Adjetivo en taru",
+        "jp": "たる形容詞",
+        "body": "Un adjetivo formal, casi siempre escrito. Toma たる delante de un sustantivo y と delante de un verbo.",
+        "example": "堂々 (どうどう). Imponente → 堂々たる態度 (un porte imponente)"
+      }
+    },
+    "to-adverb": {
+      "en": {
+        "label": "To-adverb",
+        "jp": "と副詞",
+        "body": "An adverb that takes と before the verb it modifies. Many are mimetic words, and for some the と is optional.",
+        "example": "ゆっくり(と). Slowly"
+      },
+      "es": {
+        "label": "Adverbio en to",
+        "jp": "と副詞",
+        "body": "Un adverbio que toma と delante del verbo al que modifica. Muchos son palabras miméticas y en algunos la と es opcional.",
+        "example": "ゆっくり(と). Despacio"
+      }
+    },
+    "transitive-verb": {
+      "en": {
+        "label": "Transitive verb",
+        "jp": "他動詞",
+        "body": "A verb that acts on a direct object, marked with を. It often has an intransitive twin. For example 開ける (to open something) pairs with 開く (to open by itself).",
+        "example": "開ける (あける). To open (something)"
+      },
+      "es": {
+        "label": "Verbo transitivo",
+        "jp": "他動詞",
+        "body": "Un verbo que actúa sobre un objeto directo, marcado con を. Suele tener un gemelo intransitivo: por ejemplo 開ける (abrir algo) se empareja con 開く (abrirse solo).",
+        "example": "開ける (あける). Abrir (algo)"
+      }
+    },
+    "verb": {
+      "en": {
+        "label": "Verb",
+        "jp": "動詞",
+        "body": "An action or state-of-being word. Japanese verbs come at the end of the clause and conjugate for tense, politeness and negation. But never for person or number.",
+        "example": "食べる (たべる). To eat"
+      },
+      "es": {
+        "label": "Verbo",
+        "jp": "動詞",
+        "body": "Una palabra de acción o estado. Los verbos japoneses van al final de la oración y se conjugan por tiempo, cortesía y negación, pero nunca por persona ni número.",
+        "example": "食べる (たべる). Comer"
+      }
+    },
+    "vulgar": {
+      "en": {
+        "label": "Vulgar",
+        "body": "Crude or obscene language; use with care."
+      },
+      "es": {
+        "label": "Vulgar",
+        "body": "Lenguaje grosero u obsceno; úsalo con cuidado."
+      }
+    },
+    "yojijukugo": {
+      "en": {
+        "label": "Four-character idiom",
+        "jp": "四字熟語",
+        "body": "A set idiomatic compound of four kanji, often with a figurative meaning."
+      },
+      "es": {
+        "label": "Modismo de cuatro kanji",
+        "jp": "四字熟語",
+        "body": "Compuesto idiomático fijo de cuatro kanji, a menudo con sentido figurado."
+      }
+    }
+  }
+}

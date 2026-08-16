@@ -16,6 +16,10 @@ import "./sweep-merge.test.js";
 // Last on purpose: each case installs a two-word pack of its own, which replaces
 // whatever is installed, and the harness shares one fake IndexedDB across files.
 import "./token-candidates.test.js";
+import "./word-forms.test.js";
 import "./candidate-picker.test.js";
+import "./example-sentences.test.js";
+import "./sense-card.test.js";
+import "./word-card.test.js";
 import "./shown-cut.test.js";
 import "./selection-lookup.test.js";

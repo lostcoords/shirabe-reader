@@ -83,7 +83,7 @@ function term(
 }
 
 const records = [
-  { type: "header", schemaVersion: 4, languages: ["eng", "spa"], source: "Shirabe golden corpus" },
+  { type: "header", schemaVersion: 5, languages: ["eng", "spa"], source: "Shirabe golden corpus" },
   // The 逸脱 trap: a noun/suru-verb that the godan った→つ rule would otherwise
   // reach from いつだった, burying the usually-kana いつ.
   term(1, "逸脱", "いつだつ", ["n", "vs"], 15_000),

@@ -1,8 +1,8 @@
 import { convertVariants } from "kanji-processor";
 import { deinflect, inflectionLabel, posConditionFlags } from "./deinflect.js";
-import { posLabels, tagLabels } from "./jmdict-tags.js";
-import { GLOSS_LABELS, withEnglishFallback, type GlossLanguage } from "./languages.js";
-import type { Definition, ParsedToken, Sense, TokenCandidate } from "./types.js";
+import { posChips, tagChips } from "./jmdict-tags.js";
+import { GLOSS_TAGS, withEnglishFallback, type GlossLanguage } from "./languages.js";
+import type { Definition, GlossRow, ParsedToken, Sense, SenseXref, TokenCandidate } from "./types.js";
 import { sha256 as createSha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
@@ -14,7 +14,7 @@ declare const __EXTENSION_VERSION__: string;
 // pack, which is always re-downloadable.
 const DB_NAME = "shirabe-offline-dictionary-v4";
 const DB_VERSION = 2;
-const SUPPORTED_SCHEMA = 4;
+const SUPPORTED_SCHEMA = 5;
 // Longest term the greedy longest-match will probe from any position: the
 // scanner's caret window (dom-text.ts `maxChars`) mirrors it. Covers long
 // compounds/expressions; unknown katakana runs are coalesced (`unknownRun`)
@@ -87,6 +87,11 @@ type OfflineSense = {
   misc: string[];
   dialects: string[];
   restrictions: string[];
+  // Both absent on the senses that have neither, which is most of them.
+  // `notes` is per language because a note is written in one ("usu. in kana" is
+  // not Spanish); a cross reference points at a Japanese word either way.
+  notes?: Record<string, string[]>;
+  xrefs?: Array<{ kind: string; text: string; reading?: string }>;
 };
 
 type OfflineTerm = {
@@ -2005,7 +2010,11 @@ async function examplesFor(
   return stored.filter((sentence): sentence is Stored<OfflineSentence> => !!sentence).map((sentence) => ({
     japanese: sentence.japanese,
     translation: withEnglishFallback(languages).map((language) => sentence.translations[language]).find(Boolean) ?? null,
-    ...(sentence.tokens ? { tokens: sentence.tokens.map((token) => ({ surface: token.surface })) } : {}),
+    // Surface and lemma only. The pack also stores a reading and a POS per
+    // token, which the popup would have to draw furigana with and does not: the
+    // example is one line of context, not a second parse of the page.
+    ...(sentence.tokens ? { tokens: sentence.tokens.map((token) =>
+      token.lemma ? { surface: token.surface, lemma: token.lemma } : { surface: token.surface }) } : {}),
   }));
 }
 
@@ -2133,7 +2142,7 @@ function validateTerm(term: OfflineTerm): void {
   if (Object.keys(term).some((key) => !allowed.has(key)) || !plainString(term.id) || !plainString(term.dictionary) || !plainString(term.headword) ||
       !Array.isArray(term.expressions) || !term.expressions.length || term.expressions.some((item) => !exactKeys(item, ["text", "script", "common", "tags"]) || !plainString(item.text) || !plainString(item.script) || typeof item.common !== "boolean" || !stringArray(item.tags)) ||
       !Array.isArray(term.readings) || term.readings.some((item) => !exactKeys(item, ["text", "kind", "appliesTo"]) || !plainString(item.text) || !plainString(item.kind) || (item.appliesTo != null && !stringArray(item.appliesTo))) ||
-      !Array.isArray(term.senses) || !term.senses.length || term.senses.some((sense) => !exactKeys(sense, ["glosses", "partsOfSpeech", "fields", "misc", "dialects", "restrictions"]) || !glossMap(sense.glosses, new Set(["eng", "spa"])) || !stringArray(sense.partsOfSpeech) || !stringArray(sense.fields) || !stringArray(sense.misc) || !stringArray(sense.dialects) || !stringArray(sense.restrictions)) ||
+      !Array.isArray(term.senses) || !term.senses.length || term.senses.some((sense) => !validSense(sense)) ||
       (term.pitch != null && (!Array.isArray(term.pitch) || term.pitch.some((item) => !exactKeys(item, ["text", "reading", "downstep"]) || !plainString(item.text) || !plainString(item.reading) || !Number.isInteger(item.downstep)))) ||
       (term.examples != null && !stringArray(term.examples)) ||
       (term.frequencies != null && (!Array.isArray(term.frequencies) || term.frequencies.some((item) => !exactKeys(item, ["source", "text", "reading", "rank"]) || !plainString(item.source) || !plainString(item.text) || (item.reading !== null && !plainString(item.reading)) || !Number.isFinite(item.rank)))) ||
@@ -2141,6 +2150,20 @@ function validateTerm(term: OfflineTerm): void {
     throw new Error("Dictionary term record is invalid.");
   }
   rejectUnsafeStructuredContent(term);
+}
+
+// A sense's own keys, checked against a fixed set like the rest of the record.
+// `notes` and `xrefs` are optional (schema 5) and absent on most senses, so the
+// shape they take when present is what there is to check.
+function validSense(sense: OfflineSense): boolean {
+  const allowed = new Set(["glosses", "partsOfSpeech", "fields", "misc", "dialects", "restrictions", "notes", "xrefs"]);
+  return !Object.keys(sense).some((key) => !allowed.has(key)) &&
+    glossMap(sense.glosses, new Set(["eng", "spa"])) &&
+    [sense.partsOfSpeech, sense.fields, sense.misc, sense.dialects, sense.restrictions].every(stringArray) &&
+    (sense.notes == null || glossMap(sense.notes, new Set(["eng", "spa"]))) &&
+    (sense.xrefs == null || (Array.isArray(sense.xrefs) && sense.xrefs.every((xref) =>
+      exactKeys(xref, ["kind", "text", "reading"]) && plainString(xref.kind) && plainString(xref.text) &&
+      (xref.reading == null || plainString(xref.reading)))));
 }
 
 function validateKanji(kanji: OfflineKanji): void {
@@ -2259,10 +2282,13 @@ function score(hit: LookupHit, source: string): number {
   return exact + common + frequency + hit.prefixLength * 10 - hit.candidate.reasons.length - processing;
 }
 
-// One meaning block per language, in the reader's order: the same walk as the
-// web's WordCard#build_meanings over Locales.source_stack_for. Within a block a
-// sense with no gloss in that language falls back to the languages after it,
-// English last (Locales.with_english_fallback), so a block never renders blank.
+// The senses ONCE, each carrying its meaning in every language the reader asked
+// for. It used to be the whole list per language: an entry with eight senses and
+// two languages rendered sixteen, the second eight a repeat of the first with
+// different words in them, and the sense picker offered sixteen boxes for eight
+// meanings (whose `position` it then read off the array index, so the second
+// eight scoped a save to senses the word does not have).
+//
 // `exampleIds` never leaves this module: `forPopup` trades it for the sentences
 // themselves, and everything downstream sees a plain Definition.
 type PendingDefinition = Definition & { exampleIds?: string[] };
@@ -2271,29 +2297,73 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
   const term = hit.term;
   const blocks = languages.length ? languages : ["eng" as const];
   const applicable = term.senses.filter((sense) => !sense.restrictions.length || sense.restrictions.includes(hit.surface) || sense.restrictions.includes(term.headword));
-  const senses: Sense[] = blocks.flatMap((language, index) => {
-    // Exactly WordCard#fallback_db_langs_after: the languages *after* this one
-    // in the reader's stack, English last, minus this block's own language. The
-    // fallback fills a sense inside the block: it never adds a block, which is
-    // why one language stays one language.
-    const fallbacks = withEnglishFallback(blocks.slice(index + 1)).filter((code) => code !== language);
-    return applicable.flatMap((sense) => {
-      const glosses = [language, ...fallbacks].map((code) => sense.glosses[code]).find((list) => list?.length);
-      if (!glosses) return [];
-      return [{
-        // Sense's 0-based position in the entry (display-only offline: saving is
-        // gated on a connected Pro account, so the picker never appears here).
-        position: term.senses.indexOf(sense),
-        source: `${GLOSS_LABELS[language]} · ${dictionaryName(term.dictionary)}`,
-        // Pack stores raw JMdict codes (v5r, vi, uk…); resolve to the same
-        // short labels the site chips show so offline popups match the web.
-        partsOfSpeech: posLabels(sense.partsOfSpeech),
-        posCodes: sense.partsOfSpeech,
-        tags: tagLabels([...sense.fields, ...sense.misc, ...sense.dialects]),
-        glosses,
-      }];
-    });
+  const senses: Sense[] = applicable.flatMap((sense) => {
+    const glosses = glossRows(sense, blocks);
+    if (!glosses.length) return [];
+    return [{
+      // Sense's 0-based position in the entry (display-only offline: saving is
+      // gated on a connected Pro account, so the picker never appears here).
+      position: term.senses.indexOf(sense),
+      ...(term.dictionary === "jmdict" ? {} : { dictionary: dictionaryName(term.dictionary) }),
+      // Pack stores raw JMdict codes (v5r, vi, uk…); resolve to the same
+      // short labels the site chips show so offline popups match the web.
+      partsOfSpeech: posChips(sense.partsOfSpeech),
+      posCodes: sense.partsOfSpeech,
+      tags: tagChips(sense),
+      glosses,
+      // In ONE language, unlike the glosses: a note is an aside about the word,
+      // and printing the same aside twice in two languages under a meaning
+      // already said twice buries the meaning. The reader's own language wins,
+      // English answers when it has nothing.
+      ...(noteRows(sense, blocks).length ? { notes: noteRows(sense, blocks) } : {}),
+      ...(sense.xrefs?.length ? { xrefs: crossReferences(sense.xrefs) } : {}),
+    }];
   });
+  return termCard(hit, term, senses, apiBase);
+}
+
+// One row per language the reader asked for, in their order, tagged with the
+// language the TEXT is in.
+//
+// The fallback is the same walk as the web's WordCard#fallback_db_langs_after
+// (the languages after this one in the stack, English last), and it now says
+// what it did. Filling a Spanish row from English used to print English under
+// the heading "Español · JMdict"; here the row is tagged EN, and a sense that
+// resolves to the same text twice draws it once. A reader with one language
+// sees exactly what they always saw.
+function glossRows(sense: OfflineSense, blocks: readonly GlossLanguage[]): GlossRow[] {
+  const rows: GlossRow[] = [];
+  for (const [index, language] of blocks.entries()) {
+    const fallbacks = withEnglishFallback(blocks.slice(index + 1)).filter((code) => code !== language);
+    const source = [ language, ...fallbacks ].find((code) => sense.glosses[code]?.length);
+    if (!source) continue;
+    const text = (sense.glosses[source] ?? []).join("; ");
+    if (rows.some((row) => row.text === text)) continue;
+    rows.push({ lang: source, tag: GLOSS_TAGS[source], text });
+  }
+  return rows;
+}
+
+// The sense's usage notes in the first language that has any, English last.
+function noteRows(sense: OfflineSense, blocks: readonly GlossLanguage[]): string[] {
+  const source = withEnglishFallback(blocks).find((code) => sense.notes?.[code]?.length);
+  return source ? sense.notes?.[source] ?? [] : [];
+}
+
+// The kinds JMdict actually files, and nothing else. `written_as` and
+// `compound_of` exist in the schema and are not links a reader follows from a
+// meaning; an unknown kind is dropped rather than guessed at, because the label
+// on the row is a claim about what the link MEANS.
+function crossReferences(xrefs: NonNullable<OfflineSense["xrefs"]>): SenseXref[] {
+  return xrefs.filter((xref) => xref.kind === "related" || xref.kind === "antonym")
+    .map((xref) => ({
+      kind: xref.kind as SenseXref["kind"],
+      text: xref.text,
+      ...(xref.reading ? { reading: xref.reading } : {}),
+    }));
+}
+
+function termCard(hit: LookupHit, term: Stored<OfflineTerm>, senses: Sense[], apiBase: string): PendingDefinition {
   const reading = readingFor(term, matchingExpression(hit)?.text);
   const headword = displayHeadword(hit, reading);
   // A pattern is a property of the READING: its clip is literally
@@ -2310,9 +2380,20 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
   // same pattern and the same clip, so showing the row twice just draws it twice.
   const displayedPitch = (exactPitch.length ? exactPitch : pitchRows.filter((item) => item.reading === reading))
     .filter((item, index, rows) => rows.findIndex((other) => other.downstep === item.downstep) === index);
+  // The other spellings, which is the question a reader asks the moment the
+  // headword is not the one they just met: 開く is also 空く and 明く, and a card
+  // that cannot say so sends them back to the sentence none the wiser. Search-only
+  // forms are excluded because JMdict refuses to display them at all: they exist
+  // so a query finds the word, not so a reader is shown them.
+  const forms = term.expressions
+    .filter((item) => !item.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag)))
+    .filter((item) => item.text !== headword && item.text !== reading)
+    .map((item) => ({ text: item.text, common: item.common, rare: item.tags.some((tag) => RARE_KANJI_TAGS.has(tag)) }));
+
   return {
     headword,
     reading,
+    ...(forms.length ? { forms } : {}),
     entry: term.id,
     url: `${apiBase.replace(/\/$/, "")}/word/${encodeURIComponent(headword)}`,
     common: term.expressions.some((item) => item.common),
@@ -2341,17 +2422,30 @@ function kanjiReading(readings: OfflineKanji["readings"]): string | null {
 
 function kanjiDefinition(kanji: Stored<OfflineKanji>, languages: readonly GlossLanguage[], apiBase: string): Definition {
   const order = withEnglishFallback(languages);
+  // A kanji is one meaning row: KANJIDIC glosses it in one language at a time
+  // and the reader's first language that has one wins, so there is nothing to
+  // tag a second row with.
   const language = order.find((code) => kanji.meanings[code]?.length) ?? "eng";
-  const glosses = kanji.meanings[language] ?? [];
+  const glosses = [ { lang: language, tag: GLOSS_TAGS[language], text: (kanji.meanings[language] ?? []).join("; ") } ];
   return {
     headword: kanji.char,
     reading: kanjiReading(kanji.readings),
+    // On and kun kept APART, because that distinction is most of what a learner
+    // is asking a kanji card: 音 vs 訓 decides which reading a compound takes.
+    // The other reading families KANJIDIC ships (pinyin, korean, vietnamese,
+    // nanori) stay out: three of them are not Japanese, and nanori is names.
+    kanji: {
+      on: kanji.readings.on ?? [],
+      kun: kanji.readings.kun ?? [],
+      ...(kanji.strokes ? { strokes: kanji.strokes } : {}),
+      ...(kanji.grade ? { grade: kanji.grade } : {}),
+    },
     url: `${apiBase.replace(/\/$/, "")}/kanji/${encodeURIComponent(kanji.char)}`,
     common: false,
     jlpt: kanji.jlpt ? `N${kanji.jlpt}` : null,
     frequency: kanji.frequency ?? null,
     pitch: [],
-    senses: [{ position: 0, source: `${GLOSS_LABELS[language]} · KANJIDIC2`, partsOfSpeech: [], tags: [], glosses }],
+    senses: [{ position: 0, dictionary: "KANJIDIC2", partsOfSpeech: [], tags: [], glosses }],
     examples: [],
     offline: true,
   };

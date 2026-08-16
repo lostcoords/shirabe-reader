@@ -43,7 +43,13 @@ async function mountForm(options: {
     word,
     definition: {
       headword: "高い", reading: "たかい", entry: "jmdict:1200430", url: "", common: true, jlpt: null, frequency: null,
-      pitch: [], senses: options.senses.map((s) => ({ position: 0, source: "", partsOfSpeech: [], tags: [], glosses: s.glosses })),
+      // Each sense at its own position, which is what a scoped save travels
+      // under: they used to all be built at 0, and the form read the list index
+      // instead, so nothing here could tell the two apart.
+      pitch: [], senses: options.senses.map((s, position) => ({
+        position, partsOfSpeech: [], tags: [],
+        glosses: [ { lang: "eng" as const, tag: "EN", text: s.glosses.join("; ") } ],
+      })),
       examples: (options.examples ?? []).map((e) => ({ japanese: e.japanese, translation: e.translation })),
       offline: true,
     },
@@ -97,6 +103,21 @@ test("ticking every meaning saves the whole word, not a scoped card", async () =
   // beside the plain one, for the same thing.
   const whole = await saveRequest();
   assert.equal(whole.sensePositions, undefined);
+});
+
+// The other half: an actual selection travels as the senses' OWN positions.
+// Reading them off the list index instead was invisible while a sense appeared
+// once, and wrong the moment a card repeated its senses per gloss language: the
+// second copy of sense 0 was saved as sense 2, a meaning the word does not have.
+test("a partial selection saves the positions the senses actually have", async () => {
+  const { host, saveRequest } = await mountForm({
+    senses: [{ glosses: ["high; tall"] }, { glosses: ["expensive"] }],
+  });
+
+  const boxes = [...host.querySelectorAll("input[type='checkbox']")] as HTMLInputElement[];
+  boxes[0]!.checked = false;
+
+  assert.deepEqual((await saveRequest()).sensePositions, [ 1 ]);
 });
 
 test("a word whose meanings are all saved does not offer an empty selection", async () => {
