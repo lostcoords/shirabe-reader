@@ -5,6 +5,15 @@ source maps, a development API host, test fixtures, or a local dictionary pack.
 
 ## Before every upload
 
+- **Rebuild and repackage. Never upload what is already in `artifacts/`.** Those
+  zips are whatever was built last, and "last" can predate a server change that
+  invalidates them. This has already happened once: the zips packaged 2026-08-05
+  and the `dist/` built 2026-08-17 both predate the OAuth work (shipped in
+  v0.10.0 on 2026-08-19), whose migration revoked every non-manual API key in
+  production. Uploading either would have shipped a build holding a credential
+  the server no longer honours, broken on first use, with nothing in the build
+  itself to show it. Check the version in `package.json` against the credential
+  model the server is running, not against this file.
 - Run `npm run check`, `npm test`, both production builds, and
   `npm run lint:firefox`.
 - Run `npm run package:firefox` and `npm run package:chrome`; upload only the
