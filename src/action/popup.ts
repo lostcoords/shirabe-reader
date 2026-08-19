@@ -1,5 +1,5 @@
 import { ext } from "../common/browser.js";
-import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type ScanModifier } from "../common/config.js";
+import { DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type ScanModifier } from "../common/config.js";
 import { mountAccountPanel } from "../common/account-panel.js";
 import { mountDictionaryPanel } from "../common/dictionary-panel.js";
 import { sendDictionary } from "../common/dictionary-port.js";
@@ -96,7 +96,7 @@ async function patch(change: Partial<Config>): Promise<void> {
 $<HTMLSelectElement>("dictionaryLanguages").addEventListener("change", async (event) => {
   const select = event.currentTarget as HTMLSelectElement;
   const languages = select.value.split(",") as GlossLanguage[];
-  if (config.apiKey) {
+  if (isConnected(config)) {
     const response = await send({ type: "updateLanguages", languages });
     if (!response.ok) {
       select.value = config.languages.join(",");
@@ -106,7 +106,7 @@ $<HTMLSelectElement>("dictionaryLanguages").addEventListener("change", async (ev
   } else {
     await patch({ languages });
   }
-  status(config.apiKey ? "Language synced with your profile" : "Definition language saved");
+  status(isConnected(config) ? "Language synced with your profile" : "Definition language saved");
 });
 
 $<HTMLSelectElement>("lookupScanModifier").addEventListener("change", async (event) => {
@@ -223,7 +223,7 @@ async function renderPageState(): Promise<void> {
   const installed = (await sendDictionary({ type: "dictionaryStatus" }));
   const hasDictionary = installed.ok && installed.dictionary.installed;
   const installing = installed.ok && installed.dictionary.installing;
-  const connected = config?.apiKey ? true : false;
+  const connected = config ? isConnected(config) : false;
 
   // While an install is running, don't re-offer Install: show a progress entry.
   $("needsDictionary").hidden = hasDictionary || installing;

@@ -1,4 +1,4 @@
-import { ApiError, ShirabeApi } from "../common/api.js";
+import { ApiError, ShirabeApi, type Tokens } from "../common/api.js";
 import { ext, usesPromiseMessageResponses } from "../common/browser.js";
 import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config } from "../common/config.js";
 import { isR2AudioUrl } from "../common/audio.js";
@@ -38,7 +38,22 @@ async function initializeBackground(): Promise<void> {
   // dropped here if the reader has it off.
   setTelemetryEnabled(config.errorReports);
 
-  api = new ShirabeApi(config);
+  api = new ShirabeApi(config, {
+    // A renewal happened inside a request: the new pair is what every request
+    // from now on goes out on, so it is persisted before the caller sees its
+    // answer. Nothing else on Config moves.
+    onTokens: async (tokens) => {
+      const next: Config = { ...config, ...tokens };
+      await saveConfig(next);
+      config = next;
+    },
+    // The server refused to renew: the grant is over (revoked on the account
+    // page, idle too long, or the refresh token replayed). Forget the tokens
+    // and everything that came with them; the popup shows "connect" again.
+    onSignedOut: async () => {
+      await forgetConnection();
+    },
+  });
   // Best-effort refresh of the server-maintained reader site list, so we can
   // add supported sites without shipping an extension update. No-ops if offline
   // or the endpoint isn't live yet (the bundled built-ins stay in charge).
@@ -548,7 +563,7 @@ async function runConnect(): Promise<void> {
   const { verifier, challenge } = await pkce();
   const state = randomToken(16);
   const redirectUri = ext.identity.getRedirectURL();
-  const url = api.authorizeUrl({ redirectUri, state, challenge, client: clientLabel() });
+  const url = api.authorizeUrl({ redirectUri, state, challenge });
 
   const redirect = await ext.identity.launchWebAuthFlow({ url, interactive: true });
   const params = new URL(redirect).searchParams;
@@ -558,8 +573,7 @@ async function runConnect(): Promise<void> {
   const code = params.get("code");
   if (!code) throw new ApiError("No authorization code was returned.", 400);
 
-  const { apiKey, scopes } = await api.exchangeCode({ code, verifier, redirectUri });
-  await adopt(apiKey, scopes);
+  await adopt(await api.exchangeCode({ code, verifier, redirectUri }));
 }
 
 // PKCE (S256): a random verifier the client keeps + the SHA-256 challenge the
@@ -580,9 +594,9 @@ function base64url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-// Persist a freshly-minted key, then look up whose account it belongs to.
-async function adopt(apiKey: string, scopes: string[]): Promise<void> {
-  const next: Config = { ...config, apiKey, scopes, account: "", accountCheckedAt: "", entitled: false };
+// Persist a freshly-minted token pair, then look up whose account it belongs to.
+async function adopt(tokens: Tokens): Promise<void> {
+  const next: Config = { ...config, ...tokens, account: "", accountCheckedAt: "", entitled: false };
   await saveConfig(next);
   await clearProfileCaches();
   config = next;
@@ -618,8 +632,18 @@ async function refreshAccount(force = false): Promise<void> {
   }
 }
 
+// The reader's "disconnect": hand the grant back to the server (so it leaves
+// their access list), then forget it here.
 async function disconnect(): Promise<void> {
-  const next: Config = { ...config, apiKey: "", account: "", accountCheckedAt: "", scopes: [], entitled: false };
+  await api.revoke();
+  await forgetConnection();
+}
+
+async function forgetConnection(): Promise<void> {
+  const next: Config = {
+    ...config, accessToken: "", accessTokenExpiresAt: "", refreshToken: "",
+    account: "", accountCheckedAt: "", scopes: [], entitled: false,
+  };
   await saveConfig(next);
   await clearProfileCaches();
   config = next;
@@ -636,13 +660,6 @@ async function status(): Promise<Status> {
     connecting,
     apiBase: config.apiBase,
   };
-}
-
-// A human-friendly key name on the server's "Connected apps" list.
-function clientLabel(): string {
-  const ua = navigator.userAgent;
-  const browser = /Firefox/.test(ua) ? "Firefox" : /Edg/.test(ua) ? "Edge" : /Chrome/.test(ua) ? "Chrome" : "Browser";
-  return `Shirabe Reader (${browser})`;
 }
 
 function errorResponse(err: unknown, requestType = "unknown"): Failure {

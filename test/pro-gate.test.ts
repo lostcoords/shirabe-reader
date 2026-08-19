@@ -17,7 +17,7 @@ test("a 402 keeps the server's code and sentence, so the UI can offer plans", as
   globalThis.fetch = (async () => problem(402, "PRO_REQUIRED", "Writing to the SRS requires Pro.")) as unknown as typeof fetch;
   try {
     const { ApiError, ShirabeApi } = await import("../src/common/api.js");
-    const api = new ShirabeApi({ apiBase: "https://shirabe.test", apiKey: "shr_test" } as never);
+    const api = new ShirabeApi({ apiBase: "https://shirabe.test", accessToken: "shra_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), refreshToken: "shrr_test" } as never);
 
     const error = await api.save({ lemma: "勉強" }).then(() => null, (err: unknown) => err);
 
@@ -80,7 +80,7 @@ test("every upgrade entry point tags itself, so none of them lands as organic tr
 test("a signed-in free reader is told what's missing, and can act on it", async () => {
   const { Window } = await import("happy-dom");
   const window = new Window({ url: "https://reader.test/page" });
-  const config = { apiBase: "https://shirabe.test", apiKey: "shr_x", scopes: ["READ_SRS"], entitled: false };
+  const config = { apiBase: "https://shirabe.test", accessToken: "shra_x", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), refreshToken: "shrr_x", scopes: ["READ_SRS"], entitled: false };
   Object.assign(globalThis, {
     window, document: window.document, Node: window.Node, HTMLElement: window.HTMLElement,
     chrome: {

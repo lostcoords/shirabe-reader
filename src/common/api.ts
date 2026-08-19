@@ -23,6 +23,21 @@ export class ApiError extends Error {
 // OAuth exists only for the personal online layer: identify the account, read
 // its study state, and save/grade through the SRS.
 const OAUTH_SCOPES = ["READ_ACCOUNT", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"];
+// Registered on the server (OauthClient), where the consent screen's name and
+// the redirect hosts we may use are decided. A public client: no secret, PKCE
+// binds our codes.
+export const OAUTH_CLIENT_ID = "shirabe-extension";
+// Renew this long before the access token expires, so a request never goes out
+// on a token that dies in flight.
+const RENEW_AHEAD_MS = 60_000;
+
+// What a login or a renewal hands us: the pair, and when the first half runs
+// out. Persisted by whoever owns Config (the background worker) through
+// `onTokens`; the api client keeps its own copy current so the very next
+// request goes out on the new token.
+export type Tokens = { accessToken: string; accessTokenExpiresAt: string; refreshToken: string; scopes: string[] };
+
+type TokenResponse = { access_token: string; token_type: string; expires_in: number; refresh_token: string; scope: string };
 
 // One word, as every word-level endpoint reports it (/api/v1 `WordStateEntry`): the
 // batch lookup, setting a state, and saving all answer in this shape, so the
@@ -63,7 +78,19 @@ function entryHandle(entry?: string): { dictionarySlug: string; sourceId: string
 // the web ("Español · JMdict"). Unknown codes/slugs fall back to a title-cased
 // form so user-uploaded dictionaries still read sensibly.
 export class ShirabeApi {
-  constructor(private config: Config) {}
+  // One renewal at a time. Every request that finds the token stale (or gets a
+  // 401) waits on the same promise, so a burst of lookups after an hour idle
+  // costs one round trip to the token endpoint, and, more importantly, trades
+  // the refresh token ONCE: it is single-use, and a second trade past the
+  // server's short grace revokes the whole grant.
+  private renewing: Promise<void> | null = null;
+
+  constructor(
+    private config: Config,
+    // Persist a new pair (login or renewal), and forget everything when the
+    // server says the grant is over. Both owned by whoever owns Config.
+    private hooks: { onTokens?: (tokens: Tokens) => Promise<void>; onSignedOut?: () => Promise<void> } = {},
+  ) {}
 
   update(config: Config): void {
     this.config = config;
@@ -73,10 +100,10 @@ export class ShirabeApi {
   // The consent URL the extension opens with `identity.launchWebAuthFlow`. The
   // user approves the scopes there and the browser redirects a one-time code
   // back to `redirectUri`.
-  authorizeUrl(opts: { redirectUri: string; state: string; challenge: string; client: string }): string {
+  authorizeUrl(opts: { redirectUri: string; state: string; challenge: string }): string {
     const query = new URLSearchParams({
       response_type: "code",
-      client: opts.client,
+      client_id: OAUTH_CLIENT_ID,
       redirect_uri: opts.redirectUri,
       scope: OAUTH_SCOPES.join(" "),
       state: opts.state,
@@ -86,14 +113,83 @@ export class ShirabeApi {
     return `${this.config.apiBase.replace(/\/$/, "")}/oauth/authorize?${query}`;
   }
 
-  // Exchange the one-time code (+ PKCE verifier) for a scoped key. No key yet :
-  // the code and verifier are the proof.
-  async exchangeCode(opts: { code: string; verifier: string; redirectUri: string }): Promise<{ apiKey: string; scopes: string[] }> {
-    return this.post(
+  // Exchange the one-time code (+ PKCE verifier) for the first token pair. No
+  // token yet: the code and verifier are the proof.
+  async exchangeCode(opts: { code: string; verifier: string; redirectUri: string }): Promise<Tokens> {
+    const response = await this.post<TokenResponse>(
       "/api/v1/oauth/token",
-      { grant_type: "authorization_code", code: opts.code, code_verifier: opts.verifier, redirect_uri: opts.redirectUri },
+      {
+        grant_type: "authorization_code", client_id: OAUTH_CLIENT_ID,
+        code: opts.code, code_verifier: opts.verifier, redirect_uri: opts.redirectUri,
+      },
       { auth: false },
     );
+    return tokensFrom(response);
+  }
+
+  // Trade the refresh token for the next pair. Single-flight (see `renewing`).
+  // A refusal means the grant is over: revoked on the account page, idle for
+  // ninety days, or the refresh token replayed. Nothing here can mend that, so
+  // the tokens are dropped and the reader is asked to connect again.
+  renew(): Promise<void> {
+    this.renewing ??= this.doRenew().finally(() => {
+      this.renewing = null;
+    });
+    return this.renewing;
+  }
+
+  private async doRenew(): Promise<void> {
+    const refreshToken = this.config.refreshToken;
+    if (!refreshToken) throw new ApiError("Not connected. Open the extension and connect to Shirabe.", 401);
+
+    let response: TokenResponse;
+    try {
+      response = await this.post<TokenResponse>(
+        "/api/v1/oauth/token",
+        { grant_type: "refresh_token", client_id: OAUTH_CLIENT_ID, refresh_token: refreshToken },
+        { auth: false },
+      );
+    } catch (error) {
+      // `invalid_grant` is the server saying the link is over. Anything else
+      // (offline, 5xx) is a bad moment, and the tokens we hold may still be
+      // fine next time.
+      if (error instanceof ApiError && error.code === "INVALID_GRANT") {
+        await this.signOut();
+        throw new ApiError("Your Shirabe connection has expired. Open the extension and connect again.", 401, "INVALID_GRANT");
+      }
+      throw error;
+    }
+
+    const tokens = tokensFrom(response);
+    this.config = { ...this.config, ...tokens };
+    await this.hooks.onTokens?.(tokens);
+  }
+
+  private async signOut(): Promise<void> {
+    this.config = { ...this.config, accessToken: "", accessTokenExpiresAt: "", refreshToken: "", scopes: [] };
+    await this.hooks.onSignedOut?.();
+  }
+
+  // Hand the grant back (RFC 7009): the "disconnect" button's server half.
+  // Without it, forgetting our tokens leaves the approval on the reader's
+  // access list until it idles out. Best effort: offline, the reader can still
+  // revoke it themselves at /account/settings#access.
+  async revoke(): Promise<void> {
+    const token = this.config.refreshToken || this.config.accessToken;
+    if (!token) return;
+    try {
+      await this.post("/api/v1/oauth/revoke", { token, client_id: OAUTH_CLIENT_ID }, { auth: false });
+    } catch {
+      // See above.
+    }
+  }
+
+  // Renew if the access token is about to run out, so a request never goes out
+  // on a token that dies in flight. Nothing to do while it has time left.
+  private async ensureFreshToken(): Promise<void> {
+    const expiresAt = Date.parse(this.config.accessTokenExpiresAt);
+    if (this.config.accessToken && expiresAt > Date.now() + RENEW_AHEAD_MS) return;
+    await this.renew();
   }
 
   // ── SRS write-back (/api/v1/srs/*, requires a WRITE_SRS key) ────────────────────
@@ -201,26 +297,46 @@ export class ShirabeApi {
     return this.request<T>(path, { method: "PATCH", body: JSON.stringify(body) });
   }
 
-  private async request<T>(path: string, init: RequestInit, opts: { auth?: boolean } = {}): Promise<T> {
-    const auth = opts.auth !== false; // device endpoints opt out: they mint the key
-    if (auth && !this.config.apiKey) throw new ApiError("Not connected. Open the extension and connect to Shirabe.", 401);
+  private async request<T>(path: string, init: RequestInit, opts: { auth?: boolean; retried?: boolean } = {}): Promise<T> {
+    const auth = opts.auth !== false; // the OAuth endpoints opt out: they mint the tokens
+    if (auth) {
+      if (!this.config.refreshToken) throw new ApiError("Not connected. Open the extension and connect to Shirabe.", 401);
+      await this.ensureFreshToken();
+    }
 
     const res = await fetch(this.config.apiBase.replace(/\/$/, "") + path, {
       ...init,
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        ...(auth ? { Authorization: `Bearer ${this.config.apiKey}` } : {}),
+        ...(auth ? { Authorization: `Bearer ${this.config.accessToken}` } : {}),
       },
     });
 
     if (!res.ok) {
+      // A 401 on a token we thought was good: revoked underneath us, or the
+      // clock disagreed with the server about its hour. One renewal and one
+      // retry; if the renewal itself is refused the link is over (see
+      // `doRenew`), and if the retry still 401s the answer stands.
+      if (auth && res.status === 401 && !opts.retried) {
+        await this.renew();
+        return this.request<T>(path, init, { ...opts, retried: true });
+      }
       const detail = await res.json().catch(() => null);
       const message = detail?.detail || detail?.title || `Request failed (${res.status})`;
       throw new ApiError(message, res.status, typeof detail?.code === "string" ? detail.code : undefined);
     }
     return (await res.json()) as T;
   }
+}
+
+function tokensFrom(response: TokenResponse): Tokens {
+  return {
+    accessToken: response.access_token,
+    accessTokenExpiresAt: new Date(Date.now() + response.expires_in * 1000).toISOString(),
+    refreshToken: response.refresh_token,
+    scopes: response.scope.split(" ").filter(Boolean),
+  };
 }
 
 // Katakana → hiragana, returning null when no furigana is warranted (kana-only

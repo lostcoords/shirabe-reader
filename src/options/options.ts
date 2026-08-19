@@ -1,4 +1,4 @@
-import { creditsUrl, DEFAULTS, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type PosColoring, type ScanModifier } from "../common/config.js";
+import { creditsUrl, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type PosColoring, type ScanModifier } from "../common/config.js";
 import { mountAccountPanel } from "../common/account-panel.js";
 import { mountDictionaryPanel } from "../common/dictionary-panel.js";
 import { formatKeybind, KEYBIND_ACTIONS, KEYBIND_LABELS, keybindFromEvent, type Keybind, type KeybindAction } from "../common/keybind.js";
@@ -68,7 +68,7 @@ async function patch(change: Partial<Config>): Promise<void> {
 
 $<HTMLFormElement>("prefs").addEventListener("change", async (event) => {
   const languages = prefs.languages.value.split(",") as GlossLanguage[];
-  if (event.target === prefs.languages && config.apiKey) {
+  if (event.target === prefs.languages && isConnected(config)) {
     const response = await send({ type: "updateLanguages", languages });
     if (!response.ok) {
       prefs.languages.value = config.languages.join(",");
@@ -86,7 +86,7 @@ $<HTMLFormElement>("prefs").addEventListener("change", async (event) => {
     iPlusOneIncludesLearning: prefs.iPlusOneIncludesLearning.checked,
     iPlusOneFrequencyMax: Math.max(1, Number(prefs.iPlusOneFrequencyMax.value) || DEFAULTS.iPlusOneFrequencyMax),
   });
-  status(event.target === prefs.languages && config.apiKey ? "Synced with your profile" : "Saved");
+  status(event.target === prefs.languages && isConnected(config) ? "Synced with your profile" : "Saved");
 });
 
 // ── Account ──────────────────────────────────────────────────────────────────

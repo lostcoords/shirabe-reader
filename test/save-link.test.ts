@@ -20,7 +20,7 @@ async function postedBody(options: { lemma: string; entry?: string }): Promise<R
   }) as unknown as typeof fetch;
   try {
     const { ShirabeApi } = await import("../src/common/api.js");
-    await new ShirabeApi({ apiBase: "https://shirabe.test", apiKey: "shr_test" } as never).save(options);
+    await new ShirabeApi({ apiBase: "https://shirabe.test", accessToken: "shra_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), refreshToken: "shrr_test" } as never).save(options);
     return body;
   } finally {
     globalThis.fetch = original;

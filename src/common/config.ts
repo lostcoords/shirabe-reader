@@ -20,13 +20,17 @@ export type FuriganaMode = "all" | "unknown" | "hover" | "off";
 // part of speech instead, so it replaces the state cue rather than fighting it.
 export type PosColoring = "off" | "text" | "underline";
 
-// User settings, persisted in extension-local storage. The API key is the only
-// secret; everything else is a preference. Read/written from the background
-// worker and the action popup (settings UI). The key is normally minted by the
-// device-login flow (see api.ts) rather than pasted.
+// User settings, persisted in extension-local storage. The OAuth tokens are the
+// only secrets; everything else is a preference. Read/written from the
+// background worker and the action popup (settings UI). The tokens come from
+// the redirect login (see api.ts): an access token that lives an hour and is
+// sent on every request, and a refresh token that renews it and is itself
+// replaced on every renewal.
 export type Config = {
   apiBase: string; // build-time default below; no trailing slash (/api/v1 is on every host)
-  apiKey: string;
+  accessToken: string;
+  accessTokenExpiresAt: string; // ISO; renew before this, not after
+  refreshToken: string;
   account: string; // display name of the connected account (for the popup header)
   accountCheckedAt: string; // last successful /api/v1/me refresh
   scopes: string[]; // scopes the connected key carries (gates mining buttons)
@@ -56,7 +60,9 @@ export type Config = {
 
 export const DEFAULTS: Config = {
   apiBase: __DEFAULT_API_BASE__,
-  apiKey: "",
+  accessToken: "",
+  accessTokenExpiresAt: "",
+  refreshToken: "",
   account: "",
   accountCheckedAt: "",
   scopes: [],
@@ -115,10 +121,11 @@ export const pricingUrl = (apiBase: string, source: string): string =>
 export const creditsUrl = (apiBase: string): string =>
   `${apiBase.replace(/\/$/, "")}/credits`;
 
-// Signed in iff we hold a key. Mining (save/grade/known) needs WRITE_SRS *and*
-// SRS entitlement (Pro or school): matching require_srs_pro! on the API. A
-// free account still gets dictionary lookup and word coloring.
-export const isConnected = (config: Config): boolean => config.apiKey.length > 0;
+// Signed in iff we hold a refresh token: the access token comes and goes by
+// the hour and is renewed from it. Mining (save/grade/known) needs WRITE_SRS
+// *and* SRS entitlement (Pro or school): matching require_srs_pro! on the API.
+// A free account still gets dictionary lookup and word coloring.
+export const isConnected = (config: Config): boolean => config.refreshToken.length > 0;
 export const canWriteSrs = (config: Config): boolean =>
   config.scopes.includes("WRITE_SRS") && config.entitled;
 
