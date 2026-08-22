@@ -132,9 +132,13 @@ const buildOptions = {
     // development: it doesn't move between rebuilds, so a stale copy of the
     // extension looks identical to a fresh one in the console.
     __BUILD_ID__: JSON.stringify(new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)),
-    // Telemetry ships to the same self-hosted Grafana Faro receiver as the web
-    // app's RUM; watch builds report tagged "development" so dev noise stays
-    // filterable, exactly like the web's DEPLOYMENT_ENV-tagged environment.
+    // Telemetry ships to the self-hosted Grafana Faro receiver on the same host
+    // Alloy the web app beacons to. The EXTENSION IS NOW ITS ONLY CLIENT: the
+    // web app dropped the Faro SDK on 2026-08-22 and sends OTLP metrics to
+    // /v1/metrics (:4330) instead, so /collect and the :4329 receiver must stay
+    // provisioned for this. Watch builds report tagged "development" so dev
+    // noise stays filterable, exactly like the web's DEPLOYMENT_ENV-tagged
+    // environment.
     __FARO_URL__: JSON.stringify("https://o.shirabe.org/collect"),
     __TELEMETRY_ENV__: JSON.stringify(watch ? "development" : "production"),
     // Empty everywhere else, so the self-reload client compiles down to nothing.
