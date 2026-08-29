@@ -54,8 +54,9 @@ async function sentContexts(report: { context: unknown; signals: TelemetrySignal
     __FARO_URL__: "https://o.test/collect",
     __TELEMETRY_ENV__: "development",
   });
-  let resolveSend: (payload: { events: Array<{ attributes: { source: string } }> }) => void;
-  const sent = new Promise<{ events: Array<{ attributes: { source: string } }> }>((resolve) => {
+  type Captured = { batch: Array<{ properties: { source: string } }> };
+  let resolveSend: (payload: Captured) => void;
+  const sent = new Promise<Captured>((resolve) => {
     resolveSend = resolve;
   });
   globalThis.fetch = (async (_url: string, init: { body: string }) => {
@@ -65,7 +66,9 @@ async function sentContexts(report: { context: unknown; signals: TelemetrySignal
 
   const { ingestClientReport } = await import("../src/background/telemetry.js");
   ingestClientReport(report as never);
-  return (await sent).events.map((event) => event.attributes.source);
+  // The PostHog capture shape: one batch of events, each carrying its source in
+  // `properties`. This used to read the Faro payload's `events[].attributes`.
+  return (await sent).batch.map((event) => event.properties.source);
 }
 
 test("a page claiming 'background' is re-stamped as content, never the privileged worker", async () => {

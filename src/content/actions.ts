@@ -45,7 +45,7 @@ export function applyStudyDetails(word: HTMLElement, details: StudyDetails): voi
   // Which meanings are taken, for the sense picker. Written as a plain list so
   // the picker reads it without parsing JSON, and cleared when nothing is
   // covered: a stale list would grey out a meaning you can still save.
-  const covered = details.savedWholeWord ? "all" : (details.savedSensePositions ?? []).join(",");
+  const covered = details.savedWholeWord ? "all" : (details.savedSenses ?? []).join(",");
   if (covered) word.dataset.savedSenses = covered;
   else delete word.dataset.savedSenses;
   if (details.cardCount != null && details.cardCount !== Number(word.dataset.cardCount)) {
@@ -217,7 +217,7 @@ async function entryFor(word: HTMLElement): Promise<string | undefined> {
   return entry;
 }
 
-async function saveRequest(word: HTMLElement, sensePositions?: number[]) {
+async function saveRequest(word: HTMLElement, senseRefs?: string[]) {
   const config = await loadConfig();
   // Snap the source image for the mined card (Shirabe chrome hidden). Sentence
   // text can be edited later in Shirabe. For a video subtitle that's the video
@@ -242,7 +242,7 @@ async function saveRequest(word: HTMLElement, sensePositions?: number[]) {
     entry: await entryFor(word),
     ...(config.preferredDeckId == null ? {} : { deckId: config.preferredDeckId }),
     ...(sentence ? { sentence } : {}),
-    ...(sensePositions?.length ? { sensePositions } : {}),
+    ...(senseRefs?.length ? { senses: senseRefs } : {}),
     ...(imageDataUrl ? { imageDataUrl } : {}),
     ...(audioDataUrl ? { audioDataUrl } : {}),
   });
@@ -401,11 +401,11 @@ export async function grade(word: HTMLElement, rating: Rating): Promise<Outcome>
   return { ok: true, message: `${lemma} → ${GRADES[rating]}${interval ? ` · ${interval}` : ""}`, cardUrl };
 }
 
-// Add to the deck without grading. `sensePositions` scopes the card to a subset
+// Add to the deck without grading. `senses` scopes the card to a subset
 // of the word's senses (empty/undefined = the whole word).
-export async function save(word: HTMLElement, sensePositions?: number[]): Promise<Outcome> {
+export async function save(word: HTMLElement, senseRefs?: string[]): Promise<Outcome> {
   const lemma = lemmaOf(word);
-  const res = await saveRequest(word, sensePositions);
+  const res = await saveRequest(word, senseRefs);
   let cardUrl: string | undefined;
   if (res.ok) {
     applyStateEverywhere(lemma, res.result.state);

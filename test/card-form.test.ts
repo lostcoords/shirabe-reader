@@ -102,14 +102,14 @@ test("ticking every meaning saves the whole word, not a scoped card", async () =
   // positions would build a scoped card that covers everything: a second card
   // beside the plain one, for the same thing.
   const whole = await saveRequest();
-  assert.equal(whole.sensePositions, undefined);
+  assert.equal(whole.senses, undefined);
 });
 
 // The other half: an actual selection travels as the senses' OWN positions.
 // Reading them off the list index instead was invisible while a sense appeared
 // once, and wrong the moment a card repeated its senses per gloss language: the
 // second copy of sense 0 was saved as sense 2, a meaning the word does not have.
-test("a partial selection saves the positions the senses actually have", async () => {
+test("a partial selection saves the senses it ticked, named by their dictionary", async () => {
   const { host, saveRequest } = await mountForm({
     senses: [{ glosses: ["high; tall"] }, { glosses: ["expensive"] }],
   });
@@ -117,7 +117,7 @@ test("a partial selection saves the positions the senses actually have", async (
   const boxes = [...host.querySelectorAll("input[type='checkbox']")] as HTMLInputElement[];
   boxes[0]!.checked = false;
 
-  assert.deepEqual((await saveRequest()).sensePositions, [ 1 ]);
+  assert.deepEqual((await saveRequest()).senses, [ "jmdict#1" ]);
 });
 
 test("a word whose meanings are all saved does not offer an empty selection", async () => {
@@ -131,7 +131,7 @@ test("a word whose meanings are all saved does not offer an empty selection", as
   assert.equal(host.querySelectorAll("input[type='checkbox']").length, 0, "nothing left to tick");
   assert.equal(host.querySelectorAll(".sb-sense-saved-mark").length, 2, "each meaning says it is already saved");
   const request = await saveRequest();
-  assert.equal(request.sensePositions, undefined);
+  assert.equal(request.senses, undefined);
 });
 
 test("examples are picked into state, so removing one survives the list re-rendering", async () => {

@@ -1,7 +1,11 @@
 import { ext } from "../common/browser.js";
-import { canWriteSrs, isConnected, loadConfig, onConfigChanged, type Config, type ScanModifier } from "../common/config.js";
-import { loadHostRules, resolveHostMode, type HostRule } from "../common/host-rules.js";
+import { canWriteSrs, isConnected, loadConfig, onConfigChanged, saveConfig, type Config, type ScanModifier } from "../common/config.js";
+import { loadHostRules, matchUrl, normalizePattern, resolveHostMode, type HostRule } from "../common/host-rules.js";
 import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
+
+// The actions that need a word under the pointer, which is every one that is not
+// aimed at the page as a whole.
+type WordAction = Exclude<KeybindAction, "parse" | "highlighting">;
 import { send } from "../common/messages.js";
 import { grade, markKnown, REVIEW_IN_READER, save, type Outcome } from "./actions.js";
 import { observeLazy, parse, setParsingPaused } from "./parser.js";
@@ -12,8 +16,10 @@ import { youTubeCueSource } from "./cues/youtube-cues.js";
 import { startAsbplayer } from "./parsers/asbplayer.js";
 import { startYouTubeCaptions } from "./parsers/youtube.js";
 import { startDynamicReader } from "./parsers/dynamic-reader.js";
-import { dismissPopup, picksForWord, scheduleHide, scheduleShow, scheduleTextLookup, setWriteState, showNow } from "./popup.js";
-import { logicalTextAt, selectionText } from "./dom-text.js";
+import { dismissPopup, picksForWord, scheduleShow, scheduleTextLookup, setCardHost, setPopupOptions, setWriteState, showNow } from "shirabe-sdk/word-card";
+import { extensionHost } from "./card-host.js";
+import { selectionText } from "shirabe-sdk/word-card/dom-text.js";
+import { scanPointer as sdkScan } from "shirabe-sdk/word-card/scan.js";
 import { toast } from "./toast.js";
 import { ensureFurigana } from "./word.js";
 import { installClientReporter } from "../common/client-reporter.js";
@@ -67,6 +73,8 @@ function boot(): void {
   let localDictionaryReady = false;
   const isTopFrame = window === window.top;
 
+  setCardHost(extensionHost);
+
   function apply(config: Config): void {
     current = config;
     scanModifier = config.scanModifier;
@@ -76,9 +84,22 @@ function boot(): void {
     document.documentElement.classList.toggle("sb-furigana-off", config.furiganaMode === "off");
     if (showFurigana) ensureFurigana();
     document.documentElement.dataset.sbPosColoring = config.posColoring;
+    document.documentElement.dataset.sbStateColoring = config.stateColoring;
+    document.documentElement.dataset.sbMarked = markedList(config);
+    applyCustomWordCss(config.customWordCss);
+    markFrequent(config);
     setMetricsOptions({ includesLearning: config.iPlusOneIncludesLearning, frequencyMax: config.iPlusOneFrequencyMax });
     setSentenceAudioEnabled(config.mineSentenceAudio);
     setWriteState({ canWrite: canWriteSrs(config), connected: isConnected(config), languages: config.languages });
+    setPopupOptions({
+      definitionSize: config.definitionSize,
+      lookupDelay: config.lookupDelay,
+      hideDelay: config.popupHideDelay,
+      hideAutomatically: config.popupHideAutomatically,
+      theme: config.theme,
+      audioAutoplay: config.audioAutoplay,
+      customCss: config.customPopupCss,
+    });
 
     const resolution = resolveHostMode(location.href, {
       disabledHosts: config.disabledHosts,
@@ -88,6 +109,8 @@ function boot(): void {
     mode = resolution.mode;
     rule = resolution.rule;
     document.documentElement.classList.toggle("sb-reader-off", mode === "off");
+    const plainHere = config.plainHosts.some((pattern) => matchUrl(normalizePattern(pattern), location.href));
+    document.documentElement.classList.toggle("sb-cues-off", !config.highlighting || plainHere);
 
     if (mode === "off") {
       hovered = null;
@@ -218,65 +241,18 @@ function boot(): void {
     });
   });
 
+  // The scan itself is the SDK's (word-card/scan.ts); what belongs to this
+  // extension is when it may run: not on an off page, not before the local
+  // dictionary can answer, and not unless the reader's scan modifier is held.
   function scanPointer(event: MouseEvent, force = false): void {
     if (mode === "off" || !localDictionaryReady || (!force && !wantPopup(event))) return;
-    const element = event.target as Element | null;
-    if (element?.closest?.(".sb-word, .sb-host, input, textarea, select, [contenteditable='true']")) return;
-    // Anything that isn't Japanese text should let an open scan card go: a
-    // scan target is bare page text, not a `.sb-word`, so the popup's own
-    // pointer-out guard never fires for it and nothing else would close it.
-    const caret = caretAt(event.clientX, event.clientY);
-    if (!caret || caret.node.nodeType !== Node.TEXT_NODE) {
-      scheduleHide();
-      return;
-    }
-    const logical = logicalTextAt(caret.node, caret.offset);
-    const text = logical.text;
-    if (!startsJapanese(text)) {
-      scheduleHide();
-      return;
-    }
-    const range = document.createRange();
-    range.setStart(caret.node, caret.offset);
-    range.setEnd(caret.node, Math.min(caret.offset + 1, caret.node.length));
-    const rect = range.getBoundingClientRect();
-    if (!rect.width && !rect.height) {
-      scheduleHide();
-      return;
-    }
-    const sentence = sentenceAround(logical.context, logical.contextOffset);
-    scheduleTextLookup(text, rect, sentence.text, sentence.targetStart, { node: caret.node, offset: caret.offset });
+    sdkScan(event);
   }
 
   document.addEventListener("pointerup", (event) => {
     if (event.pointerType === "touch") scanPointer(event, true);
   });
 
-  function caretAt(x: number, y: number): { node: Text; offset: number } | null {
-    const doc = document as Document & {
-      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
-      caretRangeFromPoint?: (x: number, y: number) => Range | null;
-    };
-    const position = doc.caretPositionFromPoint?.(x, y);
-    if (position?.offsetNode.nodeType === Node.TEXT_NODE) return { node: position.offsetNode as Text, offset: position.offset };
-    const range = doc.caretRangeFromPoint?.(x, y);
-    return range?.startContainer.nodeType === Node.TEXT_NODE ? { node: range.startContainer as Text, offset: range.startOffset } : null;
-  }
-
-  function startsJapanese(text: string): boolean {
-    return /^[々〇〻\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text);
-  }
-
-  function sentenceAround(text: string, offset: number): { text: string; targetStart: number } {
-    const boundaries = /[。！？!?\n]/;
-    let start = offset;
-    let end = offset;
-    while (start > 0 && !boundaries.test(text[start - 1])) start -= 1;
-    while (end < text.length && !boundaries.test(text[end])) end += 1;
-    const raw = text.slice(start, Math.min(text.length, end + 1));
-    const leading = raw.length - raw.trimStart().length;
-    return { text: raw.trim(), targetStart: Math.max(0, offset - start - leading) };
-  }
 
   // Pressing the scan modifier while already hovering a word reveals it at once,
   // without moving the mouse. No-op in "none" mode.
@@ -290,9 +266,9 @@ function boot(): void {
   });
 
   // ── Rebindable shortcuts ─────────────────────────────────────────────────────
-  // `parse` acts on the page (or selection); the rest act on the hovered word. All
-  // bindings live in config.keybinds and are user-editable in the popup.
-  const WORD_ACTIONS: Record<Exclude<KeybindAction, "parse">, (word: HTMLElement) => Promise<Outcome>> = {
+  // `parse` and `highlighting` act on the page; the rest act on the hovered word.
+  // All bindings live in config.keybinds and are user-editable in the popup.
+  const WORD_ACTIONS: Record<WordAction, (word: HTMLElement) => Promise<Outcome>> = {
     again: (w) => grade(w, 1),
     hard: (w) => grade(w, 2),
     good: (w) => grade(w, 3),
@@ -305,7 +281,7 @@ function boot(): void {
   // A shortcut for a button that isn't there grades a card by accident: the keys
   // leave with the row they belong to (see REVIEW_IN_READER).
   const GRADE_ACTIONS: KeybindAction[] = ["again", "hard", "good", "easy"];
-  const WORD_ACTION_KEYS = (Object.keys(WORD_ACTIONS) as Array<Exclude<KeybindAction, "parse">>)
+  const WORD_ACTION_KEYS = (Object.keys(WORD_ACTIONS) as WordAction[])
     .filter((action) => REVIEW_IN_READER || !GRADE_ACTIONS.includes(action));
 
   window.addEventListener("keydown", (e) => {
@@ -317,6 +293,15 @@ function boot(): void {
     if (mode !== "off" && matchesKeybind(e, keybinds.parse)) {
       e.preventDefault();
       initParse();
+      return;
+    }
+
+    // Highlighting: page-level like parse, and deliberately not gated on an
+    // account. Saved rather than held for the tab, so a page you open next is
+    // as plain as the one you turned it off on.
+    if (matchesKeybind(e, keybinds.highlighting)) {
+      e.preventDefault();
+      void toggleHighlighting();
       return;
     }
 
@@ -337,6 +322,46 @@ function boot(): void {
       }
     }
   });
+
+  // `markedStates` plus the frequency mark, which is not a state but shares the
+  // same "is this worth a mark" question, in one attribute the stylesheet reads
+  // with `~=`.
+  function markedList(config: Config): string {
+    return [...config.markedStates, ...(config.markFrequent ? ["frequent"] : [])].join(" ");
+  }
+
+  // Frequency is on the span already (`data-frequency`), but CSS cannot compare
+  // numbers, so the comparison happens once here and leaves a class behind. Only
+  // words you have no card for: a word you are already learning is not a
+  // recommendation.
+  function markFrequent(config: Config): void {
+    for (const word of document.querySelectorAll<HTMLElement>(".sb-word")) {
+      const rank = Number(word.dataset.frequency);
+      const worth = config.markFrequent && Number.isFinite(rank) && rank <= config.markFrequentMax;
+      word.classList.toggle("sb-frequent", worth && word.dataset.state === "none");
+    }
+  }
+
+  function applyCustomWordCss(css: string): void {
+    let style = document.getElementById("sb-custom-word-css");
+    if (!css) { style?.remove(); return; }
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "sb-custom-word-css";
+      document.documentElement.append(style);
+    }
+    style.textContent = css;
+  }
+
+  // The saved setting is the single source of truth: writing it re-enters
+  // `apply` through onConfigChanged, so the class, the options page and the
+  // action popup all follow from one write.
+  async function toggleHighlighting(): Promise<void> {
+    if (!current) return;
+    const highlighting = !current.highlighting;
+    await saveConfig({ ...current, highlighting });
+    toast(highlighting ? "Highlighting on" : "Highlighting off", true);
+  }
 
   function isTyping(target: EventTarget | null): boolean {
     const el = target as HTMLElement | null;
@@ -427,6 +452,7 @@ function boot(): void {
         observeLazy(el, showFurigana, ruleOptions()); // lazy: parse fresh blocks as they're seen
       }
       refreshMetrics();
+      if (current) markFrequent(current); // freshly parsed spans have no class yet
     }, 350);
   }
 }

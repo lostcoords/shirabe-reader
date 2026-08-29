@@ -1,5 +1,5 @@
 // Extension telemetry, shaped for the shared Grafana Faro receiver
-// (o.shirabe.org/collect: the same collector the web app's RUM ships to).
+// PostHog, which is where every Shirabe surface reports.
 //
 // Privacy is the hard constraint. The extension's promise is local, offline
 // lookup that sends no page text, so telemetry reports failure *shape* only :
@@ -99,6 +99,78 @@ function parseBrowser(userAgent: string): { name: string; version: string; os: s
   const os = /Windows/.test(userAgent) ? "Windows" : /Mac OS X|Macintosh/.test(userAgent) ? "macOS" : /Android/.test(userAgent) ? "Android" : /Linux/.test(userAgent) ? "Linux" : "Unknown";
   const version = userAgent.match(/(?:Firefox|Edg|Chrome)\/(\d+(?:\.\d+)?)/)?.[1] ?? "";
   return { name, version, os, mobile: /Mobile/.test(userAgent), userAgent: scrub(userAgent) };
+}
+
+/** Who is reporting, as every event carries it. */
+export type PostHogIdentity = FaroIdentity & {
+  /** The project's public token. Public by design: it identifies a project to
+      write into and grants nothing to read. */
+  token: string;
+  /** Which of our surfaces this is: the same card and the same signals arrive
+      from the extension, the Anki add-on and the site, and a chart that cannot
+      tell them apart cannot answer "is this broken in Anki". */
+  surface: string;
+  /** Whatever else this surface knows about where it is running. The add-on
+      sends the Anki and Qt versions here, which is the only way to see whether
+      a release broke one of them. */
+  platform?: Record<string, string | number | boolean>;
+};
+
+/**
+ * Build a PostHog capture batch.
+ *
+ * The signals are ours; the shape is theirs. An exception becomes `$exception`
+ * with an `$exception_list`, which is what their error tracking groups issues
+ * on: anything else arrives as an ordinary event nobody can triage.
+ *
+ * `distinct_id` is the surface's own session id, so a reader is a reader across
+ * a service worker's many restarts, and is never anything about the person.
+ */
+export function toPostHogBatch(signals: TelemetrySignal[], identity: PostHogIdentity): object {
+  const common = {
+    distinct_id: identity.sessionId,
+    $lib: `shirabe-${identity.surface}`,
+    $lib_version: identity.appVersion,
+    surface: identity.surface,
+    environment: identity.environment,
+    app_version: identity.appVersion,
+    ...browserProperties(identity.userAgent),
+    ...(identity.platform ?? {}),
+  };
+
+  const batch = signals.map((signal) => {
+    const timestamp = new Date(signal.timestamp).toISOString();
+    if (signal.kind === "exception") {
+      return {
+        event: "$exception",
+        timestamp,
+        properties: {
+          ...common,
+          source: signal.context,
+          // The list form, not the flat `$exception_type` pair: it is what
+          // carries a stack, and a stack is what makes two reports the same
+          // issue rather than two.
+          $exception_list: [{
+            type: signal.type,
+            value: signal.value,
+            mechanism: { handled: true, synthetic: false },
+            stacktrace: { type: "raw", frames: parseFrames(signal.stack).map((frame) => ({ ...frame, in_app: true, lang: "javascript" })) },
+          }],
+        },
+      };
+    }
+    if (signal.kind === "event") {
+      return { event: signal.name, timestamp, properties: { ...common, source: signal.context, ...(signal.attributes ?? {}) } };
+    }
+    return { event: signal.metric, timestamp, properties: { ...common, source: signal.context, value: signal.value } };
+  });
+
+  return { api_key: identity.token, historical_migration: false, batch };
+}
+
+function browserProperties(userAgent: string): Record<string, string | boolean> {
+  const browser = parseBrowser(userAgent);
+  return { $browser: browser.name, $browser_version: browser.version, $os: browser.os, $device_type: browser.mobile ? "Mobile" : "Desktop" };
 }
 
 // Build the Faro ingest payload the receiver accepts. Empty signal arrays are

@@ -13,11 +13,12 @@ for (const target of targets) {
   // Required hosts are first-party Shirabe origins ONLY, listed exhaustively so a
   // new one has to be added here deliberately: shirabe.org (API), cdn.shirabe.org
   // (audio clips the background worker fetches: src/common/audio.ts), and
-  // o. shirabe.org (the RUM collector the web app also ships to:
+  // t.shirabe.org (PostHog, through our own domain rather than
+  // *.i.posthog.com, which content blockers filter by name:
   // src/common/telemetry.ts). Page access stays optional, asserted below.
   assert.deepEqual(
     manifest.host_permissions,
-    ["https://shirabe.org/*", "https://cdn.shirabe.org/*", "https://o.shirabe.org/*"],
+    ["https://shirabe.org/*", "https://cdn.shirabe.org/*", "https://t.shirabe.org/*"],
     `${target} has unexpected required hosts`,
   );
   assert.deepEqual(manifest.optional_host_permissions, ["<all_urls>"], `${target} page access must remain optional`);
@@ -29,6 +30,13 @@ for (const target of targets) {
     if (!textExtensions.has(extname(file))) continue;
     const source = await readFile(file, "utf8");
     assert.doesNotMatch(source, /shirabe\.localhost|127\.0\.0\.1/, `${target} package contains a development origin in ${path}`);
+    // A build made without POSTHOG_PROJECT_TOKEN in the environment ships an
+    // empty token and reports nothing, silently, forever. The absence then
+    // reads as "no crashes", which is the failure this whole migration was
+    // about. Caught here rather than by noticing an empty dashboard.
+    if (path === "background.js") {
+      assert.match(source, /"phc_[A-Za-z0-9_-]{20,}"/, `${target} was built without POSTHOG_PROJECT_TOKEN set`);
+    }
   }
 }
 

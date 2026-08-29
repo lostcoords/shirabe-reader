@@ -31,3 +31,13 @@ export function installClientReporter(context: ClientContext): void {
     forward(event.reason);
   });
 }
+
+
+/**
+ * One event from a content script, forwarded to the worker that owns the
+ * network. A page's CSP stops a content script posting anywhere itself, which
+ * is the same reason exceptions go this way.
+ */
+export function reportEvent(name: string, attributes: Record<string, string>, context: ClientContext = "content"): void {
+  void send({ type: "telemetry", report: { context, signals: [{ kind: "event", name, attributes, context, timestamp: Date.now() }] } });
+}

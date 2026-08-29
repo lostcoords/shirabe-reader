@@ -143,13 +143,34 @@ html:not(.sb-reader-off) :is(
   text-decoration-skip-ink: none;
 }
 
-/* State coloring: a left-to-right cue from "learn this" to "got it". */
-.sb-new { --sb-cue: #0369a1; }
-.sb-learning { --sb-cue: #f59e0b; }
-.sb-due { --sb-cue: #ef4444; }
-.sb-retired { --sb-cue: transparent; }
+/* State coloring: a left-to-right cue from "learn this" to "got it", spent on
+   the underline or on the word's own ink. The two modes don't share a palette,
+   because a hue that reads as a 2px line under a word is not the same hue that
+   reads as the word: the amber underline below is unreadable as text on white. */
+[data-sb-marked~="new"][data-sb-state-coloring="underline"] .sb-word.sb-new { --sb-cue: #0369a1; }
+[data-sb-marked~="learning"][data-sb-state-coloring="underline"] .sb-word.sb-learning { --sb-cue: #f59e0b; }
+[data-sb-marked~="due"][data-sb-state-coloring="underline"] .sb-word.sb-due { --sb-cue: #ef4444; }
+[data-sb-marked~="retired"][data-sb-state-coloring="underline"] .sb-word.sb-retired { --sb-cue: transparent; }
 /* Not yet tracked: a faint dotted hint that it's interactive. */
-.sb-none { --sb-cue: rgba(3, 105, 161, 0.5); --sb-cue-style: dotted; }
+[data-sb-marked~="none"][data-sb-state-coloring="underline"] .sb-word.sb-none:not(.sb-frequent) { --sb-cue: rgba(3, 105, 161, 0.5); --sb-cue-style: dotted; }
+
+/* Tinting the word instead, the way jpd-breader marks a page: one mark per word
+   rather than a line under every one of them. Known words take a colour here
+   that the underline mode spends nothing on, because with no line in play an
+   unpainted word would be indistinguishable from text we never parsed. Untracked
+   words stay in the page's own ink for the same reason in reverse: they are the
+   majority of a new reader's page, and `.sb-word:hover` already says they are
+   live. */
+[data-sb-marked~="new"][data-sb-state-coloring="text"] .sb-word.sb-new { color: #0369a1; }
+[data-sb-marked~="learning"][data-sb-state-coloring="text"] .sb-word.sb-learning { color: #b45309; }
+[data-sb-marked~="due"][data-sb-state-coloring="text"] .sb-word.sb-due { color: #dc2626; }
+[data-sb-marked~="retired"][data-sb-state-coloring="text"] .sb-word.sb-retired { color: #15803d; }
+@media (prefers-color-scheme: dark) {
+  [data-sb-marked~="new"][data-sb-state-coloring="text"] .sb-word.sb-new { color: oklch(72% 0.15 245); }
+  [data-sb-marked~="learning"][data-sb-state-coloring="text"] .sb-word.sb-learning { color: oklch(78% 0.15 75); }
+  [data-sb-marked~="due"][data-sb-state-coloring="text"] .sb-word.sb-due { color: oklch(70% 0.19 25); }
+  [data-sb-marked~="retired"][data-sb-state-coloring="text"] .sb-word.sb-retired { color: oklch(74% 0.17 150); }
+}
 
 /* Part-of-speech colouring: the same groups and hues as the site's phrase
    breakdown (TokensHelper::POS_COLORS), so a word reads the same here as it does
@@ -189,17 +210,41 @@ html:not(.sb-reader-off) :is(
 .sb-word[data-pos="prt"] { --sb-pos: var(--sb-pos-particle); }
 .sb-word[data-pos="cop"], .sb-word[data-pos^="aux"], .sb-word[data-pos="conj"] { --sb-pos: var(--sb-pos-aux); }
 
-/* Tinting the word leaves the cue free, so a page says what a word IS and how well
-   you know it at the same time. */
-[data-sb-pos-coloring="text"] .sb-word[data-pos] { color: var(--sb-pos, inherit); }
-/* Giving the cue to the part of speech takes it from the study state: two
-   meanings can't share one line, and this is the mode that says so. Solid, so a
+/* Part of speech takes a channel only when the study state is not already
+   spending it: two meanings can't share one line or one colour, and how well you
+   know a word outranks what kind of word it is. Selected rather than ordered, so
+   moving these rules can't silently change which signal wins. Solid, so a
    `.sb-none` word doesn't keep the dotted "untracked" line while showing a part
    of speech. */
-[data-sb-pos-coloring="underline"] .sb-word[data-pos] {
+[data-sb-pos-coloring="text"]:not([data-sb-state-coloring="text"]) .sb-word[data-pos] {
+  color: var(--sb-pos, inherit);
+}
+[data-sb-pos-coloring="underline"]:not([data-sb-state-coloring="underline"]) .sb-word[data-pos] {
   --sb-cue: var(--sb-pos, transparent);
   --sb-cue-style: solid;
 }
+
+/* The common words you have no card for. Frequency is a property of the word,
+   not of your memory of it, so it gets its own mark rather than a fifth state
+   colour: a dotted underline in the i+1 blue, under a word whose state cue is
+   the untracked hint it replaces. */
+[data-sb-marked~="frequent"] .sb-word.sb-frequent {
+  --sb-cue: rgba(3, 105, 161, 0.85);
+  --sb-cue-style: dashed;
+}
+
+/* Highlighting off: the page keeps its own ink and loses every mark we paint,
+   while hover, popup, furigana and mining carry on. Distinct from `.sb-reader-off`
+   above, which suspends the reader itself. Both channels are named here rather
+   than left to the mode rules, because a mode that paints `color` outranks an
+   unset variable. */
+.sb-cues-off .sb-word {
+  --sb-cue: transparent !important;
+  color: inherit !important;
+}
+.sb-cues-off .sb-i-plus-one { background: none !important; box-shadow: none !important; }
+.sb-cues-off .sb-word.sb-i-plus-one-word { background-color: transparent; }
+.sb-cues-off .sb-word.sb-i-plus-one-word:hover { background-color: rgba(3, 105, 161, 0.14); }
 
 /* Every piece of our own chrome, hidden for the split second a mined card's
    screenshot is taken (see capturePageScreenshot). It has to be `!important`:
@@ -231,10 +276,14 @@ html:not(.sb-reader-off) :is(
   .sb-word { forced-color-adjust: auto; }
   /* Forced colors replaces our hues with system ones, so state and part of speech
      both collapse to LinkText: the line STYLE is what still separates them. */
-  .sb-new { --sb-cue: LinkText; --sb-cue-style: double; }
-  .sb-learning { --sb-cue: LinkText; --sb-cue-style: dashed; }
-  .sb-due { --sb-cue: LinkText; --sb-cue-style: dotted; }
-  [data-sb-pos-coloring="underline"] .sb-word[data-pos] { --sb-cue: LinkText; --sb-cue-style: solid; }
+  /* Text mode has no colour to spend here, so both modes fall back to the line. */
+  [data-sb-marked~="new"][data-sb-state-coloring="underline"] .sb-word.sb-new,
+  [data-sb-marked~="new"][data-sb-state-coloring="text"] .sb-word.sb-new { --sb-cue: LinkText; --sb-cue-style: double; }
+  [data-sb-marked~="learning"][data-sb-state-coloring="underline"] .sb-word.sb-learning,
+  [data-sb-marked~="learning"][data-sb-state-coloring="text"] .sb-word.sb-learning { --sb-cue: LinkText; --sb-cue-style: dashed; }
+  [data-sb-marked~="due"][data-sb-state-coloring="underline"] .sb-word.sb-due,
+  [data-sb-marked~="due"][data-sb-state-coloring="text"] .sb-word.sb-due { --sb-cue: LinkText; --sb-cue-style: dotted; }
+  [data-sb-pos-coloring="underline"]:not([data-sb-state-coloring="underline"]) .sb-word[data-pos] { --sb-cue: LinkText; --sb-cue-style: solid; }
   /* Forced colors drops background and box-shadow, so the i+1 block cue would
      vanish. An inset outline survives it and still costs no layout: drawn
      inside the border box, it can't merge with the block above either. */

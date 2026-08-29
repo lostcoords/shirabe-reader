@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { hostOnly, parseFrames, scrub, toException, toFaroPayload, MAX_MESSAGE, type FaroIdentity, type TelemetrySignal } from "../src/common/telemetry.js";
+import { hostOnly, parseFrames, scrub, toException, toFaroPayload, toPostHogBatch, MAX_MESSAGE, type FaroIdentity, type PostHogIdentity, type TelemetrySignal } from "../src/common/telemetry.js";
 
 const identity: FaroIdentity = {
   appVersion: "0.2.0",
@@ -86,4 +86,57 @@ test("named failure counters are wired at their choke points", () => {
   // Core-functionality + feature counters at their own sites.
   assert.match(background, /captureMeasurement\("parse_failed", 1\)/);
   assert.match(background, /captureEvent\("audio_fetch_failed"/);
+});
+
+
+const posthogIdentity: PostHogIdentity = {
+  token: "phc_test",
+  surface: "extension",
+  appVersion: "0.2.3",
+  environment: "production",
+  sessionId: "session-1",
+  userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/122.0.0.0 Safari/537.36",
+  platform: { anki_version: "25.09.4" },
+};
+
+type Captured = { api_key: string; batch: Array<{ event: string; properties: Record<string, unknown> }> };
+
+test("an exception arrives as $exception with a stack, which is what groups two reports into one issue", () => {
+  const signals: TelemetrySignal[] = [{
+    kind: "exception", type: "TypeError", value: "x is not a function",
+    stack: "at parse (chrome-extension://abc/content.js:10:5)", context: "content", timestamp: 0,
+  }];
+  const sent = toPostHogBatch(signals, posthogIdentity) as Captured;
+
+  assert.equal(sent.api_key, "phc_test");
+  assert.equal(sent.batch[0]!.event, "$exception");
+  const list = sent.batch[0]!.properties.$exception_list as Array<{ type: string; value: string; stacktrace: { frames: unknown[] } }>;
+  assert.equal(list[0]!.type, "TypeError");
+  assert.ok(list[0]!.stacktrace.frames.length > 0, "without frames PostHog cannot tell two crashes apart");
+});
+
+test("every event says which surface it came from, because they all send the same signals", () => {
+  const signals: TelemetrySignal[] = [{ kind: "event", name: "word_saved", context: "content", timestamp: 0 }];
+  const sent = toPostHogBatch(signals, posthogIdentity) as Captured;
+  const props = sent.batch[0]!.properties;
+
+  assert.equal(sent.batch[0]!.event, "word_saved");
+  assert.equal(props.surface, "extension", "a chart that cannot separate the surfaces cannot answer 'is Anki broken'");
+  assert.equal(props.distinct_id, "session-1");
+  assert.equal(props.app_version, "0.2.3");
+  assert.equal(props.anki_version, "25.09.4", "whatever the surface knows about where it runs rides along");
+});
+
+test("the reader is a session, never a person", () => {
+  const signals: TelemetrySignal[] = [{ kind: "event", name: "x", context: "content", timestamp: 0 }];
+  const props = (toPostHogBatch(signals, posthogIdentity) as Captured).batch[0]!.properties;
+  assert.equal(props.distinct_id, posthogIdentity.sessionId);
+  assert.equal(JSON.stringify(props).includes("@"), false, "no address ever reaches a property");
+});
+
+test("a measurement keeps its own name so it can be charted", () => {
+  const signals: TelemetrySignal[] = [{ kind: "measurement", metric: "lookup_ms", value: 42, context: "background", timestamp: 0 }];
+  const sent = toPostHogBatch(signals, posthogIdentity) as Captured;
+  assert.equal(sent.batch[0]!.event, "lookup_ms");
+  assert.equal(sent.batch[0]!.properties.value, 42);
 });

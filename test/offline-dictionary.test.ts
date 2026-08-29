@@ -170,7 +170,7 @@ const records = [
     frequencies: [{ source: "jiten-global", text: "凄い", reading: "すごい", rank: 800 }],
   },
   // `uk` on a MINOR later sense must not flip the whole entry to kana: the backend
-  // reads `facets.first` (Entry#usually_kana?), so only the primary sense counts.
+  // reads `senses.first` (Entry#usually_kana?), so only the primary sense counts.
   // 表 is ordinarily written in kanji; a secondary "front side" sense tagged uk
   // must leave the kanji headword alone.
   {
@@ -331,7 +331,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   );
 
   // `uk` is read from the PRIMARY sense only, matching the backend's
-  // `facets.first`: a uk tag on a minor later sense must not turn the kanji
+  // `senses.first`: a uk tag on a minor later sense must not turn the kanji
   // headword into kana.
   assert.equal((await lookupOffline("表", ["eng"], "https://shirabe.test"))?.headword, "表",
     "uk on a non-primary sense does not flip the headword to kana");

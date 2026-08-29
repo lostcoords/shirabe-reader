@@ -1,31 +1,14 @@
 import { ext } from "./browser.js";
-import type { Definition, ParsedToken, WordState } from "./types.js";
+import type { Definition, DeckMembership, IntervalPreviews, ParsedToken, StudyDetails, WordState } from "./types.js";
 import type { DictionaryStatus, PackManifest } from "./offline-dictionary.js";
-import type { GlossLanguage } from "./languages.js";
+import type { GlossLanguage } from "shirabe-sdk/word-card/languages.js";
 import type { ClientReport } from "./telemetry.js";
+
+export type { DeckMembership, IntervalPreviews, StudyDetails };
 
 // A grade on Shirabe's 1–4 FSRS scale, matching POST /api/v1/srs/reviews.
 export type Rating = 1 | 2 | 3 | 4;
 export type Deck = { id: number; name: string; visibility: "personal" | "school" };
-export type DeckMembership = { id: number; name: string };
-export type IntervalPreviews = { again: string; hard: string; good: string; easy: string };
-export type StudyDetails = {
-  state: WordState;
-  decks: DeckMembership[];
-  intervals?: IntervalPreviews;
-  /** Shirabe card id: open `/study/cards?card_id=` to view card + mined context. */
-  cardId?: number;
-  /**
-   * How many cards this word holds. A word can carry one per meaning, so `> 1`
-   * means `cardId` reaches only one of them and the word deserves the card
-   * browser filtered by lemma instead of a deep link.
-   */
-  cardCount?: number;
-  /** 0-based sense positions this word already has cards for. */
-  savedSensePositions?: number[];
-  /** A card covers the whole word, so every meaning is already taken. */
-  savedWholeWord?: boolean;
-};
 export type SaveResult = StudyDetails & { created: boolean };
 // Grading returns the card's new state + next-grade previews, but not deck
 // membership (grading a card never changes which decks hold it).
@@ -111,7 +94,7 @@ export type Request =
       // was never looked up (nothing to link to), and the save still succeeds.
       entry?: string;
       // 0-based sense positions to scope the card to (empty/omitted = whole word).
-      sensePositions?: number[];
+      senses?: string[];
       imageDataUrl?: string; audioDataUrl?: string;
       // The full capture form's extras (docs/plans/extension-card-form.md): a deck
       // typed instead of picked, the learner's own fields, every example the card

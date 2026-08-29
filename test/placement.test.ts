@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { placeCard, type Rect } from "../src/content/placement.js";
+import { placeCard, type Rect } from "shirabe-sdk/word-card/placement.js";
 
 const rect = (left: number, top: number, width: number, height: number): Rect =>
   ({ left, top, width, height, right: left + width, bottom: top + height });

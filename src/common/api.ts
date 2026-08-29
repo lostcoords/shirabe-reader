@@ -1,5 +1,5 @@
 import type { Config } from "./config.js";
-import { glossLanguagesFrom, uiLanguagesFrom, type GlossLanguage } from "./languages.js";
+import { glossLanguagesFrom, uiLanguagesFrom, type GlossLanguage } from "shirabe-sdk/word-card/languages.js";
 import type { WordState } from "./types.js";
 import type { Deck, GradeResult, IntervalPreviews, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
 
@@ -48,7 +48,7 @@ type WordStateEntry = {
   decks: Array<{ id: number; name: string }>;
   cardId?: number;
   cardCount?: number;
-  savedSensePositions?: number[];
+  savedSenses?: string[];
   savedWholeWord?: boolean;
   intervals?: IntervalPreviews;
 };
@@ -58,7 +58,7 @@ const studyDetails = (word: WordStateEntry): StudyDetails => ({
   decks: word.decks,
   ...(word.cardId != null ? { cardId: word.cardId } : {}),
   ...(word.cardCount != null ? { cardCount: word.cardCount } : {}),
-  ...(word.savedSensePositions ? { savedSensePositions: word.savedSensePositions } : {}),
+  ...(word.savedSenses ? { savedSenses: word.savedSenses } : {}),
   ...(word.savedWholeWord ? { savedWholeWord: word.savedWholeWord } : {}),
   ...(word.intervals ? { intervals: word.intervals } : {}),
 });
@@ -193,13 +193,13 @@ export class ShirabeApi {
   }
 
   // ── SRS write-back (/api/v1/srs/*, requires a WRITE_SRS key) ────────────────────
-  // Save (or mine) a word as a review card. `sensePositions` scopes the card to a
+  // Save (or mine) a word as a review card. `senses` scopes the card to a
   // subset of the word's senses (empty/omitted = the whole word). Grading is a
   // separate call: see `grade`.
   async save(options: {
     lemma: string; surface?: string; reading?: string; entry?: string; deckId?: number; newDeckName?: string;
     hint?: string; notes?: string; sentence?: SentenceCapture; sentences?: SentenceCapture[];
-    sensePositions?: number[]; imageDataUrl?: string; audioDataUrl?: string;
+    senses?: string[]; imageDataUrl?: string; audioDataUrl?: string;
   }): Promise<SaveResult> {
     const { entry, ...fields } = options;
     const response = await this.post<{ card: { id: number }; created: boolean; word: WordStateEntry }>(

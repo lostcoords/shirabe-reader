@@ -32,6 +32,11 @@ try {
         // ships. Unit tests use the dev list because it exercises the local-dev
         // host rule too; production packages omit only that last entry.
         __SHIRABE_OFF_HOSTS__: JSON.stringify(DEV_OFF_HOSTS),
+        // The telemetry sender reads these at module scope; without them the
+        // bundle carries bare identifiers and the suite dies on the first import.
+        __POSTHOG_HOST__: JSON.stringify("https://posthog.test"),
+        __POSTHOG_TOKEN__: JSON.stringify("phc_test"),
+        __TELEMETRY_ENV__: JSON.stringify("test"),
       },
     });
   }

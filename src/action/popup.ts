@@ -22,6 +22,7 @@ Promise.all([loadConfig(), loadHostRules(), activeTabUrl()]).then(([c, r, url]) 
   $<HTMLSelectElement>("dictionaryLanguages").value = c.languages.join(",");
   $<HTMLSelectElement>("lookupScanModifier").value = c.scanModifier;
   $<HTMLSelectElement>("lookupFuriganaMode").value = c.furiganaMode;
+  $<HTMLSelectElement>("lookupHighlighting").value = c.highlighting ? "on" : "off";
   void renderHostControls();
   void renderPageState();
   // Opening the action is the user's activation gesture. Use its activeTab
@@ -35,6 +36,7 @@ onConfigChanged((next) => {
   $<HTMLSelectElement>("dictionaryLanguages").value = next.languages.join(",");
   $<HTMLSelectElement>("lookupScanModifier").value = next.scanModifier;
   $<HTMLSelectElement>("lookupFuriganaMode").value = next.furiganaMode;
+  $<HTMLSelectElement>("lookupHighlighting").value = next.highlighting ? "on" : "off";
 });
 
 // ── Bottom navigation ────────────────────────────────────────────────────────
@@ -113,6 +115,12 @@ $<HTMLSelectElement>("lookupScanModifier").addEventListener("change", async (eve
   const scanModifier = (event.currentTarget as HTMLSelectElement).value as ScanModifier;
   await patch({ scanModifier });
   status("Popup trigger saved");
+});
+
+$<HTMLSelectElement>("lookupHighlighting").addEventListener("change", async (event) => {
+  const highlighting = (event.currentTarget as HTMLSelectElement).value === "on";
+  await patch({ highlighting });
+  status(highlighting ? "Highlighting on" : "Highlighting off");
 });
 
 $<HTMLSelectElement>("lookupFuriganaMode").addEventListener("change", async (event) => {

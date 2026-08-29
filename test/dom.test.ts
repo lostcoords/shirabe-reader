@@ -152,7 +152,7 @@ test("a surface with real cue times overrides what watching the overlay guessed"
 
 test("logical scanner crosses inline links and ignores native ruby readings", async () => {
   const window = installDom("<p id='line'>食<ruby>漢<rt>しょく</rt></ruby><a>べる</a></p>");
-  const { logicalTextAt } = await import("../src/content/dom-text.js");
+  const { logicalTextAt } = await import("shirabe-sdk/word-card/dom-text.js");
   const first = window.document.querySelector("p")?.firstChild as Text;
   const logical = logicalTextAt(first, 0);
   assert.equal(logical.context, "食漢べる");
@@ -164,14 +164,14 @@ test("logical scanner inserts a boundary between block-level siblings", async ()
   // a block <p>; a naive join glues them into 「日本語。猫」: a word (and sentence)
   // that never existed.
   const window = installDom(`<div id="wrap">日本語。<p id="b">猫</p></div>`);
-  const { logicalTextAt } = await import("../src/content/dom-text.js");
+  const { logicalTextAt } = await import("shirabe-sdk/word-card/dom-text.js");
   const first = window.document.querySelector("#wrap")?.firstChild as Text;
   const logical = logicalTextAt(first, 0);
   assert.equal(logical.context, "日本語。\n猫", "block siblings are separated by a newline, not glued");
 
   // Inline descendants inside one block stay contiguous (the existing contract).
   const inline = installDom(`<p id="line">日本<a>語</a>を<em>読む</em></p>`);
-  const mod = await import("../src/content/dom-text.js");
+  const mod = await import("shirabe-sdk/word-card/dom-text.js");
   const head = inline.document.querySelector("#line")?.firstChild as Text;
   assert.equal(mod.logicalTextAt(head, 0).context, "日本語を読む", "inline links/emphasis do not add boundaries");
 });
@@ -181,7 +181,7 @@ test("a caret in a later block is offset past the newlines inserted before it", 
   // index into the joined context, not into its own text node. Get it wrong and
   // the lookup window reads from the wrong character of the wrong block.
   const window = installDom(`<div id="wrap"><p id="first">日本語。</p>猫が鳴く</div>`);
-  const { logicalTextAt } = await import("../src/content/dom-text.js");
+  const { logicalTextAt } = await import("shirabe-sdk/word-card/dom-text.js");
   const second = window.document.getElementById("wrap")?.lastChild as Text;
   const logical = logicalTextAt(second, 1);
 
@@ -199,7 +199,7 @@ test("scan highlight range snaps to the matched length across inline nodes", asy
   // 食べ<a>られた</a>: a 3-code-unit match from the caret must cover 食べ plus ら
   // (one char into the next inline node), so the highlight lands on the term.
   const window = installDom(`<p id="line">食べ<a>られた</a></p>`);
-  const { rangeFromCaret } = await import("../src/content/dom-text.js");
+  const { rangeFromCaret } = await import("shirabe-sdk/word-card/dom-text.js");
   const head = window.document.querySelector("#line")?.firstChild as Text;
   const range = rangeFromCaret(head, 0, 3);
   assert.equal(range.toString(), "食べら", "range spans exactly 3 code units across the inline boundary");
@@ -603,7 +603,7 @@ test("Japanese Wikipedia fixture scopes logical text to article content", async 
   const rule = resolveHostMode("https://ja.wikipedia.org/wiki/日本語", { disabledHosts: [], rules: BUILTIN_RULES }).rule;
   const root = window.document.querySelector(rule?.parse ?? "body") as HTMLElement;
   const first = root.querySelector("p")?.firstChild as Text;
-  const { logicalTextAt } = await import("../src/content/dom-text.js");
+  const { logicalTextAt } = await import("shirabe-sdk/word-card/dom-text.js");
   assert.equal(logicalTextAt(first, 0).context, "日本語を勉強する。");
   assert.ok(!root.textContent?.includes("辞書ではないナビ"));
 });
@@ -764,7 +764,7 @@ test("a meaning that already has a card is marked saved, not offered again", asy
 
   applyStudyDetails(word, {
     state: "new", decks: [ { id: 1, name: "Saved words" } ], cardId: 15, cardCount: 1,
-    savedSensePositions: [ 0 ],
+    savedSenses: [ 0 ],
   });
   assert.equal(word.dataset.savedSenses, "0");
 

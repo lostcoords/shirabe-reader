@@ -16,7 +16,7 @@ async function selectionOver(html: string, select: (document: Document) => Range
   window.document.body.innerHTML = html;
   Object.assign(globalThis, { window, document: window.document, NodeFilter: window.NodeFilter });
 
-  const { rangeText } = await import("../src/content/dom-text.js");
+  const { rangeText } = await import("shirabe-sdk/word-card/dom-text.js");
   return rangeText(select(window.document as unknown as Document) as unknown as Range);
 }
 

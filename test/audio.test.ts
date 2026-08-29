@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isR2AudioUrl } from "../src/common/audio.js";
+import { isR2AudioUrl } from "shirabe-sdk/word-card/audio.js";
 
 test("only https clips under cdn.shirabe.org/audio/ are fetchable", () => {
   assert.equal(isR2AudioUrl(`https://cdn.shirabe.org/audio/${"a".repeat(64)}.m4a`), true);

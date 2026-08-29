@@ -43,11 +43,15 @@ test("needs-Pro is recognised by code or bare status, and nothing else is", asyn
 
 test("the popup offers plans on a refusal instead of colouring it as an error", async () => {
   const { readFileSync } = await import("node:fs");
-  const popup = readFileSync("src/content/popup.ts", "utf8");
+  const popup = readFileSync("../shirabe-sdk/src/word-card/card.ts", "utf8");
   const actions = readFileSync("src/content/actions.ts", "utf8");
 
   assert.match(actions, /proRequired: true/, "the write actions flag the refusal");
-  assert.match(popup, /pricingUrl\(config\.apiBase, "extension"\)/, "and the popup links plans");
+  // The card asks its host where plans live: a host with no pricing page simply
+  // does not answer, and the link stays inert rather than pointing at ours.
+  const cardHost = readFileSync("src/content/card-host.ts", "utf8");
+  assert.match(popup, /optional\(\)\.pricingUrl\?\.\("extension"\)/, "and the card asks for the plans link");
+  assert.match(cardHost, /pricingUrl\(config\.apiBase, source\)/, "which the extension answers from its own config");
   assert.match(popup, /sb-error", !ok && !proRequired/, "a needs-Pro note is not painted as a failure");
 });
 
@@ -62,8 +66,8 @@ test("every upgrade entry point tags itself, so none of them lands as organic tr
   // funnel can't attribute (the web app tags the same way: pricing_path(source:)).
   // The word card builds its own link; the toolbar popup and the settings page
   // share one account card and declare the tag they mount it with.
-  const wordCard = readFileSync("src/content/popup.ts", "utf8");
-  assert.match(wordCard, /pricingUrl\([^)]*"extension"\)/, "the word card must tag its upgrade link");
+  const wordCard = readFileSync("../shirabe-sdk/src/word-card/card.ts", "utf8");
+  assert.match(wordCard, /pricingUrl\?\.\("extension"\)/, "the word card must tag its upgrade link");
   const accountPanel = readFileSync("src/common/account-panel.ts", "utf8");
   assert.match(accountPanel, /pricingUrl\(apiBase, hooks\.pricingSource\)/, "the shared card must tag through its mount");
   for (const [file, source] of [
@@ -72,7 +76,7 @@ test("every upgrade entry point tags itself, so none of them lands as organic tr
   ] as const) {
     assert.match(readFileSync(file, "utf8"), new RegExp(`pricingSource: "${source}"`), `${file} must declare its source`);
   }
-  for (const file of ["src/content/popup.ts", "src/action/popup.ts", "src/options/options.ts", "src/common/account-panel.ts"]) {
+  for (const file of ["../shirabe-sdk/src/word-card/card.ts", "src/action/popup.ts", "src/options/options.ts", "src/common/account-panel.ts"]) {
     assert.doesNotMatch(readFileSync(file, "utf8"), /\+ "\/pricing"/, `${file} must not hand-build an untagged pricing URL`);
   }
 });
@@ -89,12 +93,21 @@ test("a signed-in free reader is told what's missing, and can act on it", async 
     },
   });
 
-  const { setWriteState, studyUnavailable } = await import("../src/content/popup.js");
+  const { setCardHost, setWriteState, studyUnavailable } = await import("shirabe-sdk/word-card");
+  // The link resolves through the host, which is what a card with no host (an
+  // anonymous Anki card, say) is entitled to leave inert.
+  const { extensionHost } = await import("../src/content/card-host.js");
+  setCardHost(extensionHost);
 
   // Signed in, no Pro: the controls are rightly absent, but what stands in for
   // them has to name the subscription and offer a way to buy it.
   setWriteState({ canWrite: false, connected: true });
   const offered = studyUnavailable();
+  // Not a formality: `studyUnavailable` answers null for a surface that cannot
+  // save at all, which is how an Anki card avoids offering an upgrade that
+  // would not help it. The extension can save, so this reader is exactly who
+  // the line is for and it has to be drawn.
+  assert.ok(offered, "a signed-in free reader on a surface that saves gets the offer");
   await new Promise((resolve) => setTimeout(resolve, 0)); // the href resolves from stored config
   const link = offered.querySelector("a.sb-plans") as HTMLAnchorElement | null;
 
@@ -110,6 +123,7 @@ test("a signed-in free reader is told what's missing, and can act on it", async 
   // Anonymous is a different state: nothing to upgrade yet, so no plans link.
   setWriteState({ canWrite: false, connected: false });
   const anonymous = studyUnavailable();
+  assert.ok(anonymous);
   assert.match(anonymous.textContent ?? "", /Offline lookup/);
   assert.equal(anonymous.querySelector("a.sb-plans"), null);
 });

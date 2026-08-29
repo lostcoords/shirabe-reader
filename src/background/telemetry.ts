@@ -1,10 +1,10 @@
 import { ext } from "../common/browser.js";
 import {
   toException,
-  toFaroPayload,
+  toPostHogBatch,
   type ClientContext,
   type ClientReport,
-  type FaroIdentity,
+  type PostHogIdentity,
   type SignalContext,
   type TelemetryEvent,
   type TelemetryMeasurement,
@@ -12,11 +12,16 @@ import {
 } from "../common/telemetry.js";
 
 // The only context allowed to touch the network: content scripts and the popup
-// forward their signals here (they can't reach the collector under a page CSP,
-// and only the background holds the o.shirabe.org host permission that bypasses
-// CORS). Signals are batched and POSTed to the Faro receiver as one payload.
+// forward their signals here, because they cannot reach a collector under a
+// page's CSP and only the background holds the host permission that bypasses
+// CORS. Signals are batched and POSTed as one capture request.
+//
+// PostHog rather than the self-hosted collector, which is where every other
+// surface already reports. The site moved on 2026-08-22 and this did not, so
+// until now the extension's crashes landed somewhere nothing else looked.
 
-declare const __FARO_URL__: string;
+declare const __POSTHOG_HOST__: string;
+declare const __POSTHOG_TOKEN__: string;
 declare const __TELEMETRY_ENV__: string;
 declare const __EXTENSION_VERSION__: string;
 
@@ -54,8 +59,10 @@ function loadSession(): Promise<string> {
   return sessionLoad;
 }
 
-function identity(): FaroIdentity {
+function identity(): PostHogIdentity {
   return {
+    token: __POSTHOG_TOKEN__,
+    surface: "extension",
     appVersion: __EXTENSION_VERSION__,
     environment: __TELEMETRY_ENV__,
     sessionId,
@@ -95,10 +102,10 @@ async function flush(): Promise<void> {
   sessionId = await loadSession(); // resolve the stable id before tagging the batch
   const batch = queue.splice(0, queue.length);
   try {
-    await fetch(__FARO_URL__, {
+    await fetch(`${__POSTHOG_HOST__}/batch/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(toFaroPayload(batch, identity())),
+      body: JSON.stringify(toPostHogBatch(batch, identity())),
       keepalive: true, // best-effort delivery even as the service worker suspends
     });
   } catch {

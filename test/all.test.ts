@@ -4,6 +4,7 @@ import "./audio.test.js";
 import "./offline-dictionary.test.js";
 import "./dom.test.js";
 import "./host-rules.test.js";
+import "./presets.test.js";
 import "./placement.test.js";
 import "./content-render.test.js";
 import "./card-form.test.js";

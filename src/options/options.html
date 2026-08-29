@@ -18,6 +18,7 @@
         <a href="#dictionary">Dictionary</a>
         <a href="#account">Account</a>
         <a href="#keyboard">Keyboard shortcuts</a>
+        <a href="#advanced">Advanced</a>
       </nav>
 
       <article class="settings-content">
@@ -30,14 +31,61 @@
             <label>Open popup on hover<select id="scanModifier"><option value="none">Always</option><option value="alt">Hold Alt / Option</option><option value="ctrl">Hold Ctrl</option><option value="shift">Hold Shift</option><option value="meta">Hold ⌘ Cmd</option></select></label>
             <label>Definition language<select id="languages"><option value="eng">English</option><option value="spa">Español</option><option value="spa,eng">Español, then English</option><option value="eng,spa">English, then Español</option></select></label>
             <label>Furigana<select id="furiganaMode"><option value="all">All words</option><option value="unknown">Unknown words</option><option value="hover">On hover</option><option value="off">Off</option></select></label>
+            <label>Highlighting preset<select id="colorPreset"></select></label>
+            <label>Word state colors<select id="stateColoring"><option value="underline">Color the underline</option><option value="text">Color the word</option><option value="off">Off</option></select></label>
             <label>Part-of-speech colors<select id="posColoring"><option value="off">Off</option><option value="text">Color the word</option><option value="underline">Color the underline</option></select></label>
+            <label>Definition size<select id="definitionSize"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+            <label>Theme<select id="theme"><option value="system">Follow the system</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+            <label>Pronunciation voice<select id="audioVoice"><option value="male">Male</option><option value="female">Female</option></select></label>
+            <label class="frequency-field">Popup opens after (ms)<input id="lookupDelay" type="number" min="0" max="2000" step="10" /></label>
+            <label class="frequency-field">Popup closes after (ms)<input id="popupHideDelay" type="number" min="0" max="5000" step="50" /></label>
             <label class="frequency-field">i+1 maximum frequency rank<input id="iPlusOneFrequencyMax" type="number" min="1" max="1000000" step="1000" /></label>
+            <label class="frequency-field">Mark common words up to rank<input id="markFrequentMax" type="number" min="1" max="1000000" step="1000" /></label>
+            <fieldset class="marked-states">
+              <legend>Mark these words</legend>
+              <label class="check-row"><input id="marked-none" type="checkbox" data-state="none" /><span>Not saved yet</span></label>
+              <label class="check-row"><input id="marked-new" type="checkbox" data-state="new" /><span>New</span></label>
+              <label class="check-row"><input id="marked-learning" type="checkbox" data-state="learning" /><span>Learning</span></label>
+              <label class="check-row"><input id="marked-due" type="checkbox" data-state="due" /><span>Due</span></label>
+              <label class="check-row"><input id="marked-retired" type="checkbox" data-state="retired" /><span>Known</span></label>
+            </fieldset>
             <div class="check-stack">
+              <label class="check-row"><input id="highlighting" type="checkbox" /><span>Show highlighting on the page (lookup and mining keep working without it)</span></label>
               <label class="check-row"><input id="iPlusOneIncludesLearning" type="checkbox" /><span>Count learning words as known for i+1</span></label>
               <label class="check-row"><input id="mineSentenceAudio" type="checkbox" /><span>Record the spoken line when mining a subtitle (replays it)</span></label>
+              <label class="check-row"><input id="markFrequent" type="checkbox" /><span>Mark the most common words you have not saved yet</span></label>
+              <label class="check-row"><input id="popupHideAutomatically" type="checkbox" /><span>Close the popup when the pointer leaves it (off keeps it open until you click away or press Escape)</span></label>
+              <label class="check-row"><input id="audioAutoplay" type="checkbox" /><span>Play pronunciation automatically when a word opens</span></label>
               <label class="check-row"><input id="errorReports" type="checkbox" /><span>Send error reports (what broke and where in our code, never the page you were on)</span></label>
             </div>
           </form>
+        </section>
+
+        <section id="advanced" class="card">
+          <div class="section-title">
+            <h2>Advanced</h2>
+            <p>Sites that stay plain, your own CSS, and a copy of these settings.</p>
+          </div>
+          <form id="advancedPrefs" class="prefs-grid">
+            <label class="stacked">Sites that stay plain
+              <span class="field-hint">One host or pattern per line. Lookup keeps working; the page keeps its own ink.</span>
+              <textarea id="plainHosts" rows="3" spellcheck="false"></textarea>
+            </label>
+            <label class="stacked">Your CSS for words on the page
+              <span class="field-hint">Applied after ours. <code>.sb-word</code> is a word, <code>.sb-new</code> / <code>.sb-due</code> / <code>.sb-retired</code> its state.</span>
+              <textarea id="customWordCss" rows="4" spellcheck="false"></textarea>
+            </label>
+            <label class="stacked">Your CSS for the lookup popup
+              <span class="field-hint">Applied inside the popup. <code>.sb-popup</code> is the card.</span>
+              <textarea id="customPopupCss" rows="4" spellcheck="false"></textarea>
+            </label>
+          </form>
+          <div class="settings-io">
+            <button id="exportSettings" class="ghost" type="button">Export settings</button>
+            <button id="importSettings" class="ghost" type="button">Import settings</button>
+            <input id="importSettingsFile" type="file" accept="application/json" hidden />
+          </div>
+          <p class="muted">Export writes a JSON file of your preferences. Your sign-in is never in it, so importing on another machine does not carry your account across.</p>
         </section>
 
         <section id="dictionary" class="card">

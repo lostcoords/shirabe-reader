@@ -1,7 +1,7 @@
 import { convertVariants } from "kanji-processor";
 import { deinflect, inflectionLabel, posConditionFlags } from "./deinflect.js";
 import { posChips, tagChips } from "./jmdict-tags.js";
-import { GLOSS_TAGS, withEnglishFallback, type GlossLanguage } from "./languages.js";
+import { GLOSS_TAGS, withEnglishFallback, type GlossLanguage } from "shirabe-sdk/word-card/languages.js";
 import type { Definition, GlossRow, ParsedToken, Sense, SenseXref, TokenCandidate } from "./types.js";
 import { sha256 as createSha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -410,13 +410,13 @@ export async function removeDictionary(): Promise<void> {
   void clearInstallSnapshot();
 }
 
-export async function lookupOffline(query: string, languages: readonly GlossLanguage[], apiBase: string): Promise<Definition | null> {
+export async function lookupOffline(query: string, languages: readonly GlossLanguage[], apiBase: string, voice?: string): Promise<Definition | null> {
   const source = normalize(query).slice(0, MAX_SCAN_CHARS);
   if (!source) return null;
   const db = await openDatabase();
   const generation = await activeGeneration(db);
   if (!generation) throw new DictionaryNotInstalledError("look up words");
-  return forPopup(db, generation, await lookupInDatabase(db, generation, source, languages, apiBase), languages);
+  return forPopup(db, generation, await lookupInDatabase(db, generation, source, languages, apiBase), languages, voice);
 }
 
 // One named entry, for a reader who PICKED it. Everything else in this file
@@ -429,7 +429,7 @@ export async function lookupOffline(query: string, languages: readonly GlossLang
 // than a re-parse. `surface` is the span they tapped, kept because sense
 // restrictions are keyed on the spelling in front of them.
 export async function lookupEntryOffline(
-  entry: string, surface: string, languages: readonly GlossLanguage[], apiBase: string,
+  entry: string, surface: string, languages: readonly GlossLanguage[], apiBase: string, voice?: string,
 ): Promise<Definition | null> {
   const db = await openDatabase();
   const generation = await activeGeneration(db);
@@ -445,7 +445,7 @@ export async function lookupEntryOffline(
     prefixLength: [...matched].length,
     surface: matched,
   };
-  return forPopup(db, generation, termDefinition(hit, languages, apiBase), languages);
+  return forPopup(db, generation, termDefinition(hit, languages, apiBase), languages, voice);
 }
 
 export async function parseOffline(text: string, languages: readonly GlossLanguage[], apiBase: string): Promise<ParsedToken[]> {
@@ -1511,10 +1511,10 @@ function displayHeadword(hit: LookupHit, reading: string | null): string {
 // WordCard/Entry#usually_kana?: JMdict `uk`, or every kanji writing is rare
 // (rK/oK), or the word is kana-only. Such a word's kana IS its normal spelling.
 function isUsuallyKana(term: Stored<OfflineTerm>): boolean {
-  // Primary sense only: the backend reads `facets.first` (Entry#usually_kana?),
-  // not "any facet", so a `uk` annotation on a minor later sense must not flip the
-  // whole entry to kana. The pack writes senses in facet order, so senses[0] is
-  // that primary facet (the exporter drops only facets with no glosses at all).
+  // Primary sense only: the backend reads `senses.first` (Entry#usually_kana?),
+  // not "any sense", so a `uk` annotation on a minor later sense must not flip the
+  // whole entry to kana. The pack writes senses in sense order, so senses[0] is
+  // that primary sense (the exporter drops only senses with no glosses at all).
   if (term.senses[0]?.misc.includes("uk")) return true;
   const kanjiForms = term.expressions.filter((expression) => expression.script !== "kana");
   if (!kanjiForms.length) return true;
@@ -1978,24 +1978,24 @@ async function clipUrl(recipe: PackManifest["audio"], reading: string, downstep:
 // Page parsing builds a definition per token and keeps neither, so doing this
 // there would be thousands of digests and reads thrown away per page.
 async function forPopup(
-  db: IDBDatabase, generation: string, definition: PendingDefinition | null, languages: readonly GlossLanguage[],
+  db: IDBDatabase, generation: string, definition: PendingDefinition | null, languages: readonly GlossLanguage[], voice?: string,
 ): Promise<Definition | null> {
   if (!definition) return null;
   const [pitch, examples] = await Promise.all([
-    clipUrlsFor(db, definition),
+    clipUrlsFor(db, definition, voice),
     examplesFor(db, generation, definition, languages),
   ]);
   const { exampleIds: _ids, ...rest } = definition;
   return { ...rest, pitch, examples };
 }
 
-async function clipUrlsFor(db: IDBDatabase, definition: PendingDefinition): Promise<Definition["pitch"]> {
+async function clipUrlsFor(db: IDBDatabase, definition: PendingDefinition, voice?: string): Promise<Definition["pitch"]> {
   const reading = definition.reading;
   if (!definition.pitch.length || !reading) return definition.pitch;
   const recipe = await audioRecipe(db);
   if (!recipe) return definition.pitch;
   return Promise.all(definition.pitch.map(async (pattern) => (
-    { ...pattern, audioUrl: await clipUrl(recipe, reading, pattern.downstep) }
+    { ...pattern, audioUrl: await clipUrl(recipe, reading, pattern.downstep, voice) }
   )));
 }
 

@@ -1,7 +1,7 @@
 import { ApiError, ShirabeApi, type Tokens } from "../common/api.js";
 import { ext, usesPromiseMessageResponses } from "../common/browser.js";
 import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config } from "../common/config.js";
-import { isR2AudioUrl } from "../common/audio.js";
+import { isR2AudioUrl } from "shirabe-sdk/word-card/audio.js";
 import { normalizePattern, refreshRemoteHostRules } from "../common/host-rules.js";
 import { cancelDictionaryInstall, checkDictionaryUpdate, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupEntryOffline, lookupKanjiOffline, lookupOffline, parseOffline, removeDictionary, resumeInterruptedDictionaryInstall } from "../common/offline-dictionary.js";
 import type { Deck, Failure, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
@@ -15,6 +15,14 @@ let config: Config = DEFAULTS;
 let api: ShirabeApi;
 installBackgroundErrorHandlers();
 installDevReload();
+
+// Installs and upgrades, which is the one number a store dashboard reports and
+// nothing else can: how many people took a given version, and how quickly. It
+// fires once per event rather than per startup, so it counts what it says.
+ext.runtime.onInstalled?.addListener(({ reason }) => {
+  if (reason !== "install" && reason !== "update") return;
+  captureEvent("extension_installed", { reason });
+});
 const ready = initializeBackground();
 
 async function initializeBackground(): Promise<void> {
@@ -200,7 +208,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
         const definition = await lookupCache.fetch(`${kind}:${config.languages.join(",")}:${request.query}`, async () => (
           kind === "kanji"
             ? lookupKanjiOffline(request.query, config.languages, config.apiBase)
-            : lookupOffline(request.query, config.languages, config.apiBase)
+            : lookupOffline(request.query, config.languages, config.apiBase, config.audioVoice)
         ));
         return { ok: true, type: "lookup", definition };
       } catch (error) {
@@ -216,7 +224,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       try {
         const definition = await lookupCache.fetch(
           `entry:${config.languages.join(",")}:${request.entry}:${request.surface}`,
-          async () => lookupEntryOffline(request.entry, request.surface, config.languages, config.apiBase),
+          async () => lookupEntryOffline(request.entry, request.surface, config.languages, config.apiBase, config.audioVoice),
         );
         return { ok: true, type: "lookupEntry", definition };
       } catch (error) {

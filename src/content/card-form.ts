@@ -1,7 +1,7 @@
 import { send } from "../common/messages.js";
 import type { SentenceCapture } from "../common/messages.js";
 import type { Definition } from "../common/types.js";
-import { senseText } from "../common/senses.js";
+import { senseText } from "shirabe-sdk/word-card/senses.js";
 
 // The full capture form: the extension's front door to the same Card the web
 // app's save modal and new-card page build (docs/specs/srs.md §1.0, and
@@ -265,7 +265,11 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
   submit.addEventListener("click", async () => {
     submit.disabled = true;
     feedback.textContent = "Saving…";
-    const ticked = senseBoxes.filter((box) => box.checked).map((box) => Number(box.dataset.position));
+    // The pack this extension ships is JMdict only, so a checkbox's position is
+    // JMdict's own sense number and the ref it qualifies to names that one book.
+    const ticked = senseBoxes
+      .filter((box) => box.checked)
+      .map((box) => `jmdict#${Number(box.dataset.position)}`);
     // Ticking every meaning is the whole word, and so is ticking none: but an
     // all-covered word must not send an empty pick, which would build a second
     // whole-word card rather than the nothing the learner intended.
@@ -286,7 +290,7 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
       ...(newDeckName.hidden || !newDeckName.value.trim()
         ? deckSelect.value ? { deckId: Number(deckSelect.value) } : {}
         : { newDeckName: newDeckName.value.trim() }),
-      ...(scoped ? { sensePositions: ticked } : {}),
+      ...(scoped ? { senses: ticked } : {}),
       ...(sentences.length ? { sentences } : {}),
       hint: hint.value.trim(),
       notes: notes.value.trim(),

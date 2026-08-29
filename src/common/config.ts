@@ -1,8 +1,10 @@
 import { ext } from "./browser.js";
 import { DEFAULT_KEYBINDS, type Keybind, type KeybindAction } from "./keybind.js";
-import type { GlossLanguage } from "./languages.js";
+import type { GlossLanguage } from "shirabe-sdk/word-card/languages.js";
+import type { ColorPreset } from "./presets.js";
+import type { WordState } from "./types.js";
 
-export type { GlossLanguage };
+export type { ColorPreset, GlossLanguage };
 
 // Injected at build time by build.mjs (esbuild `define`): the default API host :
 // https://shirabe.localhost for dev/watch builds, https://shirabe.org for shipped
@@ -14,11 +16,27 @@ declare const __DEFAULT_API_BASE__: string;
 // Ctrl / Shift / Meta so casual reading isn't interrupted.
 export type ScanModifier = "none" | "alt" | "ctrl" | "shift" | "meta";
 export type FuriganaMode = "all" | "unknown" | "hover" | "off";
-// How (and whether) a word's part of speech is coloured, using the site's own
-// groups and hues. "text" tints the word itself, which leaves the state underline
-// free to keep saying how well you know it; "underline" gives the underline to the
-// part of speech instead, so it replaces the state cue rather than fighting it.
+// A word carries two independent signals, and the page has two channels to spend
+// them on: the underline and the word's own ink. Each signal picks a channel or
+// stays off, and the state signal wins a channel they both ask for.
 export type PosColoring = "off" | "text" | "underline";
+export type StateColoring = "off" | "text" | "underline";
+
+// Our own chrome follows the OS unless told otherwise. A page that opposes the
+// OS is the case this exists for: the popup can end up the one light surface on
+// a dark screen, or the reverse.
+export type Theme = "system" | "light" | "dark";
+
+// The voices the pack ships clips for (Audio::Voice::ALL), and the same choice
+// the site persists in Prefs#voice. Adding one here without generating its
+// corpus gives every play button a 404, so this list follows the pack.
+export type AudioVoice = "male" | "female";
+
+// How big the definitions print. A separate decision from the browser's own zoom
+// because it is the CARD that changed: a monolingual pack writes paragraphs where
+// a bilingual one wrote a phrase.
+export type DefinitionSize = "small" | "medium" | "large";
+
 
 // User settings, persisted in extension-local storage. The OAuth tokens are the
 // only secrets; everything else is a preference. Read/written from the
@@ -46,8 +64,43 @@ export type Config = {
   disabledHosts: string[]; // domains/patterns where the reader is turned off entirely
   preferredDeckId: number | null; // connected mining target; null uses the server default
   posColoring: PosColoring;
+  stateColoring: StateColoring;
+  // Which states are worth a mark at all. A state left out paints nothing, which
+  // is how a reader who only wants to see due words gets a page that says so.
+  markedStates: WordState[];
+  // The named bundle the colour settings above last matched, or "custom" once
+  // they have been edited by hand. Applying one writes the fields; nothing reads
+  // this back, so a preset can never disagree with what is actually painted.
+  colorPreset: ColorPreset;
+  theme: Theme;
+  definitionSize: DefinitionSize;
+  // Every mark we paint on the page, in one switch: the colours above, plus the
+  // i+1 block and word cues. Off leaves lookup, mining and furigana working on a
+  // page that looks untouched, which is the state you want a screenshot or a
+  // second reading of a paragraph in.
+  highlighting: boolean;
   iPlusOneIncludesLearning: boolean;
   iPlusOneFrequencyMax: number;
+  // Mark the most common words you have no card for, so a page shows what it is
+  // worth learning first rather than every gap at once.
+  markFrequent: boolean;
+  markFrequentMax: number;
+  // How long the pointer must rest on a word before the popup opens, and how
+  // long it may leave before the popup closes. The second is grace to cross the
+  // gap onto the card, so it is not the same number as the first.
+  lookupDelay: number;
+  popupHideDelay: number;
+  popupHideAutomatically: boolean;
+  audioAutoplay: boolean;
+  audioVoice: AudioVoice;
+  // Hosts where the page keeps its own ink. Distinct from `disabledHosts`, which
+  // turns the reader off entirely.
+  plainHosts: string[];
+  // Advanced: appended to our own stylesheets, last, so a rule with equal
+  // specificity wins. Unparsed and unvalidated by us on purpose: it is the
+  // reader's own CSS, applied to their own pages.
+  customWordCss: string;
+  customPopupCss: string;
   // Record the spoken line when mining a subtitle. It replays the cue to do it
   // (see content/sentence-audio.ts), so it's worth being able to turn off.
   mineSentenceAudio: boolean;
@@ -74,9 +127,25 @@ export const DEFAULTS: Config = {
   enabledHosts: [],
   disabledHosts: [],
   preferredDeckId: null,
-  posColoring: "underline",
+  posColoring: "off",
+  stateColoring: "underline",
+  markedStates: ["none", "new", "learning", "due"],
+  colorPreset: "state",
+  theme: "system",
+  definitionSize: "medium",
+  highlighting: true,
   iPlusOneIncludesLearning: true,
   iPlusOneFrequencyMax: 10_000,
+  markFrequent: false,
+  markFrequentMax: 10_000,
+  lookupDelay: 180,
+  popupHideDelay: 250,
+  popupHideAutomatically: true,
+  audioAutoplay: false,
+  audioVoice: "male",
+  plainHosts: [],
+  customWordCss: "",
+  customPopupCss: "",
   mineSentenceAudio: true,
   errorReports: true,
 };

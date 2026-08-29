@@ -117,6 +117,10 @@ const buildOptions = {
   ),
   outdir,
   bundle: true,
+  // shirabe-sdk lives beside this project in the repository and is bundled from
+  // source: no install step and no version to bump while the extension is its
+  // only consumer (docs/plans/word-card-library.md).
+  alias: { "shirabe-sdk": join(root, "../shirabe-sdk/src") },
   format: "iife",
   target: ["firefox115", "chrome110"],
   sourcemap: watch ? "inline" : false,
@@ -139,7 +143,13 @@ const buildOptions = {
     // provisioned for this. Watch builds report tagged "development" so dev
     // noise stays filterable, exactly like the web's DEPLOYMENT_ENV-tagged
     // environment.
-    __FARO_URL__: JSON.stringify("https://o.shirabe.org/collect"),
+    // PostHog through our own domain, the same host `POSTHOG_HOST` names in
+    // production. Not `*.i.posthog.com` directly: content blockers filter that
+    // by name, and a report that is silently swallowed is worse than none,
+    // because the absence reads as "no crashes". The project token is public by
+    // design: it names a project to write into and reads nothing.
+    __POSTHOG_HOST__: JSON.stringify("https://t.shirabe.org"),
+    __POSTHOG_TOKEN__: JSON.stringify(process.env.POSTHOG_PROJECT_TOKEN ?? ""),
     __TELEMETRY_ENV__: JSON.stringify(watch ? "development" : "production"),
     // Empty everywhere else, so the self-reload client compiles down to nothing.
     __DEV_RELOAD_URL__: JSON.stringify(devReload ? reloadUrl : ""),

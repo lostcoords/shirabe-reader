@@ -90,6 +90,15 @@ textarea { resize: vertical; font-size: 12px; }
 .prefs-grid > label { display: grid; gap: 5px; }
 .frequency-field { align-content: start; }
 .check-stack { display: flex; flex-direction: column; justify-content: center; gap: 9px; }
+/* The state list and the free-text fields each want the full row: a column of
+   checkboxes squeezed into half a grid track wraps its labels onto two lines. */
+.marked-states, .stacked, .settings-io { grid-column: 1 / -1; }
+.marked-states { display: flex; flex-wrap: wrap; gap: 9px 18px; margin: 0; border: 1px solid var(--outline); border-radius: 12px; padding: 12px 14px; }
+.marked-states legend { padding: 0 6px; font-size: 12px; font-weight: 600; }
+.stacked { display: grid; gap: 5px; }
+.field-hint { color: var(--ink-subtle); font-size: 12px; }
+.stacked textarea { border: 1px solid var(--outline); border-radius: 10px; padding: 9px 11px; background: var(--surface); color: var(--ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; resize: vertical; }
+.settings-io { display: flex; gap: 9px; margin-top: 14px; }
 .check-row { display: grid; grid-template-columns: 18px 1fr; align-items: start; gap: 8px; font-weight: 500; }
 input[type="checkbox"] { width: 17px; height: 17px; margin: 1px 0 0; accent-color: var(--primary); }
 
