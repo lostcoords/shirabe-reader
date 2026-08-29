@@ -60,9 +60,9 @@ const markedBoxes = [...document.querySelectorAll<HTMLInputElement>(".marked-sta
 // "Custom" is only ever a description of where the four fields have ended up, so
 // it is offered only once they are somewhere no preset describes.
 function renderPresetOptions(current: ColorPreset): void {
-  const options = PRESET_IDS.map((id) => `<option value="${id}">${PRESETS[id].label}</option>`);
-  if (current === "custom") options.push(`<option value="custom">Custom</option>`);
-  prefs.colorPreset.innerHTML = options.join("");
+  const options = PRESET_IDS.map((id) => new Option(PRESETS[id].label, id));
+  if (current === "custom") options.push(new Option("Custom", "custom"));
+  prefs.colorPreset.replaceChildren(...options);
   prefs.colorPreset.value = current;
 }
 
