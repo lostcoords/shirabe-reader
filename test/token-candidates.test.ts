@@ -165,10 +165,8 @@ test("a picked word is fetched by its handle, not looked up again", async () => 
     "the definition comes back whole, so the popup renders a pick like any other word");
 });
 
-// An entry the pack does not carry answers nothing rather than falling back to
-// the spelling: a stale handle must not quietly show a different word.
-test("a handle the pack does not carry answers nothing", async () => {
+test("a handle the pack does not carry reports unavailable without substituting its spelling", async () => {
   await install([ term("jmdict:1522150", "本", "本", "ほん", "book") ]);
 
-  assert.equal(await lookupEntryOffline("jmdict:9999999", "本", [ "eng" ], HOST), null);
+  await assert.rejects(lookupEntryOffline("jmdict:9999999", "本", [ "eng" ], HOST), /Not available in this dictionary/);
 });

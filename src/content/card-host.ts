@@ -3,6 +3,7 @@ import { sendDictionary } from "../common/dictionary-port.js";
 import { send } from "../common/messages.js";
 import type { StudyDetails } from "../common/types.js";
 import type { Rating, WordCardHost } from "shirabe-sdk/word-card";
+import type { LookupResult } from "shirabe-sdk/word-card/host.js";
 import { applyStudyDetails, captureFor, grade, markKnown, REVIEW_IN_READER, save, setScanOrigin, studyUrlForWord } from "./actions.js";
 import { renderCardForm } from "./card-form.js";
 import { candidatesFor } from "./word.js";
@@ -15,6 +16,13 @@ import { reportEvent } from "../common/client-reporter.js";
 const stringify = (detail?: Record<string, string | number | boolean>): Record<string, string> =>
   Object.fromEntries(Object.entries(detail ?? {}).map(([key, value]) => [key, String(value)]));
 
+async function unavailable(query: string, message: string, entry?: string): Promise<LookupResult> {
+  const config = await loadConfig();
+  const url = new URL(`/en/${entry ? "word" : "search"}/${encodeURIComponent(query)}`, config.apiBase);
+  if (entry) url.searchParams.set("entry", entry);
+  return { status: "unavailable", message, action: { label: `Search online: ${query}`, url: url.href } };
+}
+
 // ── The extension's implementation ───────────────────────────────────────────
 // Everything below is what makes this extension a host: a local pack behind a
 // worker, an account, and a page underneath with its own metrics and toasts. A
@@ -26,6 +34,7 @@ export const extensionHost: WordCardHost = {
     // the cursor and takes the longest match from it, which is the cutting a
     // host over the API has to ask the server to do first.
     const res = await send({ type: "lookup", query, kind: kind === "kanji" ? "kanji" : "word" });
+    if (!res.ok && res.code === "OFFLINE_LOOKUP_UNAVAILABLE") return unavailable(query, res.error);
     if (!res.ok) return { status: "failed", message: res.error };
     // The pack is still arriving. The card is told to wait and told what to say;
     // it is never told that a pack is the reason.
@@ -37,6 +46,7 @@ export const extensionHost: WordCardHost = {
 
   async lookupEntry(entry, surface) {
     const res = await send({ type: "lookupEntry", entry, surface });
+    if (!res.ok && res.code === "OFFLINE_LOOKUP_UNAVAILABLE") return unavailable(surface, res.error, entry);
     return res.ok ? { status: "found", definition: res.definition } : { status: "failed", message: res.error };
   },
 

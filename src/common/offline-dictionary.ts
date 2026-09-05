@@ -80,6 +80,13 @@ export class DictionaryNotInstalledError extends Error {
   }
 }
 
+export class OfflineLookupUnavailableError extends Error {
+  constructor(readonly reason: "meaning" | "entry") {
+    super(reason === "meaning" ? "Meaning search is available online." : "Not available in this dictionary.");
+    this.name = "OfflineLookupUnavailableError";
+  }
+}
+
 type OfflineSense = {
   glosses: Record<string, string[]>;
   partsOfSpeech: string[];
@@ -411,12 +418,19 @@ export async function removeDictionary(): Promise<void> {
 }
 
 export async function lookupOffline(query: string, languages: readonly GlossLanguage[], apiBase: string, voice?: string): Promise<Definition | null> {
-  const source = normalize(query).slice(0, MAX_SCAN_CHARS);
+  const normalized = normalize(query);
+  const latin = /\p{Script=Latin}/u.test(normalized) && !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(normalized);
+  const source = normalized.slice(0, MAX_SCAN_CHARS);
   if (!source) return null;
   const db = await openDatabase();
   const generation = await activeGeneration(db);
   if (!generation) throw new DictionaryNotInstalledError("look up words");
-  return forPopup(db, generation, await lookupInDatabase(db, generation, source, languages, apiBase), languages, voice);
+  if (latin && source !== normalized) throw new OfflineLookupUnavailableError("meaning");
+  const found = await lookupInDatabase(db, generation, source, languages, apiBase, false, latin);
+  if (!found && latin) {
+    throw new OfflineLookupUnavailableError("meaning");
+  }
+  return forPopup(db, generation, found, languages, voice);
 }
 
 // One named entry, for a reader who PICKED it. Everything else in this file
@@ -436,7 +450,7 @@ export async function lookupEntryOffline(
   if (!generation) throw new DictionaryNotInstalledError("look up words");
 
   const term = await getByPk<Stored<OfflineTerm>>(db, "terms", `${generation}\0${entry}`);
-  if (!term) return null;
+  if (!term) throw new OfflineLookupUnavailableError("entry");
 
   const matched = normalize(surface) || term.headword;
   const hit: LookupHit = {
@@ -489,8 +503,12 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
     // particle alone and let the next pass read the word.
     if (await swallowedParticle(db, generation, definition, afterContent)) {
       const particle = [...rest][0]!;
+      const { all } = await contextualCandidates(db, generation, particle);
+      const hit = all.find((candidate) => candidate.term.senses.some((sense) => sense.partsOfSpeech.includes("prt")));
+      const resolved = hit ? termDefinition(hit, languages, apiBase) : null;
       tokens.push({ start: position, length: particle.length, surface: particle,
-        reading: null, lemma: particle, pos: "prt", content: false, state: "none" });
+        reading: resolved?.reading ?? null, lemma: particle, entry: resolved?.entry,
+        pos: "prt", content: Boolean(resolved), state: "none" });
       position += particle.length;
       afterSuruNoun = false;
       afterContent = false;
@@ -848,12 +866,14 @@ async function bestWithLookahead(
   // Gathered once and used twice: the winner becomes the token, the runners-up
   // are what the path scorer prices it against. Re-asking the database for a
   // list already in hand doubled the queries for every position on the page.
-  const { trusted } = await contextualCandidates(db, generation, source, afterSuruNoun);
+  const { trusted, all } = await contextualCandidates(db, generation, source, afterSuruNoun);
   const best = trusted.length
     ? termDefinition(wholeKatakanaWord(trusted, source), languages, apiBase)
     : await lookupInDatabase(db, generation, source, languages, apiBase, true);
   const matched = best?.sourceForm;
   if (!matched) return best;
+  const compound = await dictionaryNounCompound(db, generation, source, best, all);
+  if (compound) return termDefinition(compound, languages, apiBase);
 
   // Fire only when the winning span ends STRICTLY INSIDE a following auxiliary:
   // that is the "bitten into it" case. 授けていただく: cutting at 授けて leaves
@@ -881,6 +901,28 @@ async function bestWithLookahead(
   // logged: Sudachi minimises a connection cost over a full lattice, and this is
   // the two-token slice of that we can afford. Ranks ride in the pack already.
   return pathAdjusted(db, generation, rest, languages, apiBase, best, trusted);
+}
+
+async function dictionaryNounCompound(
+  db: IDBDatabase, generation: string, source: string, best: Definition, candidates: LookupHit[],
+): Promise<LookupHit | undefined> {
+  if (!firstPartOfSpeech(best).match(/^n(?:-|$)/)) return;
+  const length = best.sourceForm!.length;
+  const compounds = candidates.filter((hit) => hit.prefixLength > length && hit.candidate.reasons.length === 0
+    && matchingExpression(hit) && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("n"))
+    && BOUND_PARTICLES.has(source[hit.prefixLength]!));
+  if (!compounds.length) return;
+
+  const cost = (surface: string, rank: number | null | undefined): number =>
+    TOKEN_COST + [...surface].length * Math.log10(Math.max(rank ?? UNRANKED, 1));
+  for (const compound of compounds.sort((a, b) => b.prefixLength - a.prefixLength)) {
+    const overlap = source.slice(length, compound.prefixLength);
+    const hits = await hitsForCandidates(db, generation, [{ prefix: overlap, candidate: { text: overlap, reasons: [] } }], false);
+    const nouns = hits.filter((hit) => matchingExpression(hit) && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("n")));
+    if (!nouns.length) continue;
+    const splitCost = cost(best.sourceForm!, best.frequency) + Math.min(...nouns.map((hit) => cost(overlap, frequencyForHit(hit))));
+    if (cost(compound.surface, frequencyForHit(compound)) < splitCost) return compound;
+  }
 }
 
 // Particles a word can be mis-cut across: they bind what comes BEFORE them, so a
@@ -1344,8 +1386,8 @@ async function pathAdjusted(
   return termDefinition(alternatives[cheapest.index], languages, apiBase);
 }
 
-async function lookupInDatabase(db: IDBDatabase, generation: string, source: string, languages: readonly GlossLanguage[], apiBase: string, contextual = false): Promise<PendingDefinition | null> {
-  const prefixes = prefixesLongestFirst(source);
+async function lookupInDatabase(db: IDBDatabase, generation: string, source: string, languages: readonly GlossLanguage[], apiBase: string, contextual = false, whole = false): Promise<PendingDefinition | null> {
+  const prefixes = whole ? [source] : prefixesLongestFirst(source);
   // Exact prefixes first: IndexedDB reads run concurrently, and this is the
   // overwhelmingly common case. Each prefix is probed in its verbatim spelling
   // and its folded/collapsed variants so emphasis katakana and stretched kana

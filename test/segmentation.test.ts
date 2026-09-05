@@ -23,7 +23,7 @@ import { installTestPack, packPayload, realPackPath, subsetPack } from "./suppor
 // mis-parse fixed today can return on the next dictionary refresh. A row here can
 // never come back without turning this test red.
 
-const CORPORA = ["cross_engine", "segmentation"] as const;
+const CORPORA = ["cross_engine", "segmentation", "search_mapping"] as const;
 
 // The floor a real-pack subset has to clear before it counts as one. The corpora
 // currently subset to a few thousand entries, so this only trips when the
@@ -46,6 +46,7 @@ type SegmentationCase = {
   // that on purpose, while an entry id means the same thing here, on the web,
   // and in the API's `sourceId`.
   entries?: Record<string, string>;
+  clickable?: string[];
   tokens?: string[];
   // Absent means the row needs the real dictionary; `fixture` means it is still
   // meaningful against the bundled 12-entry pack. Safe direction: a row that
@@ -175,6 +176,11 @@ test("segmentation corpus", async (context) => {
       const surfaces = tokens.map((token) => token.surface);
       const shown = surfaces.join(" | ");
       const why = entry.why ? `\n  why: ${entry.why.trim()}` : "";
+      for (const surface of entry.clickable ?? []) {
+        const token = tokens.find((item) => item.surface === surface);
+        assert.ok(token?.content && token.entry, `${surface} must be clickable with a dictionary identity`);
+        assert.equal(token.state, "none");
+      }
 
       // `merges`/`splits` pin only the boundary a case is about, so an unrelated
       // dictionary change cannot fail it: the shape the Rails eval already uses.

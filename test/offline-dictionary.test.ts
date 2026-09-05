@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
-import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupKanjiOffline, lookupOffline, lookupVariants, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
+import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupEntryOffline, lookupKanjiOffline, lookupOffline, lookupVariants, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
 
 const records = [
   { type: "header", schemaVersion: 5, languages: ["eng", "spa"], source: "Shirabe open-core" },
@@ -34,6 +34,7 @@ const records = [
     // that a careless CSS-injection guard rejects, aborting the whole install.
     ["10", "投げつける", "なげつける", "to hurl (at)", "lanzar", "v1", 1000],
     ["11", "カール", "かーる", "to curl (hair)", "rizar", "vs", 1100],
+    ["99998", "API", "えーぴーあい", "application programming interface", "interfaz de programación", "n", 1200],
   ].map(([id, headword, reading, english, spanish, pos, rank]) => ({
     type: "term", id: `jmdict:${id}`, dictionary: "jmdict", headword,
     expressions: [{ text: headword, script: "mixed", common: true, tags: [] }],
@@ -239,6 +240,10 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   }) as typeof fetch;
 
   await installDictionary("https://api.test");
+  await assert.rejects(lookupOffline("arm hair", ["eng"], "https://shirabe.test"), /Meaning search is available online/);
+  assert.equal((await lookupOffline("API", ["eng"], "https://shirabe.test"))?.headword, "API");
+  await assert.rejects(lookupOffline("API hair", ["eng"], "https://shirabe.test"), /Meaning search is available online/);
+  await assert.rejects(lookupEntryOffline("personal:1", "食べる", ["eng"], "https://shirabe.test"), /Not available in this dictionary/);
   const definition = await lookupOffline("食べました", ["spa"], "https://shirabe.test");
   assert.equal(definition?.headword, "食べる");
   assert.equal(definition?.sourceForm, "食べました");
@@ -577,4 +582,3 @@ test("a parsed token's part of speech is the JMdict code, not the label the popu
   assert.match(source, /const code = sense\.posCodes\?\.\[0\]/);
   assert.doesNotMatch(source, /pos: definition\.senses\[0\]\?\.partsOfSpeech/);
 });
-
