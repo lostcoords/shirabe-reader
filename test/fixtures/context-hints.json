@@ -1,0 +1,18 @@
+[
+  {"name":"motion evidence", "counts":{"go":143,"say":0}, "candidates":["need","say","go"], "expected":"go"},
+  {"name":"speech evidence", "counts":{"say":7}, "candidates":["go","say","need"], "expected":"say"},
+  {"name":"minimum support", "counts":{"go":5,"say":2}, "candidates":["go","say"], "expected":"go"},
+  {"name":"below minimum", "counts":{"go":4}, "candidates":["go"], "expected":null},
+  {"name":"insufficient margin", "counts":{"go":5,"say":3}, "candidates":["go","say"], "expected":null},
+  {"name":"exact margin", "counts":{"go":6,"say":3}, "candidates":["say","go"], "expected":"go"},
+  {"name":"tie", "counts":{"go":10,"say":10}, "candidates":["go","say"], "expected":null},
+  {"name":"no evidence", "counts":{}, "candidates":["go","say"], "expected":null},
+  {"name":"no candidates", "counts":{"go":100}, "candidates":[], "expected":null},
+  {"name":"unavailable winner", "counts":{"go":100,"say":3}, "candidates":["say"], "expected":null},
+  {"name":"unavailable competitor", "counts":{"go":100,"say":5}, "candidates":["say"], "expected":"say"},
+  {"name":"duplicate candidates", "counts":{"go":6,"say":3}, "candidates":["go","go","say"], "expected":"go"},
+  {"name":"fractional votes are not observations", "counts":{"go":5.5}, "candidates":["go"], "expected":null},
+  {"name":"negative count", "counts":{"go":10,"say":-1}, "candidates":["go","say"], "expected":null},
+  {"name":"unsafe integer", "counts":{"go":9007199254740992}, "candidates":["go"], "expected":null},
+  {"name":"inherited object property is not evidence", "counts":{}, "candidates":["toString"], "expected":null}
+]

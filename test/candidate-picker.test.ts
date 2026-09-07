@@ -28,21 +28,20 @@ const candidate = (entry: string, headword: string, reading: string) => ({ entry
 // What the background worker would answer, keyed by the question asked, so a
 // test can assert on what was ASKED as well as on what rendered.
 Object.assign(answers, {
-  "lookup:きみ": definition("jmdict:1226580", "きみ", "きみ", "millet"),
+  "entry:jmdict:1226580": definition("jmdict:1226580", "きみ", "きみ", "millet"),
   "entry:jmdict:1247250": definition("jmdict:1247250", "君", "きみ", "you"),
-  "lookup:きみ2": definition("jmdict:1226580", "きみ", "きみ", "millet"),
-  "lookup:本": definition("jmdict:1522150", "本", "ほん", "book"),
+  "entry:jmdict:1522150": definition("jmdict:1522150", "本", "ほん", "book"),
   // The row-cap cases below. Each needs its own lemma so the popup re-renders
   // rather than reusing the open card.
-  "lookup:きみ-many": definition("jmdict:900000", "語0", "ご0", "the first of many"),
-  "lookup:きみ-deep": definition("jmdict:910009", "名9", "な9", "ranked tenth"),
-  "lookup:きみ-name": definition("jmdict:1247250", "君", "きみ", "you"),
+  "entry:jmdict:900000": definition("jmdict:900000", "語0", "ご0", "the first of many"),
+  "entry:jmdict:910009": definition("jmdict:910009", "名9", "な9", "ranked tenth"),
 });
 
 const chips = (): Promise<HTMLElement[]> => drawn(".sb-candidate");
 
 test("a span several words claim offers them all, the parser's answer marked", async () => {
   await hover({ entry: "jmdict:1226580", candidates: [ candidate("jmdict:1226580", "きみ", "きみ"), candidate("jmdict:1247250", "君", "きみ") ] });
+  assert.ok(asked.some((message) => message.type === "lookupEntry" && message.entry === "jmdict:1226580"));
 
   const offered = await chips();
   assert.deepEqual(offered.map((chip) => chip.dataset.entry), [ "jmdict:1226580", "jmdict:1247250" ],

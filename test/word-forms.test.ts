@@ -15,7 +15,7 @@ import { installTestPack, packPayload } from "./support/pack.js";
 // would be showing a reader a spelling nobody writes.
 
 const HOST = "https://shirabe.test";
-const HEADER = JSON.stringify({ type: "header", schemaVersion: 5, languages: [ "eng", "spa" ], source: "Shirabe forms" });
+const HEADER = JSON.stringify({ type: "header", schemaVersion: 6, languages: [ "eng", "spa" ], source: "Shirabe forms" });
 
 const opener = JSON.stringify({
   type: "term", id: "jmdict:1202650", dictionary: "jmdict", headword: "開く",

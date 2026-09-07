@@ -16,6 +16,29 @@ function installDom(html: string): Window {
   return window;
 }
 
+test("page scanning sends Japanese widths unchanged without scanning Latin-only text", async () => {
+  const japanese = ["ﾊﾞﾅﾅ", "ﾊﾟﾝ", "ｺｰﾋｰ", "バナナ", "猫", "ＣＤ"];
+  const latin = ["hello", "hola", "benkyou shimashita", "123"];
+  const window = installDom([...japanese, ...latin].map((text) => `<p>${text}</p>`).join(""));
+  const { ext } = await import("../src/common/browser.js");
+  const original = ext.runtime.sendMessage;
+  const seen: string[] = [];
+  ext.runtime.sendMessage = async (message: { type: string; texts?: string[] }) => {
+    if (message.type !== "parseBatch") return { ok: true, states: {} };
+    seen.push(...(message.texts ?? []));
+    return { ok: true, tokens: (message.texts ?? []).map(() => []) };
+  };
+  try {
+    const { parse, setParsingPaused } = await import("../src/content/parser.js");
+    setParsingPaused(false);
+    assert.equal(await parse(window.document.body, false), japanese.length);
+    assert.deepEqual(seen, japanese);
+    assert.equal(window.document.body.textContent, [...japanese, ...latin].join(""));
+  } finally {
+    ext.runtime.sendMessage = original;
+  }
+});
+
 test("a caption that grows word by word keeps the moment it first appeared", async () => {
   // Auto-generated captions roll a line in one word at a time, and every added
   // word is another parse. Re-stamping each time walks the line's start forward

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deinflect, inflectionLabel } from "../src/common/deinflect.js";
+import { deinflect, displayInflections, inflectionLabel, matchesPos, posConditionFlags } from "../src/common/deinflect.js";
+import irregularCases from "./fixtures/irregular-parity.json";
 
 // Deliberately NOT driven by test/tokenizer_eval/deinflection.yml, though at a
 // glance the two look like the same table. That corpus asserts the hint the
@@ -11,6 +12,92 @@ import { deinflect, inflectionLabel } from "../src/common/deinflect.js";
 // The same word, two answers, both correct: one corpus could only hold one.
 
 const forms = (text: string) => deinflect(text).map((candidate) => candidate.term);
+
+test("na adjective adverbials retain their class in direct and contextual lookup", () => {
+  for (const contextual of [false, true]) {
+    for (const surface of ["静かに", "確かに", "上手に"]) {
+      const candidate = deinflect(surface, { contextual }).find((form) => form.term === surface.slice(0, -1) && matchesPos(form, ["adj-na"]));
+      assert.ok(candidate, surface);
+      assert.deepEqual(candidate.inflections, ["adverbial"]);
+      assert.equal(matchesPos(candidate, ["n"]), false);
+      assert.equal(matchesPos(candidate, ["cop"]), false);
+    }
+  }
+});
+
+test("de is a te-form of the copula, not of the past auxiliary", () => {
+  for (const contextual of [false, true]) {
+    const candidates = deinflect("で", { contextual }).filter((candidate) => candidate.term === "だ");
+    assert.ok(candidates.some((candidate) => matchesPos(candidate, ["cop"]) && candidate.inflections.join() === "-て"));
+    assert.ok(!candidates.some((candidate) => matchesPos(candidate, ["aux-v"])));
+    assert.ok(!candidates.some((candidate) => matchesPos(candidate, ["v5r"])));
+  }
+});
+
+test("contextual permission keeps the copula and following predicate separate", () => {
+  for (const surface of ["でもいい", "じゃなくてもいい"]) {
+    assert.ok(deinflect(surface).some((candidate) => candidate.term === "だ" && matchesPos(candidate, ["cop"])), surface);
+    assert.ok(!deinflect(surface, { contextual: true }).some((candidate) => candidate.term === "だ" && matchesPos(candidate, ["cop"])), surface);
+  }
+  for (const surface of ["食べてもいい", "食べなくてもいい"]) {
+    assert.ok(deinflect(surface, { contextual: true }).some((candidate) => candidate.term === "食べる" && matchesPos(candidate, ["v1"])), surface);
+  }
+  assert.ok(deinflect("で", { contextual: true }).some((candidate) => candidate.term === "だ" && matchesPos(candidate, ["cop"])));
+});
+
+test("contextual deinflection retains copulas but leaves nominal predicates as separate words", () => {
+  for (const [surface, base, pos] of [["だった", "だ", "cop"], ["でした", "です", "cop"], ["しました", "する", "vs-i"]]) {
+    assert.ok(deinflect(surface!, { contextual: true }).some((candidate) => candidate.term === base && matchesPos(candidate, [pos!])), surface);
+  }
+  for (const [surface, base, pos] of [["勉強しました", "勉強", "vs"], ["静かだった", "静か", "adj-na"], ["猫だった", "猫", "n"]]) {
+    assert.ok(deinflect(surface!).some((candidate) => candidate.term === base && matchesPos(candidate, [pos!])), surface);
+    assert.ok(!deinflect(surface!, { contextual: true }).some((candidate) => candidate.term === base && matchesPos(candidate, [pos!])), surface);
+  }
+});
+
+test("irregular class decisions match Daidai across proper and regularized paradigms", () => {
+  for (const { surface, base, pos, accepted } of irregularCases) {
+    assert.equal(deinflect(surface).some((candidate) => candidate.term === base && matchesPos(candidate, [pos])), accepted, `${surface} → ${base} (${pos})`);
+  }
+});
+
+test("irregular dictionary classes reject regularized forms without rejecting their real forms", () => {
+  for (const [surface, base, pos] of [
+    ["行いた", "行く", "v5k-s"], ["問った", "問う", "v5u-s"],
+    ["あらない", "ある", "v5r-i"], ["くださります", "くださる", "v5aru"],
+    ["行いていなかった", "行く", "v5k-s"],
+  ]) {
+    const candidates = deinflect(surface!).filter((candidate) => candidate.term === base);
+    assert.ok(candidates.length, surface);
+    assert.ok(!candidates.some((candidate) => matchesPos(candidate, [pos!])), surface);
+  }
+  for (const [surface, base, pos] of [
+    ["行った", "行く", "v5k-s"], ["問うた", "問う", "v5u-s"],
+    ["くださいます", "くださる", "v5aru"], ["下さいます", "下さる", "v5aru"],
+    ["行っていなかった", "行く", "v5k-s"],
+  ]) {
+    assert.ok(deinflect(surface!).some((candidate) => candidate.term === base && matchesPos(candidate, [pos!])), surface);
+  }
+});
+
+test("nominal and suru bases retain the grammatical class accepted by the dictionary", () => {
+  const cases = [
+    ["勉強しました", "勉強", "vs"],
+    ["静かだった", "静か", "adj-na"],
+    ["猫だった", "猫", "n"],
+    ["静かなら", "静か", "adj-na"],
+    ["でした", "です", "cop"],
+    ["しましたり", "する", "vs-i"],
+  ];
+  for (const [surface, lemma, pos] of cases) {
+    assert.ok(deinflect(surface!).some((candidate) =>
+      candidate.term === lemma && candidate.dictionaryForm && (candidate.conditions & posConditionFlags([pos!])) !== 0),
+    `${surface} → ${lemma} (${pos})`);
+  }
+  assert.ok(!deinflect("静かだった").some((candidate) =>
+    candidate.term === "静か" && (candidate.conditions & posConditionFlags(["v5k"])) !== 0));
+  assert.ok(!forms("でした").includes(""));
+});
 
 test("deinflects nested ichidan causative passive negative past", () => {
   assert.ok(forms("食べさせられなかった").includes("食べる"));
@@ -57,6 +144,15 @@ test("deinflects the negative te-form 〜ないで (daidai extension beyond Yomi
 // cases (test/deinflector_test.rb), through its LABELS map.
 const chain = (surface: string, lemma: string) =>
   deinflect(surface).find((candidate) => candidate.term === lemma)?.inflections.map(inflectionLabel);
+
+test("popup labels match the website without changing the underlying derivation", () => {
+  assert.deepEqual(displayInflections(chain("上手く", "上手い")!), ["adverbial (〜く)"]);
+  assert.deepEqual(displayInflections(chain("静かに", "静か")!), ["adverbial (〜に)"]);
+  assert.deepEqual(displayInflections(chain("行かなければならない", "行く")!), ["obligation (must)"]);
+  assert.deepEqual(displayInflections(chain("食べてはいけない", "食べる")!), ["prohibition (must not)"]);
+  assert.deepEqual(displayInflections(chain("食べました", "食べる")!), ["past", "polite"]);
+  assert.deepEqual(displayInflections(["unknown rule"]), ["unknown rule"]);
+});
 
 test("inflection chains match daidai's, so labels read the same as the website", () => {
   assert.deepEqual(chain("食べてる", "食べる"), ["progressive", "te-form"]);

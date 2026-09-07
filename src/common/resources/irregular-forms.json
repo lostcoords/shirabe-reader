@@ -1,0 +1,2264 @@
+{
+  "rules": [
+    "-た",
+    "-て",
+    "-ます",
+    "negative",
+    "-ば",
+    "-たら",
+    "-たり",
+    "potential",
+    "passive",
+    "causative",
+    "volitional",
+    "imperative"
+  ],
+  "rows": {
+    "v5k-s": [
+      {
+        "stem": 1,
+        "okuri": "く",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "った",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きました",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かなかった",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きませんでした",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "って",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きまして",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かなくて",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かないで",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きませんで",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "けば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きますなら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きますならば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かなければ",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きませんなら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きませんならば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ける",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "けます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "けない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "けません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かれる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かれます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かれない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かれません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かせる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かす",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かせます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かします",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かせない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かさない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かせません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かしません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かせられる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かされる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かせられます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かされます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かせられない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かされない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かせられません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かされません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "こう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きましょう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くまい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きませんまい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "け",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きなさい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くな",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きなさるな",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ったら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きましたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かなかったら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きませんでしたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ったり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きましたり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かなかったり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "きませんでしたり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "き",
+        "euphr": null,
+        "euphk": null
+      }
+    ],
+    "v5u-s": [
+      {
+        "stem": 1,
+        "okuri": "う",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "います",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "うた",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いました",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わなかった",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんでした",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "うて",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いまして",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わなくて",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わないで",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんで",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "えば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いますなら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いますならば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わなければ",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんなら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんならば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "える",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "えます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "えない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "えません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "われる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "われます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "われない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "われません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わせる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わす",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わせます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わします",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わせない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わさない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わせません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わしません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わせられる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わされる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わせられます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わされます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わせられない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わされない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わせられません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わされません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "おう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いましょう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "うまい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんまい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "え",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いなさい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "うな",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いなさるな",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "うたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いましたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わなかったら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんでしたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "うたり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いましたり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "わなかったり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんでしたり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "い",
+        "euphr": null,
+        "euphk": null
+      }
+    ],
+    "v5r-i": [
+      {
+        "stem": 1,
+        "okuri": "る",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ります",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 2,
+        "okuri": "ない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "った",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りました",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 2,
+        "okuri": "なかった",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りませんでした",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "って",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りまして",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 2,
+        "okuri": "なくて",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 2,
+        "okuri": "ないで",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りませんで",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りますなら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りますならば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 2,
+        "okuri": "なければ",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りませんなら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りませんならば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らす",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らします",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らさない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らしません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせられる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らされる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせられます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らされます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせられない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らされない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせられません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らされません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ろう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りましょう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "るまい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りませんまい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れ",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りなさい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "るな",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りなさるな",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ったら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りましたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 2,
+        "okuri": "なかったら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りませんでしたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ったり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りましたり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 2,
+        "okuri": "なかったり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "りませんでしたり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "り",
+        "euphr": null,
+        "euphk": null
+      }
+    ],
+    "v5aru": [
+      {
+        "stem": 1,
+        "okuri": "る",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "います",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "った",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いました",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らなかった",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんでした",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "って",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いまして",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らなくて",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らないで",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんで",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いますなら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いますならば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らなければ",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんなら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんならば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らす",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らします",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らさない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らしません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせられる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らされる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせられます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らされます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせられない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らされない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らせられません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らされません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ろう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いましょう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "るまい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんまい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "い",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いなさい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "るな",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いなさるな",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ったら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いましたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らなかったら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんでしたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ったり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いましたり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "らなかったり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いませんでしたり",
+        "euphr": null,
+        "euphk": null
+      }
+    ],
+    "v1-s": [
+      {
+        "stem": 1,
+        "okuri": "る",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "た",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ました",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なかった",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんでした",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "て",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "まして",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なくて",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ないで",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんで",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ますなら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ますならば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なければ",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんなら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんならば",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "られません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "させる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "さす",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "させます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "さします",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "させない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ささない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "させません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "さしません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "させられる",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "させられます",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "させられない",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "させられません",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "よう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ましょう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "まい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ますまい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なさい",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "るな",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なさるな",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "たら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ましたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なかったら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんでしたら",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "たり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ましたり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なかったり",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんでしたり",
+        "euphr": null,
+        "euphk": null
+      }
+    ],
+    "adj-ix": [
+      {
+        "stem": 1,
+        "okuri": "い",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いです",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くない",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くないです",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くありません",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かった",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かったです",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くなかった",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くなかったです",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くありませんでした",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くて",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くなくて",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ければ",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くなければ",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くさせる",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かろう",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "いでしょう",
+        "euphr": null,
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かったら",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "くなかったら",
+        "euphr": "よ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "かったり",
+        "euphr": "よ",
+        "euphk": null
+      }
+    ],
+    "vs-s": [
+      {
+        "stem": 1,
+        "okuri": "る",
+        "euphr": "す",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ます",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ない",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ません",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "た",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ました",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なかった",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんでした",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "て",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "まして",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なくて",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ないで",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんで",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れば",
+        "euphr": "す",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ますなら",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ますなれば",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なければ",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんなら",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんならば",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "る",
+        "euphr": "しえ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "る",
+        "euphr": "しう",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ます",
+        "euphr": "しえ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ない",
+        "euphr": "しえ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ません",
+        "euphr": "しえ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れる",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れます",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れない",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "れません",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "せる",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "す",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "せます",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "します",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "せない",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "さない",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "せません",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "しません",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "せられる",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "せられます",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "せられない",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "せられません",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "よう",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ましょう",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "るまい",
+        "euphr": "す",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ますまい",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ろ",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "よ",
+        "euphr": "せ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なさい",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "るな",
+        "euphr": "す",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なさるな",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "たら",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ましたら",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なかったら",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんでしたら",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "たり",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ましたり",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なかったり",
+        "euphr": "さ",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ませんでしたり",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "",
+        "euphr": "し",
+        "euphk": null
+      }
+    ]
+  }
+}

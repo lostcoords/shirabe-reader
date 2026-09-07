@@ -1,4 +1,6 @@
 import "./deinflection.test.js";
+import "./romaji.test.js";
+import "./context-hints.test.js";
 import "./jmdict-tags.test.js";
 import "./audio.test.js";
 import "./offline-dictionary.test.js";
@@ -24,3 +26,5 @@ import "./sense-card.test.js";
 import "./word-card.test.js";
 import "./shown-cut.test.js";
 import "./selection-lookup.test.js";
+import "./lookup-ranking.test.js";
+import "./search-intent.test.js";

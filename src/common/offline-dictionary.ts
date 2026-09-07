@@ -1,5 +1,8 @@
 import { convertVariants } from "kanji-processor";
-import { deinflect, inflectionLabel, posConditionFlags } from "./deinflect.js";
+import { deinflect, displayInflections, inflectionLabel, matchesPos, posConditionFlags, type Deinflection } from "./deinflect.js";
+import { searchReadings } from "./romaji.js";
+import { chooseContextHint, contextCounts } from "./context-hints.js";
+import listingCategoryData from "../../../db/reference/listing_categories.json";
 import { posChips, tagChips } from "./jmdict-tags.js";
 import { GLOSS_TAGS, withEnglishFallback, type GlossLanguage } from "shirabe-sdk/word-card/languages.js";
 import type { Definition, GlossRow, ParsedToken, Sense, SenseXref, TokenCandidate } from "./types.js";
@@ -14,7 +17,8 @@ declare const __EXTENSION_VERSION__: string;
 // pack, which is always re-downloadable.
 const DB_NAME = "shirabe-offline-dictionary-v4";
 const DB_VERSION = 2;
-const SUPPORTED_SCHEMA = 5;
+const SUPPORTED_SCHEMA = 6;
+const MINIMUM_PACK_RECIPE = 13;
 // Longest term the greedy longest-match will probe from any position: the
 // scanner's caret window (dom-text.ts `maxChars`) mirrors it. Covers long
 // compounds/expressions; unknown katakana runs are coalesced (`unknownRun`)
@@ -106,7 +110,7 @@ type OfflineTerm = {
   id: string;
   dictionary: string;
   headword: string;
-  expressions: Array<{ text: string; script: string; common: boolean; tags: string[] }>;
+  expressions: Array<{ text: string; script: string; common: boolean; tags: string[]; inflectionClass?: string }>;
   // `appliesTo` carries JMdict's per-writing restriction, present only when it
   // narrows: よいてんき spells 良い天気 and よい天気, but never いい天気.
   readings: Array<{ text: string; kind: string; appliesTo?: string[] }>;
@@ -148,7 +152,7 @@ type OfflineSentence = {
 };
 
 type Stored<T> = T & { pk: string; generation: string };
-type Candidate = { text: string; reasons: string[]; conditions?: number; processingCost?: number };
+type Candidate = { text: string; reasons: string[]; processingCost?: number; emphasisRepair?: boolean; deinflection?: Deinflection };
 type LookupHit = { term: Stored<OfflineTerm>; candidate: Candidate; prefixLength: number; surface: string };
 
 class BoundedCache<V> {
@@ -212,7 +216,7 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
   let lastCheckedAt: string | undefined;
   try {
     [active, manifest, lastCheckedAt] = await Promise.all([
-      meta<string>(db, "activeGeneration"), meta<PackManifest>(db, "manifest"), meta<string>(db, "lastUpdateCheck"),
+      activeGeneration(db), meta<PackManifest>(db, "manifest"), meta<string>(db, "lastUpdateCheck"),
     ]);
   } catch (error) {
     throw tracedError(`IndexedDB metadata read failed; stores=${Array.from(db.objectStoreNames).join(",")}`, error);
@@ -420,16 +424,22 @@ export async function removeDictionary(): Promise<void> {
 export async function lookupOffline(query: string, languages: readonly GlossLanguage[], apiBase: string, voice?: string): Promise<Definition | null> {
   const normalized = normalize(query);
   const latin = /\p{Script=Latin}/u.test(normalized) && !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(normalized);
-  const source = normalized.slice(0, MAX_SCAN_CHARS);
+  const source = latin ? normalized : normalized.slice(0, MAX_SCAN_CHARS);
   if (!source) return null;
   const db = await openDatabase();
   const generation = await activeGeneration(db);
   if (!generation) throw new DictionaryNotInstalledError("look up words");
-  if (latin && source !== normalized) throw new OfflineLookupUnavailableError("meaning");
-  const found = await lookupInDatabase(db, generation, source, languages, apiBase, false, latin);
+  let found = await lookupInDatabase(db, generation, source, languages, apiBase, false, latin);
   if (!found && latin) {
-    throw new OfflineLookupUnavailableError("meaning");
+    const readings = await Promise.all(searchReadings(normalized).map((reading) =>
+      lookupInDatabase(db, generation, reading, languages, apiBase, false, true)));
+    found = readings.filter((definition): definition is PendingDefinition => definition !== null)
+      .sort((a, b) => Number(Boolean(a.inflection?.length)) - Number(Boolean(b.inflection?.length))
+        || Number(b.common) - Number(a.common)
+        || (a.frequency ?? Infinity) - (b.frequency ?? Infinity)
+        || (a.inflection?.length ?? 0) - (b.inflection?.length ?? 0))[0] ?? null;
   }
+  if (!found && latin) throw new OfflineLookupUnavailableError("meaning");
   return forPopup(db, generation, found, languages, voice);
 }
 
@@ -453,13 +463,45 @@ export async function lookupEntryOffline(
   if (!term) throw new OfflineLookupUnavailableError("entry");
 
   const matched = normalize(surface) || term.headword;
+  const spellings = new Set([...term.expressions, ...term.readings].map((item) => normalize(item.text)));
+  const variants = [matched, ...searchReadings(matched)].flatMap(lookupVariants);
+  const candidates = variants.flatMap((variant): Candidate[] => [
+    { text: variant.text, reasons: [], processingCost: variant.processingCost },
+    ...deinflect(variant.text).map((found) => ({
+      text: found.term, reasons: found.inflections.map(inflectionLabel),
+      processingCost: variant.processingCost, deinflection: found,
+    })),
+  ]).filter((candidate) => spellings.has(normalize(candidate.text)) && posSatisfiesInflection(term, candidate));
+  candidates.sort((a, b) => (a.processingCost ?? 0) - (b.processingCost ?? 0) || a.reasons.length - b.reasons.length);
   const hit: LookupHit = {
     term,
-    candidate: { text: matched, reasons: [] },
+    candidate: candidates[0] ?? { text: matched, reasons: [] },
     prefixLength: [...matched].length,
     surface: matched,
   };
   return forPopup(db, generation, termDefinition(hit, languages, apiBase), languages, voice);
+}
+
+function curatedExpressionContext(definition: PendingDefinition, text: string, start: number, previous?: ParsedToken): boolean {
+  if (definition.studyHeadword !== "男を知る") return true;
+  const before = text.slice(0, start);
+  const specifiedMan = /(?:この|その|あの|どの)\s*$/u.test(before);
+  const relativeClause = previous?.pos.startsWith("v") && /(?:[うくぐすつぬぶむるた]|ない)$/u.test(previous.surface);
+  return !specifiedMan && !relativeClause;
+}
+
+const LISTING_CATEGORIES: Readonly<Record<string, readonly string[]>> = listingCategoryData;
+
+function curatedListingContext(tokens: readonly ParsedToken[], following: string): boolean | null {
+  const category = LISTING_CATEGORIES[following];
+  if (!category) return null;
+  const items: string[] = [];
+  for (let index = tokens.length - 1; index >= 0; index -= 2) {
+    items.push(tokens[index].surface);
+    if (index < 2 || !["や", "と", "、"].includes(tokens[index - 1].surface)) break;
+  }
+  if (items.length < 2 || !items.every((item) => Object.values(LISTING_CATEGORIES).some((members) => members.includes(item)))) return null;
+  return items.every((item) => category.includes(item));
 }
 
 export async function parseOffline(text: string, languages: readonly GlossLanguage[], apiBase: string): Promise<ParsedToken[]> {
@@ -474,6 +516,7 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
   // noun outranks a deinflected verb of the same length. One bit of context is
   // enough to settle it, and it is the bit Sudachi's POS bigrams carry.
   let afterSuruNoun = false;
+  let afterPurposeParticle = false;
   // Whether the token before this position was a content word, which is what
   // makes a leading は a particle rather than the first mora of a word.
   let afterContent = false;
@@ -485,23 +528,106 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
       tokens.push({ start: position, length: surface.length, surface, reading: null, lemma: surface, pos: "", content: false, state: "none" });
       position += surface.length;
       afterSuruNoun = false; // punctuation or a Latin run ends the compound
+      afterPurposeParticle = false;
       afterContent = false;
       continue;
     }
 
-    const definition = await bestWithLookahead(db, generation, rest, languages, apiBase, afterSuruNoun);
+    const previous = tokens[tokens.length - 1];
+    const atClauseStart = !previous || (!previous.content &&
+      (/[。、，．,.!?！？\n][\s\p{White_Space}]*$/u.test(previous.surface) ||
+        (tokens.length === 1 && /^[\s\p{White_Space}]*$/u.test(previous.surface))));
+    const interjectionContext = atClauseStart || (previous?.pos === "prt" && previous.surface === "は");
+    let definition = await bestWithLookahead(db, generation, rest, languages, apiBase, afterSuruNoun, interjectionContext);
+    if (/^と(?:言|い)った/u.test(rest)) {
+      const following = await bestWithLookahead(db, generation, rest.slice(4).trimStart(), languages, apiBase);
+      const listing = curatedListingContext(tokens, following?.sourceForm ?? "");
+      if (listing !== null) {
+        const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS));
+        const preferred = all.filter((hit) => listing
+          ? hit.surface === rest.slice(0, 4) && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("conj"))
+          : hit.surface === "と" && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("prt"))).sort(byLadder)[0];
+        if (preferred) definition = termDefinition(preferred, languages, apiBase);
+      }
+    }
+    if (definition && !curatedExpressionContext(definition, text, position, previous)) {
+      const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS), afterSuruNoun);
+      const literal = all.filter((hit) => hit.surface === "男" && hit.term.headword === "男").sort(byLadder)[0];
+      if (literal) definition = termDefinition(literal, languages, apiBase);
+    }
+    const personPredicate = previous && /^n(?:-|$)/u.test(previous.pos) && LISTING_CATEGORIES["人"]?.includes(previous.lemma)
+      && /^で[\s\p{White_Space}]*$/u.test(rest)
+      && ["は", "が", "も"].includes(tokens.slice(0, -1).reverse().find((token) => token.surface.trim())?.surface ?? "");
+    if ((previous?.pos === "adj-na" || personPredicate) && definition?.sourceForm === "で") {
+      const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS), afterSuruNoun);
+      const copula = all.filter((hit) => hit.surface === "で"
+        && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("cop"))).sort(byLadder)[0];
+      if (copula) definition = termDefinition(copula, languages, apiBase);
+    }
+    if (previous?.pos === "prt" && previous.surface === "に" && definition?.baseForm === "なる") {
+      const surface = definition.sourceForm;
+      const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS), afterSuruNoun);
+      const become = all.filter((hit) => hit.surface === surface && hit.candidate.text === "なる"
+        && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("aux-v"))).sort(byLadder)[0];
+      if (become) definition = termDefinition(become, languages, apiBase);
+    }
+    const beforeParticle = tokens[tokens.length - 2];
+    const recipient = previous?.surface === "に" && beforeParticle && /^(?:n|pn)/u.test(beforeParticle.pos)
+      && tokens[tokens.length - 3]?.surface === "と";
+    const quoted = recipient ? tokens[tokens.length - 4] : beforeParticle;
+    const quotation = (previous?.surface === "と" || recipient) && quoted &&
+      (/^(?:v|adj-i)/u.test(quoted.pos) || /[」』]$/u.test(quoted.surface));
+    const purpose = afterPurposeParticle || previous?.surface === "に" && beforeParticle?.pos.startsWith("v") &&
+      deinflect(beforeParticle.surface, { contextual: true }).some((form) =>
+        form.term === beforeParticle.lemma && form.inflections.includes("continuative"));
+    const preferredVerb = quotation ? ["いう", "言う", "ゆう"] : purpose ? ["いく", "行く", "ゆく"] : null;
+    if (preferredVerb) {
+      const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS));
+      const verb = all.filter((hit) => hit.surface === definition?.sourceForm
+        && preferredVerb.includes(hit.candidate.text)
+        && hit.candidate.reasons.length > 0 && firstSensePos(hit) === (quotation ? "v5u" : "v5k-s")).sort(byLadder)[0];
+      if (verb) definition = termDefinition(verb, languages, apiBase);
+    }
+    if (!preferredVerb && definition?.sourceForm === "いった" && previous && beforeParticle &&
+        ["に", "へ"].includes(previous.surface) && /^(?:n|pn)/u.test(beforeParticle.pos)) {
+      const counts = contextCounts(beforeParticle.surface + previous.surface);
+      if (Object.keys(counts).length) {
+        const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS));
+        const candidates = all.filter((hit) => hit.surface === definition?.sourceForm && hit.candidate.reasons.length > 0);
+        const winner = chooseContextHint(counts, candidates.map((hit) => hit.term.id));
+        const selected = candidates.filter((hit) => hit.term.id === winner).sort(byLadder)[0];
+        if (selected) definition = termDefinition(selected, languages, apiBase);
+      }
+    }
+    let objectParticleIndex = tokens.length - 1;
+    while (objectParticleIndex >= 0 && (tokens[objectParticleIndex].pos === "adv" ||
+        (tokens[objectParticleIndex].pos.startsWith("adj") && /[くに]$/u.test(tokens[objectParticleIndex].surface)))) {
+      objectParticleIndex -= 1;
+    }
+    const objectParticle = tokens[objectParticleIndex];
+    const object = tokens[objectParticleIndex - 1];
+    if (definition && firstPartOfSpeech(definition).startsWith("v") && objectParticle?.pos === "prt" &&
+        ["が", "を"].includes(objectParticle.surface) && object && /^(?:n|pn)/u.test(object.pos)) {
+      const counts = contextCounts(object.surface + "を");
+      if (Object.keys(counts).length) {
+        const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS));
+        const candidates = all.filter((hit) => hit.surface === definition?.sourceForm);
+        const winner = chooseContextHint(counts, candidates.map((hit) => hit.term.id));
+        const selected = candidates.filter((hit) => hit.term.id === winner &&
+          hit.candidate.deinflection?.inflections.some((form) => form === "potential" || form === "potential or passive")).sort(byLadder)[0];
+        if (selected) definition = termDefinition(selected, languages, apiBase);
+      }
+    }
     if (!definition?.sourceForm) {
       const surface = unknownRun(rest);
       tokens.push({ start: position, length: surface.length, surface, reading: null, lemma: surface, pos: "", content: false, state: "none" });
       position += surface.length;
       afterSuruNoun = false;
+      afterPurposeParticle = false;
       afterContent = false;
       continue;
     }
-    // A match that opens with a bound particle and only exists by deinflection
-    // has eaten the particle in front of it: はもう is 食む, not は + もう. Emit the
-    // particle alone and let the next pass read the word.
-    if (await swallowedParticle(db, generation, definition, afterContent)) {
+    if (await swallowedParticle(db, generation, definition, afterContent, rest)) {
       const particle = [...rest][0]!;
       const { all } = await contextualCandidates(db, generation, particle);
       const hit = all.find((candidate) => candidate.term.senses.some((sense) => sense.partsOfSpeech.includes("prt")));
@@ -510,49 +636,47 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
         reading: resolved?.reading ?? null, lemma: particle, entry: resolved?.entry,
         pos: "prt", content: Boolean(resolved), state: "none" });
       position += particle.length;
+      afterPurposeParticle = particle === "に" && afterSuruNoun && /^n(?:-|$)/u.test(previous?.pos ?? "");
       afterSuruNoun = false;
       afterContent = false;
       continue;
     }
 
     const surface = definition.sourceForm;
+    const copulaBase = await copulaHead(db, generation, definition);
+    const surfaceReading = inflectedSurfaceReading(definition);
+    let identity = definition;
+    if (firstPartOfSpeech(definition) === "adj-i" && definition.inflection?.length && surface.endsWith("く") && surfaceReading) {
+      const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS), afterSuruNoun);
+      const adverb = all.filter((hit) => hit.surface === surface && !hit.candidate.reasons.length
+        && !hit.candidate.processingCost && firstSensePos(hit) === "adv"
+        && !hit.term.senses[0]?.misc.some((tag) => tag === "arch" || tag === "obs")
+        && readingFor(hit.term, hit.candidate.text) === surfaceReading
+        && matchingExpression(hit) && !matchingExpression(hit)!.tags.some((tag) =>
+          SEARCH_ONLY_TAGS.has(tag) || RARE_KANJI_TAGS.has(tag))).sort(byLadder)[0];
+      if (adverb) identity = termDefinition(adverb, languages, apiBase);
+    }
     // The other words this span could be, asked under the context the span was
     // read in: `afterSuruNoun` names what came BEFORE this token, so it has to be
     // read before the line below reassigns it for the next one. Passing the new
     // value asked a different question and, since the flag is in the cache key,
     // paid for a second gather to get the wrong answer.
-    const alternatives = await alternativesFor(db, generation, rest, surface, definition, afterSuruNoun);
+    const alternatives = await alternativesFor(db, generation, rest, surface, identity, afterSuruNoun, languages, apiBase, tokens[tokens.length - 1], copulaBase);
+    afterPurposeParticle = surface === "に" && afterSuruNoun && /^n(?:-|$)/u.test(previous?.pos ?? "");
     afterSuruNoun = takesSuru(definition);
-    // Number + counter: JMdict lists some of these as their own noun (七本 "seven
-    // long cylindrical things", 六人 "six people") but not others (三匹 is a name
-    // only), so matching the dictionary literally is inconsistent AND hides the
-    // counter the learner actually needs. Emit the numeral and let the counter
-    // match on the next pass, so 七本 reads 七 · 本 like 三匹 already does: the
-    // extension's equivalent of the web's counter parts (tracker 2026-07-14).
-    const numeral = counterNumeralLength(surface);
-    if (numeral && await isCounter(db, generation, surface.slice(numeral))) {
-      const head = surface.slice(0, numeral);
-      tokens.push({
-        start: position, length: head.length, surface: head, reading: null,
-        lemma: head, pos: "", content: true, state: "none",
-      });
-      position += head.length;
-      afterContent = true;
-      continue;
-    }
     tokens.push({
-      start: position, length: surface.length, surface, reading: definition.reading,
-      lemma: await copulaHead(db, generation, definition) ?? definition.headword,
+      start: position, length: surface.length, surface, reading: surfaceReading,
+      lemma: copulaBase ?? definition.baseForm,
       // The entry, not just the form it reduces to. Already in hand here, and the
       // only thing about this token that means the same on the server: two
       // tokenizers disagree about lemmas by design, and a save keyed on one of
       // them forks the card.
-      entry: definition.entry,
+      entry: identity.entry,
       // Spread rather than assigned, so a token with nothing to choose between
       // carries no `candidates` key at all rather than an undefined one.
       ...alternatives ? { candidates: alternatives } : {},
       pos: firstPartOfSpeech(definition),
-      content: true, state: "none", frequency: definition.frequency,
+      content: true, state: "none", frequency: identity.frequency,
     });
     position += surface.length;
     afterContent = true;
@@ -566,7 +690,23 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
   for (const token of tokens) {
     if (NUMERAL_ONLY.test(token.surface)) token.lemma = normalize(token.surface);
   }
-  return mergeExpressions(db, generation, tokens, languages, apiBase);
+  return mergeAdverbialAdjectives(await mergeExpressions(db, generation, tokens, languages, apiBase));
+}
+
+function mergeAdverbialAdjectives(tokens: ParsedToken[]): ParsedToken[] {
+  for (let index = 0; index + 2 < tokens.length; index += 1) {
+    const adjective = tokens[index]!;
+    const particle = tokens[index + 1]!;
+    const predicate = tokens[index + 2]!;
+    if (adjective.pos !== "adj-na" || particle.pos !== "prt" || particle.surface !== "に"
+      || !/^(?:v|adj)/.test(predicate.pos)) continue;
+    tokens.splice(index, 2, { ...adjective,
+      surface: adjective.surface + particle.surface,
+      length: adjective.length + particle.length,
+      reading: adjective.reading ? adjective.reading + "に" : null,
+    });
+  }
+  return tokens;
 }
 
 // Port of Tokenizer#merge_expressions. Cheapest-path segmentation and JMdict's
@@ -598,11 +738,12 @@ const EXPRESSION_MAX_SPAN = 3;
 async function mergeExpressions(db: IDBDatabase, generation: string, tokens: ParsedToken[],
   languages: readonly GlossLanguage[], apiBase: string): Promise<ParsedToken[]> {
   if (tokens.length < 2) return tokens;
+  const text = tokens.map((token) => token.surface).join("");
   const merged: ParsedToken[] = [];
   let at = 0;
   while (at < tokens.length) {
     let taken = 1;
-    let expression: Definition | null = null;
+    let expression: PendingDefinition | null = null;
     for (let span = 2; span <= EXPRESSION_MAX_SPAN && at + span <= tokens.length; span += 1) {
       const run = tokens.slice(at, at + span);
       // Punctuation and Latin runs end a phrase; they never continue one.
@@ -617,14 +758,21 @@ async function mergeExpressions(db: IDBDatabase, generation: string, tokens: Par
       const unbound = !previous || !previous.content
         || previous.pos === "prt" || BARE_PARTICLES.has(previous.surface);
       const found = await grammarEntry(db, generation, run, languages, apiBase, unbound);
-      if (found) { expression = found; taken = span; }
+      if (found && curatedExpressionContext(found, text, run[0]!.start, previous)) {
+        expression = found; taken = span;
+      }
     }
     if (expression) {
       const run = tokens.slice(at, at + taken);
+      const surface = run.map((token) => token.surface).join("");
+      const copulaBase = await copulaHead(db, generation, expression);
+      const alternatives = await alternativesFor(db, generation, text.slice(run[0]!.start), surface,
+        expression, false, languages, apiBase, merged[merged.length - 1], copulaBase);
       merged.push({
         start: run[0]!.start, length: run.reduce((total, token) => total + token.length, 0),
-        surface: run.map((token) => token.surface).join(""), reading: expression.reading,
-        lemma: expression.headword, entry: expression.entry, pos: firstPartOfSpeech(expression),
+        surface, reading: expression.reading,
+        lemma: copulaBase ?? expression.baseForm, entry: expression.entry, pos: firstPartOfSpeech(expression),
+        ...(alternatives ? { candidates: alternatives } : {}),
         content: true, state: "none", frequency: expression.frequency,
       });
     } else {
@@ -638,7 +786,7 @@ async function mergeExpressions(db: IDBDatabase, generation: string, tokens: Par
 // The `exp`/`conj` entry a run spells exactly, if the dictionary has one and the
 // run is allowed to merge into it.
 async function grammarEntry(db: IDBDatabase, generation: string, run: ParsedToken[],
-  languages: readonly GlossLanguage[], apiBase: string, unbound = false): Promise<Definition | null> {
+  languages: readonly GlossLanguage[], apiBase: string, unbound = false): Promise<PendingDefinition | null> {
   if (!unbound
     && CASE_PARTICLES.has(run[0]!.surface) && run.every((token) => BARE_PARTICLES.has(token.surface))) return null;
   // A pronoun wearing the topic particle is the pronoun, marked: これ is what the
@@ -653,8 +801,8 @@ async function grammarEntry(db: IDBDatabase, generation: string, run: ParsedToke
   const text = run.map((token) => token.surface).join("");
   const hits = await hitsForCandidates(db, generation,
     [ { prefix: text, candidate: { text, reasons: [] } } ], false);
-  const grammar = hits.find((hit) => contextuallyConfident(hit, unbound)
-    && hit.term.senses.some((sense) => GRAMMAR_POS.some((pos) => sense.partsOfSpeech.includes(pos))));
+  const grammar = hits.filter((hit) => contextuallyConfident(hit, unbound)
+    && hit.term.senses.some((sense) => GRAMMAR_POS.some((pos) => sense.partsOfSpeech.includes(pos)))).sort(byLadder)[0];
   return grammar ? termDefinition(grammar, languages, apiBase) : null;
 }
 
@@ -694,10 +842,6 @@ function collapseEmphatic(text: string): string {
   return chars.slice(0, left).join("") + middle.join("") + chars.slice(right + 1).join("");
 }
 
-// Length of the leading numeral in a possible number+counter compound (七本 → 1),
-// or 0 when the surface does not start with a number. Kanji numerals and digits
-// both count; 十/百/千 appear inside larger numbers (三十本) so they are included.
-const COUNTER_NUMERAL = /^[0-9０-９一二三四五六七八九十百千万億兆]+/;
 // A token's part of speech is the raw JMdict code: `v5b`, `adj-i`, `prt`, not
 // the label the popup prints. Everything that consumes it matches on codes:
 // the underline hues (content.css), the i+1 function-word test, counters. A
@@ -713,6 +857,29 @@ function takesSuru(definition: Definition): boolean {
   return definition.senses.some((sense) => sense.posCodes?.some((code) => SURU_POS.has(code)));
 }
 
+function inflectedSurfaceReading(definition: PendingDefinition): string | null {
+  const { sourceForm: surface, baseForm: base, reading } = definition;
+  if (!reading || !surface || !definition.inflection?.length || surface === base) return reading;
+  if (/^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(surface)) return katakanaToHiragana(surface.normalize("NFKC"));
+  const ending = base.match(/[\p{Script=Hiragana}\p{Script=Katakana}ー]*$/u)?.[0] ?? "";
+  const stem = base.slice(0, base.length - ending.length);
+  if (!surface.startsWith(stem) || !reading.endsWith(ending)) return null;
+  const readingStem = reading.slice(0, reading.length - ending.length);
+  const stems = [readingStem];
+  const codes = definition.senses.flatMap((sense) => sense.posCodes ?? []);
+  if (!posConditionFlags(codes) && definition.inflectionClass) codes.push(definition.inflectionClass);
+  const forms = deinflect(surface).filter((form) => form.term === base
+    && (!posConditionFlags(codes) || matchesPos(form, codes))
+    && JSON.stringify(form.inflections.map(inflectionLabel)) === JSON.stringify(definition.inflection));
+  if (forms.some((form) => form.conditions & posConditionFlags(["vk"])) && readingStem.endsWith("く")) {
+    stems.push(`${readingStem.slice(0, -1)}き`, `${readingStem.slice(0, -1)}こ`);
+  }
+  return stems.map((prefix) => prefix + surface.slice(stem.length)).find((candidate) =>
+    deinflect(candidate).some((phonetic) => phonetic.term === reading
+      && (!posConditionFlags(codes) || matchesPos(phonetic, codes)) && forms.some((form) =>
+      (form.conditions & phonetic.conditions) !== 0 && JSON.stringify(form.inflections) === JSON.stringify(phonetic.inflections)))) ?? null;
+}
+
 function firstPartOfSpeech(definition: Definition): string {
   for (const sense of definition.senses) {
     const code = sense.posCodes?.[0];
@@ -722,25 +889,6 @@ function firstPartOfSpeech(definition: Definition): string {
 }
 
 const NUMERAL_ONLY = /^[0-9０-９]+$/;
-
-function counterNumeralLength(surface: string): number {
-  const match = surface.match(COUNTER_NUMERAL);
-  if (!match) return 0;
-  // Need something left over to be the counter, and the numeral must not BE the
-  // whole word (三十 on its own is a number, not a counter compound).
-  return match[0].length < surface.length ? match[0].length : 0;
-}
-
-// Is `text` a counter word in its own right (本, 人, 匹, 時)? Checked against the
-// dictionary rather than a hardcoded list, so the pack stays the source of truth.
-async function isCounter(db: IDBDatabase, generation: string, text: string): Promise<boolean> {
-  if (!text) return false;
-  // Every entry for the spelling, not just the best-ranked one: 人 leads as the
-  // noun ひと, and its counter sense にん would be invisible to a lookup that only
-  // reads the winner. Raw JMdict `ctr`, since these are unmapped pack codes.
-  const hits = await hitsForCandidates(db, generation, [{ prefix: text, candidate: { text, reasons: [] } }], false);
-  return hits.some((hit) => hit.term.senses.some((sense) => sense.partsOfSpeech.includes("ctr")));
-}
 
 // JMdict lists the に/な form of a word as an entry of its own: ように, ような,
 // そんなに, 確かに are all real headwords. But Sudachi reads them as the head plus
@@ -757,7 +905,30 @@ const COPULA_STEM_POS = [ "adj-na", "adj-pn" ];
 // some way, so it is worth the exception rather than a rule stretched to fit it.
 const COPULA_HEADS = new Set([ "よう" ]);
 
+async function copulaBaseHit(db: IDBDatabase, generation: string, definition: Definition): Promise<LookupHit | undefined> {
+  const headword = definition.headword;
+  const pos = firstPartOfSpeech(definition);
+  const lexicalPast = pos === "exp" && headword.endsWith("た");
+  if (lexicalPast || pos === "aux") {
+    const candidates = deinflect(headword, { contextual: true })
+      .filter((found) => lexicalPast || found.inflections.includes("-なら"))
+      .filter((found) => found.term !== headword && matchesPos(found, ["cop"]))
+      .map((found) => ({ prefix: headword, candidate: {
+        text: found.term, reasons: found.inflections.map(inflectionLabel), deinflection: found,
+      } }));
+    const hits = await hitsForCandidates(db, generation, candidates, false);
+    const copula = hits.filter((hit) => hit.term.senses.some((sense) => sense.partsOfSpeech.includes("cop"))).sort(byLadder)[0];
+    return copula;
+  }
+}
+
 async function copulaHead(db: IDBDatabase, generation: string, definition: Definition): Promise<string | null> {
+  const copula = await copulaBaseHit(db, generation, definition);
+  if (copula) return copula.term.headword;
+  return adjectiveHead(db, generation, definition);
+}
+
+async function adjectiveHead(db: IDBDatabase, generation: string, definition: Definition): Promise<string | null> {
   const headword = definition.headword;
   if (headword.length < 3 || !/[にな]$/.test(headword)) return null;
   const stem = headword.slice(0, -1);
@@ -766,14 +937,42 @@ async function copulaHead(db: IDBDatabase, generation: string, definition: Defin
   const head = hits.find((hit) => hit.term.senses.some((sense) =>
     COPULA_STEM_POS.some((pos) => sense.partsOfSpeech.includes(pos))));
   if (!head) return null;
-  // And the head has to be the commoner word. Stripping on shape alone read そんな
-  // as そん (損, a na-adjective meaning "loss") and さらに as さら (新, "brand new"):
-  // a lexicalised adverb whose first characters happen to spell a rare homograph.
-  // Where Sudachi really does strip a copula the head is the everyday word and the
-  // に/な form the derived one: 確か 274 against 確かに 461, そんな 40 against
-  // そんなに 2,099. So requiring that ordering keeps exactly the cases it should.
+  if (isCommonWord(head) && !definition.common) return stem;
   const headRank = frequencyForHit(head);
   return headRank !== null && headRank < (definition.frequency ?? UNRANKED) ? stem : null;
+}
+
+async function lexicalAdverbBase(db: IDBDatabase, generation: string, definition: Definition): Promise<LookupHit | undefined> {
+  const surface = normalize(definition.sourceForm ?? definition.headword);
+  if (firstPartOfSpeech(definition) !== "adv" || !surface.endsWith("く") || !definition.reading) return;
+  const forms = deinflect(surface).filter((form) => form.inflections.length === 1 && form.inflections[0] === "-く");
+  const phonetic = deinflect(definition.reading).filter((form) => form.inflections.length === 1 && form.inflections[0] === "-く");
+  const hits = await hitsForCandidates(db, generation, forms.map((form) => ({
+    prefix: surface, candidate: { text: form.term, reasons: form.inflections.map(inflectionLabel), deinflection: form },
+  })), false);
+  const adjectives = hits.filter((hit) => firstSensePos(hit) === "adj-i" && contextuallyConfident(hit)
+    && phonetic.some((form) => form.term === readingFor(hit.term, hit.candidate.text)
+      && matchesPos(form, ["adj-i"])));
+  const bases = new Set(adjectives.map((hit) => hit.candidate.text));
+  return bases.size === 1 ? adjectives.sort(byLadder)[0] : undefined;
+}
+
+async function referencedImperativeBase(db: IDBDatabase, generation: string, definition: Definition): Promise<LookupHit | undefined> {
+  if (firstPartOfSpeech(definition) !== "exp" || !definition.reading) return;
+  const references = definition.senses[0]?.xrefs?.filter((xref) => xref.kind === "related") ?? [];
+  if (!references.length) return;
+  const surface = normalize(definition.sourceForm ?? definition.headword);
+  const forms = deinflect(surface).filter((form) => form.inflections.length === 1 && form.inflections[0] === "imperative");
+  const phonetic = deinflect(definition.reading).filter((form) => form.inflections.length === 1 && form.inflections[0] === "imperative");
+  const hits = await hitsForCandidates(db, generation, forms.map((form) => ({
+    prefix: surface, candidate: { text: form.term, reasons: form.inflections.map(inflectionLabel), deinflection: form },
+  })), false);
+  const verbs = hits.filter((hit) => firstSensePos(hit).startsWith("v")
+    && references.some((xref) => hit.term.expressions.some((expression) => expression.text === xref.text)
+      && (!xref.reading || xref.reading === readingFor(hit.term, hit.candidate.text)))
+    && phonetic.some((form) => form.term === readingFor(hit.term, hit.candidate.text)
+      && matchesPos(form, hit.term.senses.flatMap((sense) => sense.partsOfSpeech))));
+  return new Set(verbs.map((hit) => hit.candidate.text)).size === 1 ? verbs.sort(byLadder)[0] : undefined;
 }
 
 // The spellings to probe for one on-page surface: the verbatim text plus its
@@ -784,14 +983,15 @@ async function copulaHead(db: IDBDatabase, generation: string, definition: Defin
 // The processingCost lets ranking keep a coincidental folded homophone from
 // beating the literal word. We fold katakana→hiragana (readings are hiragana in
 // the pack, so this needs no reindex) but not the rare inverse, to bound probes.
-export function lookupVariants(prefix: string): Array<{ text: string; processingCost: number }> {
-  const variants = [{ text: prefix, processingCost: 0 }];
+export function lookupVariants(prefix: string): Array<{ text: string; processingCost: number; emphasisRepair?: boolean }> {
+  prefix = prefix.normalize("NFKC");
+  const variants: ReturnType<typeof lookupVariants> = [{ text: prefix, processingCost: 0 }];
   // Linear scan rather than a Set: this runs for every probed prefix of every
   // position, and there are at most four variants, so the allocation costs more
   // than the lookup saves.
-  const add = (text: string, cost: number): void => {
+  const add = (text: string, cost: number, emphasisRepair = false): void => {
     if (!text || variants.some((variant) => variant.text === text)) return;
-    variants.push({ text, processingCost: cost });
+    variants.push({ text, processingCost: cost, ...(emphasisRepair ? { emphasisRepair: true } : {}) });
   };
   // Old/variant kanji (旧字体・異体字) standardize to the modern form: 萬→万, 國→国,
   // which NFKC does not do (they are distinct unified ideographs). Safe at any
@@ -816,8 +1016,8 @@ export function lookupVariants(prefix: string): Array<{ text: string; processing
   if (KATAKANA.test(prefix)) add(katakanaToHiragana(prefix), 1);
   const collapsed = collapseEmphatic(prefix);
   if (collapsed !== prefix) {
-    add(collapsed, 1);
-    if (KATAKANA.test(collapsed)) add(katakanaToHiragana(collapsed), 2);
+    add(collapsed, 1, true);
+    if (KATAKANA.test(collapsed)) add(katakanaToHiragana(collapsed), 2, true);
   }
   return variants;
 }
@@ -826,7 +1026,7 @@ export function lookupVariants(prefix: string): Array<{ text: string; processing
 // They are separate verbs, not inflections, so the deinflector cannot reach them:
 // but a long inflection chain CAN eat into their head (授けていた steals the い from
 // いただく), which is where a purely greedy longest match goes wrong.
-const TE_AUXILIARIES = ["いただく", "いただける", "くださる", "ください", "もらう", "もらえる", "くれる", "あげる", "やる", "しまう", "おく", "みる", "いく", "くる", "ある", "いる"];
+const TE_PREDICATES = ["いただく", "いただける", "くださる", "ください", "もらう", "もらえる", "くれる", "あげる", "やる", "しまう", "おく", "みる", "いく", "くる", "ある", "いる", "いい", "よい", "良い"];
 
 // An auxiliary carries the predicate's tense, so it rarely stands in its
 // dictionary spelling: ていった is て + いく in the past. So how many characters of
@@ -842,8 +1042,8 @@ function auxiliaryLength(rest: string): number {
   for (let length = Math.min(rest.length, MAX_AUXILIARY_CHARS); length >= 1; length -= 1) {
     const candidate = rest.slice(0, length);
     // Verbatim first: by far the common case, and free next to a deinflection.
-    if (TE_AUXILIARIES.includes(candidate)) return length;
-    if (deinflect(candidate).some((found) => TE_AUXILIARIES.includes(found.term))) return length;
+    if (TE_PREDICATES.includes(candidate)) return length;
+    if (deinflect(candidate).some((found) => TE_PREDICATES.includes(found.term))) return length;
   }
   return 0;
 }
@@ -860,8 +1060,8 @@ function auxiliaryLength(rest: string): number {
 // than general lattice scoring, which is what Sudachi does and we cannot afford.
 async function bestWithLookahead(
   db: IDBDatabase, generation: string, rest: string,
-  languages: readonly GlossLanguage[], apiBase: string, afterSuruNoun = false,
-): Promise<Definition | null> {
+  languages: readonly GlossLanguage[], apiBase: string, afterSuruNoun = false, interjectionContext = false,
+): Promise<PendingDefinition | null> {
   const source = rest.slice(0, MAX_SCAN_CHARS);
   // Gathered once and used twice: the winner becomes the token, the runners-up
   // are what the path scorer prices it against. Re-asking the database for a
@@ -872,16 +1072,25 @@ async function bestWithLookahead(
     : await lookupInDatabase(db, generation, source, languages, apiBase, true);
   const matched = best?.sourceForm;
   if (!matched) return best;
-  const compound = await dictionaryNounCompound(db, generation, source, best, all);
-  if (compound) return termDefinition(compound, languages, apiBase);
-
+  const literalNoun = all.filter((hit) => hit.surface.length > matched.length
+    && !hit.candidate.reasons.length && hit.candidate.text === normalize(hit.surface)
+    && /\p{Script=Han}/u.test(hit.surface) && matchingExpression(hit)
+    && firstSensePos(hit).match(/^n(?:-|$)/)
+    && !startsJapanese(rest.slice(hit.surface.length))).sort(byLadder)[0];
+  if (literalNoun) return termDefinition(literalNoun, languages, apiBase);
+  const following = rest.slice(matched.length);
+  if (interjectionContext && /^(?:aux|exp)/.test(firstPartOfSpeech(best)) &&
+    (/^[\s\p{White_Space}]*$/u.test(following) || /^[\s\p{White_Space}]*[。、，．,.!?！？\n]/u.test(following))) {
+    const interjections = all.filter((hit) => hit.surface === matched && !hit.candidate.reasons.length && firstSensePos(hit) === "int");
+    if (interjections.length) return termDefinition(interjections.sort(byLadder)[0]!, languages, apiBase);
+  }
   // Fire only when the winning span ends STRICTLY INSIDE a following auxiliary:
   // that is the "bitten into it" case. 授けていただく: cutting at 授けて leaves
   // いただく (3→7) while the match ends at 5, inside it: so it bit in, and the
   // shorter reading wins. 書いている: cutting at 書いて leaves いる (3→5) and the
   // match ends at exactly 5, consuming the auxiliary cleanly: that is the
   // progressive, one token, and must be left alone.
-  for (let cut = matched.length - 1; cut >= 2 && matched.length >= 3; cut -= 1) {
+  for (let cut = matched.length - 1; cut >= 1; cut -= 1) {
     if (matched[cut - 1] !== "て" && matched[cut - 1] !== "で") continue;
     const auxiliary = auxiliaryLength(rest.slice(cut));
     if (!auxiliary) continue;
@@ -900,7 +1109,27 @@ async function bestWithLookahead(
   // So price the two readings as PATHS and take the cheaper. Cost is corpus rank,
   // logged: Sudachi minimises a connection cost over a full lattice, and this is
   // the two-token slice of that we can afford. Ranks ride in the pack already.
-  return pathAdjusted(db, generation, rest, languages, apiBase, best, trusted);
+  const selected = await pathAdjusted(db, generation, rest, languages, apiBase, best, trusted);
+  const compound = selected && await dictionaryNounCompound(db, generation, source, selected, all);
+  if (compound) return termDefinition(compound, languages, apiBase);
+  if (selected?.sourceForm && !selected.inflection?.length && firstPartOfSpeech(selected).startsWith("v")) {
+    const adverb = await adverbBeforeVerb(db, generation, rest, selected.sourceForm, all);
+    if (adverb) return termDefinition(adverb, languages, apiBase);
+  }
+  return selected;
+}
+
+async function adverbBeforeVerb(
+  db: IDBDatabase, generation: string, rest: string, surface: string, candidates: LookupHit[],
+): Promise<LookupHit | undefined> {
+  const tail = rest.slice(surface.length);
+  if (!startsJapanese(tail)) return;
+  const adverbs = candidates.filter((hit) => hit.surface === surface && !hit.candidate.reasons.length
+    && firstSensePos(hit).startsWith("adv"));
+  if (!adverbs.length) return;
+  const { trusted } = await contextualCandidates(db, generation, tail.slice(0, MAX_SCAN_CHARS));
+  if (!trusted[0] || !firstSensePos(trusted[0]).startsWith("v")) return;
+  return adverbs.sort(byLadder)[0];
 }
 
 async function dictionaryNounCompound(
@@ -930,25 +1159,20 @@ async function dictionaryNounCompound(
 // `Tokenizer#BOUND_PARTICLES` is the same list on the web.
 const BOUND_PARTICLES = new Set([ "は", "が", "を", "に", "へ", "も", "と", "で" ]);
 
-// Did this match swallow the particle in front of it? 彼はもう帰った came back as
-// 彼 | はもう | 帰った, because はもう deinflects to はむ (食む, an archaic "to eat")
-// and longest-match takes the longer span. 私はたいてい went the same way through
-// はたく. The topic particle belongs to 彼, and もう is the word.
-//
-// Three conditions, and all three are load-bearing. The match must have been
-// reached by DEINFLECTION, so a listed expression is never touched (について and
-// ではないか are exact matches and stay whole). It must open with a bound particle.
-// And something must come BEFORE it, because a sentence-initial は is not marking
-// anything. The web does this to Sudachi's output in `unswallow_particles`, for
-// the same reason and with the same list; this is the longest-match side of it.
 async function swallowedParticle(
-  db: IDBDatabase, generation: string, definition: Definition | null, afterContent: boolean,
+  db: IDBDatabase, generation: string, definition: Definition | null, afterContent: boolean, rest: string,
 ): Promise<boolean> {
   if (!afterContent || !definition?.sourceForm) return false;
 
   const characters = [...definition.sourceForm];
   if (characters.length < 2 || !BOUND_PARTICLES.has(characters[0]!)) return false;
-  if (!definition.inflection?.length) return false;
+  if (!definition.inflection?.length) {
+    const codes = definition.senses.flatMap((sense) => sense.posCodes ?? []);
+    if (!codes.length || !codes.every((code) => /^(?:n(?:-|$)|adj-(?:na|no)$)/.test(code))) return false;
+    const remaining = rest.slice(characters[0]!.length);
+    const { all } = await contextualCandidates(db, generation, remaining.slice(0, MAX_SCAN_CHARS));
+    return Boolean(await adverbBeforeVerb(db, generation, remaining, characters.slice(1).join(""), all));
+  }
 
   // …and the fourth condition, which the first draft left out and 長居できない
   // caught within the minute. "Is the tail a word?" does not separate them: きない
@@ -1030,12 +1254,55 @@ async function contextualCandidates(db: IDBDatabase, generation: string, source:
 // presence as "there is a question here" rather than testing the length.
 async function alternativesFor(
   db: IDBDatabase, generation: string, rest: string, surface: string,
-  chosen: Definition, afterSuruNoun: boolean,
+  chosen: Definition, afterSuruNoun: boolean, languages: readonly GlossLanguage[], apiBase: string, previous?: ParsedToken,
+  copulaBase: string | null = null,
 ): Promise<TokenCandidate[] | undefined> {
   const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS), afterSuruNoun);
+  const isCopula = (hit: LookupHit): boolean => hit.term.senses.some((sense) => sense.partsOfSpeech.includes("cop"));
+  const unfinishedNominalDe = surface === "で" && !rest.slice(surface.length).trim()
+    && /^(?:n(?:-|$)|pn$)/.test(previous?.pos ?? "");
+  const copulaAfterNominal = !unfinishedNominalDe && firstPartOfSpeech(chosen) !== "prt" && /^(?:n(?:-|$)|pn$|adj-na$)/.test(previous?.pos ?? "")
+    && all.some((hit) => hit.surface === surface && isCopula(hit));
+  const tail = rest.slice(surface.length);
+  const nominalParticle = /^(?:n(?:-|$)|pn$)/.test(firstPartOfSpeech(chosen)) && /^[はがをにへも]/u.test(tail);
+  const adjectiveParticle = /^adj/.test(firstPartOfSpeech(chosen)) && /^[のと]/u.test(tail);
+  const following = nominalParticle || adjectiveParticle
+    ? await bestWithLookahead(db, generation, tail, languages, apiBase) : null;
+  const particleMarkedNominal = nominalParticle && following && firstPartOfSpeech(following) === "prt";
+  const adjectiveBeforeParticle = adjectiveParticle && following && firstPartOfSpeech(following) === "prt";
+  const hasFiniteNegative = all.some((hit) => hit.surface === surface && hit.candidate.deinflection?.inflections.includes("-ん"));
+  const afterAdverb = chosen.senses.some((sense) => sense.posCodes?.includes("adv")) && hasFiniteNegative && startsJapanese(tail)
+    ? await bestWithLookahead(db, generation, tail, languages, apiBase) : null;
+  const adverbBeforePredicate = afterAdverb && /^(?:v|adj)/.test(firstPartOfSpeech(afterAdverb));
+  const verbatimWinner = all.some((hit) => hit.surface === surface && hit.term.id === chosen.entry
+    && !hit.candidate.processingCost);
   const hits = all
     .filter((hit) => hit.surface === surface)
-    .sort(byLadder);
+    .filter((hit) => chosen.headword !== surface || firstPartOfSpeech(chosen) !== "adv"
+      || !hit.candidate.deinflection?.inflections.includes("adverbial") || hit.candidate.text === copulaBase)
+    .filter((hit) => !verbatimWinner || !hit.candidate.emphasisRepair)
+    .filter((hit) => !particleMarkedNominal || hit.term.id === chosen.entry || !hit.candidate.reasons.length)
+    .filter((hit) => !adjectiveBeforeParticle || hit.term.id === chosen.entry || !hit.candidate.deinflection?.inflections.includes("continuative"))
+    .filter((hit) => !adverbBeforePredicate || hit.term.id === chosen.entry || !hit.candidate.deinflection?.inflections.includes("-ん"))
+    .filter((hit) => !afterSuruNoun || chosen.headword !== "する" || hit.term.id === chosen.entry
+      || hit.term.senses.some((sense) => sense.partsOfSpeech.includes("vs-i")))
+    .filter((hit) => !copulaAfterNominal || hit.term.id === chosen.entry || isCopula(hit))
+    .filter((hit) => unfinishedNominalDe && (isCopula(hit) || hit.term.senses.some((sense) => sense.partsOfSpeech.includes("prt")))
+      || compatibleAlternative(hit, chosen))
+    .sort((a, b) => byAlternativeReading(a, b, chosen.reading ?? ""));
+  if (copulaBase) {
+    const bases = await hitsForCandidates(db, generation,
+      [{ prefix: copulaBase, candidate: { text: copulaBase, reasons: [] } }], false);
+    hits.push(...bases.filter((hit) => hit.term.senses.some((sense) =>
+      sense.partsOfSpeech.some((pos) => COPULA_STEM_POS.includes(pos) || (COPULA_HEADS.has(copulaBase) && pos === "n")))).sort(byLadder));
+  }
+  const attachedNiBase = copulaBase ?? chosen.baseForm;
+  if (attachedNiBase && /^(?:adj|adv|n(?:-|$))/.test(firstPartOfSpeech(chosen)) && surface === `${attachedNiBase}に`) {
+    const bases = await hitsForCandidates(db, generation,
+      [{ prefix: attachedNiBase, candidate: { text: attachedNiBase, reasons: [] } }], false);
+    hits.push(...bases.filter((hit) => hit.term.dictionary === "jmnedict"));
+    hits.sort((a, b) => byAlternativeReading(a, b, chosen.reading ?? ""));
+  }
   const summaries: TokenCandidate[] = [];
   const seen = new Set<string>();
   for (const hit of hits) {
@@ -1047,8 +1314,8 @@ async function alternativesFor(
     summaries.push({
       entry,
       headword: hit.term.headword,
-      reading: hit.term.readings[0]?.text ?? null,
-      common: hit.term.expressions.some((expression) => expression.common),
+      reading: readingFor(hit.term, hit.candidate.text),
+      common: commonAlternativeReading(hit),
     });
   }
   if (summaries.length < 2) return undefined;
@@ -1057,6 +1324,48 @@ async function alternativesFor(
   const at = summaries.findIndex((candidate) => candidate.entry === chosen.entry);
   if (at > 0) summaries.unshift(...summaries.splice(at, 1));
   return summaries;
+}
+
+function byAlternativeReading(a: LookupHit, b: LookupHit, reading: string): number {
+  const sharedPrefix = (hit: LookupHit): number => {
+    const candidate = readingFor(hit.term, hit.candidate.text) ?? "";
+    let length = 0;
+    while (length < candidate.length && length < reading.length && candidate[length] === reading[length]) length++;
+    return length;
+  };
+  return sharedPrefix(b) - sharedPrefix(a)
+    || Number(commonAlternativeReading(b)) - Number(commonAlternativeReading(a))
+    || wordFrequency(a) - wordFrequency(b)
+    || a.term.id.localeCompare(b.term.id);
+}
+
+function commonAlternativeReading(hit: LookupHit): boolean {
+  const commonReadings = hit.term.expressions.filter((expression) => expression.script === "kana" && expression.common);
+  const reading = readingFor(hit.term, hit.candidate.text);
+  return commonReadings.length && reading
+    ? commonReadings.some((expression) => expression.text === reading)
+    : hit.term.expressions.some((expression) => expression.common);
+}
+
+function compatibleAlternative(hit: LookupHit, chosen: Definition): boolean {
+  const pos = firstPartOfSpeech(chosen);
+  const prefixes = pos === "prt" || pos.startsWith("aux") || pos === "cop"
+    ? ["prt", "aux", "conj", "adv", "cop"]
+    : pos === "conj" ? ["conj", "prt", "adv"] : null;
+  if (!prefixes) return true;
+  if (hit.term.dictionary === "jmnedict") return false;
+  if (hit.term.id === chosen.entry) return true;
+  if (chosen.senses.some((sense) => sense.posCodes?.includes("cop"))) {
+    return hit.term.senses.some((sense) => sense.partsOfSpeech.includes("cop"));
+  }
+  if (pos === "prt" && hit.candidate.reasons.length && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("cop"))) return false;
+  if (pos === "prt" && hit.candidate.reasons.includes("continuative")) return false;
+  if (hit.term.headword === chosen.headword) {
+    const distinguishedHeadword = hit.term.expressions.find((expression) => expression.script === "kanji")?.text ?? hit.term.headword;
+    if (distinguishedHeadword === chosen.headword) return true;
+  }
+  const codes = hit.term.senses.flatMap((sense) => sense.partsOfSpeech);
+  return !codes.length || codes.some((code) => code === "exp" || code === "unc" || prefixes.some((prefix) => code.startsWith(prefix)));
 }
 
 /**
@@ -1093,7 +1402,7 @@ function byLadder(a: LookupHit, b: LookupHit): number {
   // Rung 4: common, then rank, then a stable id so the order never wobbles.
   const common = Number(isCommonWord(b)) - Number(isCommonWord(a));
   if (common) return common;
-  const rank = (frequencyForHit(a) ?? Number.POSITIVE_INFINITY) - (frequencyForHit(b) ?? Number.POSITIVE_INFINITY);
+  const rank = wordFrequency(a) - wordFrequency(b);
   if (rank) return rank;
   return a.term.id.localeCompare(b.term.id);
 }
@@ -1110,6 +1419,8 @@ function byLadder(a: LookupHit, b: LookupHit): number {
 // COMMON word beats a filed rare one, and filed wins every other way round. は
 // keeps its particle, which is filed AND common, so this never reaches it.
 function filedRung(a: LookupHit, b: LookupHit): number {
+  if (!/\p{Script=Han}/u.test(a.surface) && a.surface === b.surface
+    && VERBAL_POS.test(firstSensePos(a)) && VERBAL_POS.test(firstSensePos(b))) return 0;
   const aFiled = isFiledUnder(a, a.surface);
   if (aFiled === isFiledUnder(b, b.surface)) return 0;
 
@@ -1146,10 +1457,10 @@ function isFiledUnder(hit: LookupHit, surface: string): boolean {
 // The scorer looks one token ahead, which is the very span the parser reads on
 // its next step: so the work lands in the cache above rather than being redone.
 async function gatherCandidates(db: IDBDatabase, generation: string, source: string, afterSuruNoun = false): Promise<SpanCandidates> {
-  const prefixes = prefixesLongestFirst(source);
+  const prefixes = prefixesLongestFirst(source, true);
   const exactHits = await hitsForCandidates(db, generation, prefixes.flatMap((prefix) =>
     lookupVariants(prefix).map((variant) => ({
-      prefix, candidate: { text: variant.text, reasons: [], processingCost: variant.processingCost },
+      prefix, candidate: { text: variant.text, reasons: [], processingCost: variant.processingCost, emphasisRepair: variant.emphasisRepair },
     }))), false);
   // Only a VERBATIM match may suppress deinflecting its own span. A folded one is
   // a guess about the spelling (あった → collapse the sokuon → あた, an obscure old
@@ -1165,12 +1476,17 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
   // cache in front of it, which is a fifth of what the cache itself saved.
   const deinflectedHits = await hitsForCandidates(db, generation, prefixes.flatMap((prefix) =>
     lookupVariants(prefix).flatMap((variant) =>
-      deinflect(variant.text).map((found) => ({
+      deinflect(variant.text, { contextual: true }).map((found) => ({
         prefix,
-        candidate: { text: found.term, reasons: found.inflections.map(inflectionLabel), conditions: found.conditions, processingCost: variant.processingCost },
+        candidate: { text: found.term, reasons: found.inflections.map(inflectionLabel), processingCost: variant.processingCost, emphasisRepair: variant.emphasisRepair, deinflection: found },
       })))), false);
-  const hits = [...deinflectedHits, ...exactHits];
-  const confident = hits.filter((hit) => contextuallyConfident(hit));
+  const hits = [...deinflectedHits, ...exactHits].filter((hit) => !(
+    /^と(?:言|い)った$/u.test(hit.surface)
+    && /^[\s\p{White_Space}]*(?:$|[。．.!?！？])/u.test(source.slice(hit.prefixLength))
+  ));
+  const confidentHits = hits.filter((hit) => contextuallyConfident(hit));
+  const unrepairedSpans = new Set(confidentHits.filter((hit) => !hit.candidate.emphasisRepair).map((hit) => hit.prefixLength));
+  const confident = confidentHits.filter((hit) => !hit.candidate.emphasisRepair || !unrepairedSpans.has(hit.prefixLength));
   // Nothing cleared the gate: so fall back to what the parser is underneath, a
   // longest match. The gate exists to let a *confident shorter* word beat a long
   // unconfident one; with nothing confident it has no opinion, and dropping to
@@ -1217,12 +1533,16 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
       && extendsChain(leader.candidate.reasons, hit.candidate.reasons)
       && matchingExpression(hit)?.common
       && VERBAL_POS.test(firstSensePos(hit))
-      && hit.candidate.reasons.every((reason) => PREDICATE_FORMS.has(reason))
+      && hit.candidate.reasons.every((reason) => PREDICATE_FORMS.has(reason)
+        || (!isCommonWord(leader) && VERBAL_POS.test(firstSensePos(leader)) && POTENTIAL_FORMS.has(reason)
+          && (firstSensePos(hit) === "v1" || leader.term.senses[0]?.xrefs?.some((xref) =>
+            xref.kind === "related" && xref.text === hit.candidate.text
+            && (!xref.reading || xref.reading === readingFor(hit.term, hit.candidate.text))))))
       // …and the verb has to be the commoner reading of the two. それ is the
       // imperative of 剃る and たくさん the negative of 託す: real rules, firing on
       // the commonest pronouns there are. A form beats its own dictionary entry
       // only when the word behind it is the one people actually write.
-      && rankCost(hit) < rankCost(leader));
+      && wordFrequency(hit, { distinguishSpellings: false }) < wordFrequency(leader, { distinguishSpellings: false }));
     if (form > 0) confident.unshift(...confident.splice(form, 1));
   }
   // After a suru-noun, a form of する is the reading: 日焼け + した is not 日焼け
@@ -1253,7 +1573,6 @@ function rankCost(hit: LookupHit): number {
 
 function tokenCost(hit: LookupHit | null | undefined): number {
   if (!hit) return UNPARSED_COST;
-  // Each deinflection step is a small extra assumption about the reading.
   return rankCost(hit) + hit.candidate.reasons.length * 0.25;
 }
 
@@ -1326,7 +1645,7 @@ const NEVER_INITIAL = /^[ーぁぃぅぇぉっゃゅょゎァィゥェォッャ�
 // which is luck, not a rule.
 // One character of a katakana run, long-vowel mark included: the same class
 // `unknownRun` already groups whole for the same reason, applied one layer up.
-const KATAKANA_CHAR = /[\p{Script=Katakana}ー]/u;
+const KATAKANA_CHAR = /[\p{Script=Katakana}ーｰﾞﾟ]/u;
 
 // Would cutting here land in the middle of a katakana run?
 const cutsInsideKatakana = (rest: string, at: number): boolean =>
@@ -1353,13 +1672,11 @@ function wholeKatakanaWord(candidates: LookupHit[], source: string): LookupHit {
 
 async function pathAdjusted(
   db: IDBDatabase, generation: string, rest: string,
-  languages: readonly GlossLanguage[], apiBase: string, best: Definition | null,
+  languages: readonly GlossLanguage[], apiBase: string, best: PendingDefinition | null,
   candidates: LookupHit[],
-): Promise<Definition | null> {
+): Promise<PendingDefinition | null> {
   const winner = candidates[0];
-  // At the end of the text there is no path to compare: the winner explains
-  // everything that is left.
-  if (!winner || winner.prefixLength >= rest.length) return best;
+  if (!winner || !startsJapanese(rest.slice(winner.prefixLength))) return best;
 
   // One reading per span length, best first: the list holds every entry that
   // matched, and 25 readings of お are 25 identical paths.
@@ -1387,14 +1704,14 @@ async function pathAdjusted(
 }
 
 async function lookupInDatabase(db: IDBDatabase, generation: string, source: string, languages: readonly GlossLanguage[], apiBase: string, contextual = false, whole = false): Promise<PendingDefinition | null> {
-  const prefixes = whole ? [source] : prefixesLongestFirst(source);
+  const prefixes = whole ? [source] : prefixesLongestFirst(source, contextual);
   // Exact prefixes first: IndexedDB reads run concurrently, and this is the
   // overwhelmingly common case. Each prefix is probed in its verbatim spelling
   // and its folded/collapsed variants so emphasis katakana and stretched kana
   // still reach their dictionary entry.
   const exactHits = await hitsForCandidates(db, generation, prefixes.flatMap((prefix) =>
     lookupVariants(prefix).map((variant) => ({
-      prefix, candidate: { text: variant.text, reasons: [], processingCost: variant.processingCost },
+      prefix, candidate: { text: variant.text, reasons: [], processingCost: variant.processingCost, emphasisRepair: variant.emphasisRepair },
     }))), !contextual);
 
   // Deinflecting only when nothing matched exactly loses to any shorter entry
@@ -1416,9 +1733,9 @@ async function lookupInDatabase(db: IDBDatabase, generation: string, source: str
   const deinflectedHits = longerPrefixes.length
     ? await hitsForCandidates(db, generation, longerPrefixes.flatMap((prefix) =>
       lookupVariants(prefix).flatMap((variant) =>
-        deinflect(variant.text).map((found) => ({
+        deinflect(variant.text, { contextual }).map((found) => ({
           prefix,
-          candidate: { text: found.term, reasons: found.inflections.map(inflectionLabel), conditions: found.conditions, processingCost: variant.processingCost },
+          candidate: { text: found.term, reasons: found.inflections.map(inflectionLabel), processingCost: variant.processingCost, emphasisRepair: variant.emphasisRepair, deinflection: found },
         })))))
     : [];
 
@@ -1439,8 +1756,18 @@ async function lookupInDatabase(db: IDBDatabase, generation: string, source: str
   // the noun 読み) still holds: the longer deinflected span outscores the short
   // exact one on its own merits.
   const hits = [...deinflectedHits, ...exactHits];
-  hits.sort((a, b) => score(b, source) - score(a, source));
+  hits.sort((a, b) => (!contextual ? b.prefixLength - a.prefixLength : 0)
+    || score(b, source) - score(a, source)
+    || (!contextual ? filedRung(a, b) : 0)
+    || (!contextual ? ownKanjiRank(a.term) - ownKanjiRank(b.term) : 0));
   return hits[0] ? termDefinition(hits[0], languages, apiBase) : null;
+}
+
+function ownKanjiRank(term: OfflineTerm): number {
+  const reading = term.readings.find((item) => item.kind === "kana")?.text;
+  const writings = new Set(term.expressions.filter((item) => /\p{Script=Han}/u.test(item.text)
+    && !item.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag))).map((item) => item.text));
+  return Math.min(...(term.frequencies ?? []).filter((row) => writings.has(row.text) && row.reading === reading).map((row) => row.rank));
 }
 
 // Kanji are a separate corpus, never a word-search result: the server draws the
@@ -1515,9 +1842,12 @@ const CONTEXTUAL_FREQUENCY_LIMIT = 50_000;
 // pass: only deinflections are gated, and like Yomitan an entry with no matching
 // conjugating class simply doesn't match (a noun has no verb rules to fire).
 function posSatisfiesInflection(term: Stored<OfflineTerm>, candidate: Candidate): boolean {
-  const required = candidate.conditions ?? 0;
-  if (!required) return true;
-  return (posConditionFlags(term.senses.flatMap((sense) => sense.partsOfSpeech)) & required) !== 0;
+  if (!candidate.deinflection) return true;
+  const codes = term.senses.flatMap((sense) => sense.partsOfSpeech);
+  if (matchesPos(candidate.deinflection, codes)) return true;
+  if (!codes.length || !codes.every((code) => code === "exp" || code === "unc")) return false;
+  const expression = term.expressions.find((item) => normalize(item.text) === normalize(candidate.text));
+  return Boolean(expression?.inflectionClass && matchesPos(candidate.deinflection, [expression.inflectionClass]));
 }
 
 function matchingExpression(hit: LookupHit) {
@@ -1584,7 +1914,9 @@ function contextuallyConfident(hit: LookupHit, unbound = false): boolean {
   // Unless nothing in front of the run can take the case: it opens the clause,
   // or another particle already holds the slot (だけでも). There で is not binding
   // anything, and でも / では are the words JMdict lists.
-  if (!unbound && particleCluster(hit.surface)) return false;
+  const listingParticle = hit.surface === "とか" && hit.term.senses.some((sense) =>
+    sense.partsOfSpeech.some((pos) => pos === "prt" || pos === "conj" || pos === "exp"));
+  if (!unbound && particleCluster(hit.surface) && !listingParticle) return false;
   const inflected = hit.candidate.reasons.length > 0;
   const usuallyKana = hit.term.senses.some((sense) => sense.misc.includes("uk"));
   const expression = matchingExpression(hit);
@@ -1596,6 +1928,8 @@ function contextuallyConfident(hit: LookupHit, unbound = false): boolean {
     return usuallyKana && matchingReading(hit);
   }
   if (expression.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag))) return false;
+  if (hit.term.dictionary === "jmnedict" && !inflected && !hit.candidate.processingCost
+    && /^\p{Script=Han}{2,}$/u.test(hit.surface)) return true;
   if (forcedExpression(hit)) return true;
   // Demoting a usually-kana word applies to its KANJI spellings only: for について
   // / ついて / こと the kana IS the normal spelling, and JMdict lists it as a real
@@ -1628,15 +1962,13 @@ function particleCluster(surface: string): boolean {
 
 // A word that conjugates: the deinflector can only have reached it as a form.
 const VERBAL_POS = /^(v[0-9a-z-]+|adj-i)$/;
+const POTENTIAL_FORMS = new Set([ "potential", "potential / passive" ]);
 // The rules this promotion trusts, named exactly as `inflectionLabel` renders them.
 // A whitelist, not a blacklist, and the blacklist that came first is why: the
 // deinflector also has slang and dialect rules, and through those これ is the
 // imperative of 凝る, たくさん of 託す and みんな of 見る: all common verbs, so every
 // pronoun in the corpus lemma'd to a verb nobody wrote. What belongs here is the
 // plain predicate endings, where the verb IS the word and the ending is grammar.
-// Not `potential`: できる is listed as its own word and JMdict is right that it is
-// one, so promoting there just re-opens 出来る → する. Not `continuative` or the
-// noun-forming rules either: 帰り and 読み are the words the sentence means.
 const PREDICATE_FORMS = new Set([ "negative", "past", "polite", "te-form", "progressive",
   "passive", "causative", "short causative", "volitional", "imperative",
   "desiderative (-tai)", "polite imperative (-nasai)", "negative (-naide)",
@@ -1689,7 +2021,17 @@ function contextualCompare(a: LookupHit, b: LookupHit): number {
   if (common) return common;
   const aFrequency = frequencyForHit(a) ?? Number.POSITIVE_INFINITY;
   const bFrequency = frequencyForHit(b) ?? Number.POSITIVE_INFINITY;
-  return aFrequency - bFrequency || score(b, b.surface) - score(a, a.surface) || a.term.id.localeCompare(b.term.id);
+  return aFrequency - bFrequency || wordFrequency(a) - wordFrequency(b)
+    || score(b, b.surface) - score(a, a.surface) || a.term.id.localeCompare(b.term.id);
+}
+
+function wordFrequency(hit: LookupHit, { distinguishSpellings = true } = {}): number {
+  const reading = readingFor(hit.term, hit.candidate.text);
+  const rows = (hit.term.frequencies ?? []).filter((row) => row.reading === reading || row.reading === null);
+  const normalKanji = new Set(hit.term.expressions.filter((expression) => expression.script === "kanji"
+    && !expression.tags.some((tag) => tag === "rK" || tag === "oK")).map((expression) => expression.text));
+  const distinct = rows.filter((row) => normalKanji.has(row.text));
+  return Math.min(...(distinguishSpellings && distinct.length ? distinct : rows).map((row) => row.rank));
 }
 
 // Corpus rank for this hit: the applicable [text, reading] pair first, with a
@@ -1732,7 +2074,7 @@ async function performInstall(apiBase: string, signal: AbortSignal): Promise<Pac
   // Avoid re-entering snapshot/installing flags via dictionaryStatus during install:
   // only need the active revision comparison.
   const dbForCheck = await openDatabase();
-  const activeRevision = await meta<string>(dbForCheck, "activeGeneration");
+  const activeRevision = await activeGeneration(dbForCheck);
   const current = { revision: activeRevision ?? null };
   if (current.revision === manifest.contentRevision) {
     reportInstallProgress(1, null);
@@ -1983,7 +2325,17 @@ async function meta<T>(db: IDBDatabase, key: string): Promise<T | undefined> {
 
 async function activeGeneration(db: IDBDatabase): Promise<string | undefined> {
   if (activeGenerationCache !== null) return activeGenerationCache;
-  activeGenerationCache = await meta<string>(db, "activeGeneration");
+  const [generation, manifest] = await Promise.all([
+    meta<string>(db, "activeGeneration"), meta<PackManifest>(db, "manifest"),
+  ]);
+  if (!generation || !manifest || manifest.contentRevision !== generation) return;
+  activeGenerationCache = undefined;
+  try {
+    validateManifest(manifest);
+    activeGenerationCache = generation;
+  } catch {
+    return;
+  }
   return activeGenerationCache;
 }
 
@@ -2023,12 +2375,32 @@ async function forPopup(
   db: IDBDatabase, generation: string, definition: PendingDefinition | null, languages: readonly GlossLanguage[], voice?: string,
 ): Promise<Definition | null> {
   if (!definition) return null;
-  const [pitch, examples] = await Promise.all([
+  const source = normalize(definition.sourceForm ?? definition.headword);
+  const literalForm = [source, ...searchReadings(source)].flatMap(lookupVariants)
+    .some((variant) => variant.text === normalize(definition.headword));
+  const [pitch, examples, copula, adjective, lexicalAdverb, imperative] = await Promise.all([
     clipUrlsFor(db, definition, voice),
     examplesFor(db, generation, definition, languages),
+    !definition.inflection?.length && literalForm ? copulaBaseHit(db, generation, definition) : undefined,
+    adjectiveHead(db, generation, definition),
+    !definition.inflection?.length ? lexicalAdverbBase(db, generation, definition) : undefined,
+    !definition.inflection?.length ? referencedImperativeBase(db, generation, definition) : undefined,
   ]);
-  const { exampleIds: _ids, ...rest } = definition;
-  return { ...rest, pitch, examples };
+  const adverbial = !definition.inflection?.length && literalForm && adjective
+    ? deinflect(source).find((form) => form.term === adjective && form.inflections.includes("adverbial"))
+    : undefined;
+  const { exampleIds: _ids, inflectionClass: _class, studyHeadword, ...rest } = definition;
+  const lexicalBase = lexicalAdverb ?? imperative;
+  const inflections = copula?.candidate.reasons ?? lexicalBase?.candidate.reasons
+    ?? adverbial?.inflections.map(inflectionLabel) ?? definition.inflection ?? [];
+  const ranuki = definition.senses.some((sense) => sense.posCodes?.some((pos) => pos === "v1" || pos === "vk"));
+  return { ...rest, pitch, examples, baseForm: studyHeadword,
+    inflection: displayInflections(inflections.map((reason) => ranuki && reason === "potential" ? "potential_ranuki" : reason)),
+    ...(lexicalBase ? { inflectionBase: lexicalBase.candidate.text } : {}),
+    ...(adverbial ? { inflectionBase: adjective! } : {}),
+    ...(copula ? { inflectionBase: copula.term.headword,
+      baseForm: copula.term.headword, baseReading: copula.term.readings[0]?.text } : {}),
+  };
 }
 
 async function clipUrlsFor(db: IDBDatabase, definition: PendingDefinition, voice?: string): Promise<Definition["pitch"]> {
@@ -2128,6 +2500,9 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
 
 function validateManifest(manifest: PackManifest): void {
   if (manifest.schemaVersion !== SUPPORTED_SCHEMA) throw new Error(`This dictionary needs a newer Shirabe Reader (schema ${manifest.schemaVersion}).`);
+  if (Number.isInteger(manifest.buildRecipeVersion) && manifest.buildRecipeVersion < MINIMUM_PACK_RECIPE) {
+    throw new Error("This dictionary pack is outdated. Rebuild it before installing.");
+  }
   if (!/^\d+\.\d+\.\d+$/.test(manifest.minimumExtensionVersion) || compareVersions(manifest.minimumExtensionVersion, __EXTENSION_VERSION__) > 0) {
     throw new Error(`This dictionary needs Shirabe Reader ${manifest.minimumExtensionVersion} or newer.`);
   }
@@ -2182,7 +2557,7 @@ function compareVersions(left: string, right: string): number {
 function validateTerm(term: OfflineTerm): void {
   const allowed = new Set(["type", "id", "dictionary", "headword", "expressions", "readings", "senses", "pitch", "frequencies", "jlpt", "examples"]);
   if (Object.keys(term).some((key) => !allowed.has(key)) || !plainString(term.id) || !plainString(term.dictionary) || !plainString(term.headword) ||
-      !Array.isArray(term.expressions) || !term.expressions.length || term.expressions.some((item) => !exactKeys(item, ["text", "script", "common", "tags"]) || !plainString(item.text) || !plainString(item.script) || typeof item.common !== "boolean" || !stringArray(item.tags)) ||
+      !Array.isArray(term.expressions) || !term.expressions.length || term.expressions.some((item) => !exactKeys(item, ["text", "script", "common", "tags", "inflectionClass"]) || !plainString(item.text) || !plainString(item.script) || typeof item.common !== "boolean" || !stringArray(item.tags) || (item.inflectionClass !== undefined && (!plainString(item.inflectionClass) || !posConditionFlags([item.inflectionClass])))) ||
       !Array.isArray(term.readings) || term.readings.some((item) => !exactKeys(item, ["text", "kind", "appliesTo"]) || !plainString(item.text) || !plainString(item.kind) || (item.appliesTo != null && !stringArray(item.appliesTo))) ||
       !Array.isArray(term.senses) || !term.senses.length || term.senses.some((sense) => !validSense(sense)) ||
       (term.pitch != null && (!Array.isArray(term.pitch) || term.pitch.some((item) => !exactKeys(item, ["text", "reading", "downstep"]) || !plainString(item.text) || !plainString(item.reading) || !Number.isInteger(item.downstep)))) ||
@@ -2307,8 +2682,8 @@ function normalize(text: string): string {
   return text.normalize("NFKC").trim();
 }
 
-function prefixesLongestFirst(text: string): string[] {
-  const chars = [...text];
+function prefixesLongestFirst(text: string, contextual = false): string[] {
+  const chars = [...(contextual ? text.split(/[\s\p{White_Space}]/u, 1)[0]! : text)];
   return Array.from({ length: chars.length }, (_, index) => chars.slice(0, chars.length - index).join(""));
 }
 
@@ -2333,7 +2708,7 @@ function score(hit: LookupHit, source: string): number {
 //
 // `exampleIds` never leaves this module: `forPopup` trades it for the sentences
 // themselves, and everything downstream sees a plain Definition.
-type PendingDefinition = Definition & { exampleIds?: string[] };
+type PendingDefinition = Definition & { exampleIds?: string[]; baseForm: string; studyHeadword: string; inflectionClass?: string };
 
 function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], apiBase: string): PendingDefinition {
   const term = hit.term;
@@ -2434,6 +2809,10 @@ function termCard(hit: LookupHit, term: Stored<OfflineTerm>, senses: Sense[], ap
 
   return {
     headword,
+    studyHeadword: term.headword,
+    inflectionClass: matchingExpression(hit)?.inflectionClass,
+    baseForm: !term.senses.some((sense) => sense.partsOfSpeech.includes("num"))
+      && (matchingExpression(hit)?.script === "kana" || isUsuallyKana(term)) ? headword : term.headword,
     reading,
     ...(forms.length ? { forms } : {}),
     entry: term.id,
@@ -2501,7 +2880,7 @@ function dictionaryName(slug: string): string {
 // headwords (Ｔシャツ, ２ちゃんねる, ＣＤプレーヤー), so the scanner must treat them as
 // word characters. Both patterns must describe the same set: one finds where a
 // word can start, the other consumes the run of text between words.
-const JAPANESE_CHARS = String.raw`々〇〻\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}０-９Ａ-Ｚａ-ｚ`;
+const JAPANESE_CHARS = String.raw`々〇〻\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}0-9０-９Ａ-Ｚａ-ｚ`;
 const JAPANESE_HEAD = new RegExp(`^[${JAPANESE_CHARS}]`, "u");
 const NOT_JAPANESE_RUN = new RegExp(`^[^${JAPANESE_CHARS}]+`, "u");
 
@@ -2513,10 +2892,10 @@ const NOT_JAPANESE_RUN = new RegExp(`^[^${JAPANESE_CHARS}]+`, "u");
 // particle or kanji word still tokenizes on its own. A kanji/hiragana miss
 // stays a single code point: a real dictionary word can begin partway through
 // such a run, and grouping would swallow it.
-const KATAKANA_RUN = /^[\p{Script=Katakana}ー]+/u;
-const FULLWIDTH_ALNUM_RUN = /^[０-９Ａ-Ｚａ-ｚ]+/u;
+const KATAKANA_RUN = /^[\p{Script=Katakana}ーｰﾞﾟ]+/u;
+const UNKNOWN_ALNUM_RUN = /^[0-9０-９Ａ-Ｚａ-ｚ]+/u;
 function unknownRun(rest: string): string {
-  return (rest.match(KATAKANA_RUN) ?? rest.match(FULLWIDTH_ALNUM_RUN))?.[0]
+  return (rest.match(KATAKANA_RUN) ?? rest.match(UNKNOWN_ALNUM_RUN))?.[0]
     ?? String.fromCodePoint(rest.codePointAt(0) as number);
 }
 

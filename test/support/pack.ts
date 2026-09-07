@@ -120,16 +120,14 @@ export function packPayload(lines: string[]): Buffer {
 
 /**
  * Serve `payload` as the current pack and install it, replacing whatever was
- * installed before. `buildRecipeVersion` and `minimumExtensionVersion` are only
- * shape-checked by the installer (an integer, and a version no newer than this
- * build), so one pair covers every harness.
+ * installed before.
  */
 export async function installTestPack(
   payload: Buffer,
   { contentRevision, terms }: { contentRevision: string; terms: number },
 ): Promise<void> {
   const manifest = {
-    schemaVersion: 5, buildRecipeVersion: 6, minimumExtensionVersion: "0.2.1", contentRevision,
+    schemaVersion: 6, buildRecipeVersion: 13, minimumExtensionVersion: "0.2.4", contentRevision,
     audio: {
       baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f",
       engineVersion: 1, salt: "test-salt", defaultVoice: "male",

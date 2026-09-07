@@ -7,7 +7,7 @@ import { gzipSync } from "node:zlib";
 import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupEntryOffline, lookupKanjiOffline, lookupOffline, lookupVariants, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
 
 const records = [
-  { type: "header", schemaVersion: 5, languages: ["eng", "spa"], source: "Shirabe open-core" },
+  { type: "header", schemaVersion: 6, languages: ["eng", "spa"], source: "Shirabe open-core" },
   {
     type: "term", id: "jmdict:1", dictionary: "jmdict", headword: "食べる",
     expressions: [{ text: "食べる", script: "mixed", common: true, tags: [] }],
@@ -184,6 +184,16 @@ const records = [
     ],
     frequencies: [{ source: "jiten-global", text: "表", reading: "ひょう", rank: 900 }],
   },
+  ...[
+    ["debt-idiom", "首が回らない", "くびがまわらない", "adj-i"],
+    ["verb-expression", "男を知る", "おとこをしる", "v5r"],
+    ["dialect-expression", "どない", "どない", "adj-na"],
+  ].map(([id, text, reading, inflectionClass]) => ({
+    type: "term", id: `jmdict:${id}`, dictionary: "jmdict", headword: text,
+    expressions: [{ text, script: "kanji", common: true, tags: [], inflectionClass }],
+    readings: [{ text: reading, kind: "kana" }],
+    senses: [{ glosses: { eng: ["expression"] }, partsOfSpeech: ["exp"], fields: [], misc: [], dialects: [], restrictions: [] }],
+  })),
   { type: "kanji", id: "kanjidic:食", char: "食", readings: { on: ["ショク"], kun: ["た.べる"] }, meanings: { eng: ["eat"], spa: ["comer"] }, strokes: 9 },
   // KANJIDIC lists pinyin/korean/vietnam before the Japanese readings, and 猫 is
   // also a word: both of which the lookup has to see past.
@@ -208,13 +218,47 @@ const counts = {
 
 function manifest(revision: string, sha256 = checksum) {
   return {
-    schemaVersion: 5, buildRecipeVersion: 5, minimumExtensionVersion: "0.2.0", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
+    schemaVersion: 6, buildRecipeVersion: 13, minimumExtensionVersion: "0.2.4", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
     audio: { baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f", engineVersion: 1, salt: "test-salt", defaultVoice: "male", voices: { male: 1_628_969_216, female: 345_585_728 } },
     artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
     bytes: compressed.byteLength, sha256, counts, languages: ["eng", "spa"],
     dictionaries: [{ slug: "jmdict", version: "test" }], modifications: [], sources: [], downloadUrl: "https://packs.test/dictionary.gz",
   } as const;
 }
+
+test("an outdated stored pack is unavailable and updates without the daily delay", async (context) => {
+  await removeDictionary();
+  await dictionaryStatus();
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open("shirabe-offline-dictionary-v4", 2);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const transaction = db.transaction("meta", "readwrite");
+  const metadata = transaction.objectStore("meta");
+  metadata.put({ key: "activeGeneration", value: "old-installed" });
+  metadata.put({ key: "manifest", value: { ...manifest("old-installed"), buildRecipeVersion: 12 } });
+  metadata.put({ key: "lastUpdateCheck", value: new Date().toISOString() });
+  await new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(transaction.error);
+  });
+  db.close();
+  const originalFetch = globalThis.fetch;
+  context.after(async () => { globalThis.fetch = originalFetch; await removeDictionary(); });
+
+  assert.equal((await dictionaryStatus()).installed, false);
+  await assert.rejects(lookupOffline("食べる", ["eng"], "https://shirabe.test"), /Install the Shirabe dictionary/);
+  await assert.rejects(parseOffline("食べる", ["eng"], "https://shirabe.test"), /Install the Shirabe dictionary/);
+
+  globalThis.fetch = (async (input: string | URL | Request) => String(input).endsWith("/current")
+    ? new Response(JSON.stringify(manifest("replacement")), { headers: { "Content-Type": "application/json" } })
+    : new Response(new Uint8Array(compressed), { headers: { "Content-Type": "application/gzip" } })) as typeof fetch;
+  await checkDictionaryUpdate("https://api.test");
+  assert.equal((await dictionaryStatus()).revision, "replacement");
+  assert.equal((await dictionaryStatus()).installed, true);
+  assert.equal((await lookupOffline("食べる", ["eng"], "https://shirabe.test"))?.entry, "jmdict:1");
+});
 
 test("installs, deinflects, parses, and rolls back a corrupt offline pack", async (context) => {
   await removeDictionary();
@@ -240,8 +284,23 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   }) as typeof fetch;
 
   await installDictionary("https://api.test");
-  await assert.rejects(lookupOffline("arm hair", ["eng"], "https://shirabe.test"), /Meaning search is available online/);
+  for (const query of ["首が回らなく", "首が回らなかった", "首が回らなければ"]) {
+    assert.equal((await lookupOffline(query, ["eng"], "https://shirabe.test"))?.entry, "jmdict:debt-idiom", query);
+    assert.equal((await parseOffline(query, ["eng"], "https://shirabe.test"))[0]?.surface, query);
+  }
+  assert.equal((await lookupOffline("男を知った", ["eng"], "https://shirabe.test"))?.entry, "jmdict:verb-expression");
+  assert.notEqual((await lookupOffline("男を知いた", ["eng"], "https://shirabe.test"))?.entry, "jmdict:verb-expression");
+  assert.notEqual((await lookupOffline("どなかった", ["eng"], "https://shirabe.test"))?.entry, "jmdict:dialect-expression");
+  for (const query of ["arm hair", "eat", "comer", "application programming interface"]) {
+    await assert.rejects(lookupOffline(query, ["eng", "spa"], "https://shirabe.test"), /Meaning search is available online/);
+  }
   assert.equal((await lookupOffline("API", ["eng"], "https://shirabe.test"))?.headword, "API");
+  for (const query of ["taberu", "tabemashita", "ＴＡＢＥＭＡＳＨＩＴＡ", "  tabemashita  "]) {
+    assert.equal((await lookupOffline(query, ["eng"], "https://shirabe.test"))?.entry, "jmdict:1", query);
+  }
+  for (const query of ["benkyoushimashita", "benkyou  shimashita", "benkyou\tshimashita", "benkyou　shimashita"]) {
+    assert.equal((await lookupOffline(query, ["eng"], "https://shirabe.test"))?.entry, "jmdict:3", query);
+  }
   await assert.rejects(lookupOffline("API hair", ["eng"], "https://shirabe.test"), /Meaning search is available online/);
   await assert.rejects(lookupEntryOffline("personal:1", "食べる", ["eng"], "https://shirabe.test"), /Not available in this dictionary/);
   const definition = await lookupOffline("食べました", ["spa"], "https://shirabe.test");
@@ -489,6 +548,16 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   }
   assert.equal((await dictionaryStatus()).revision, "v1");
 
+  for (const inflectionClass of ["unknown-class", null, 42]) {
+    const invalidRecords = structuredClone(records);
+    const invalidTerm = invalidRecords[1] as unknown as { expressions: Array<Record<string, unknown>> };
+    invalidTerm.expressions[0]!.inflectionClass = inflectionClass;
+    archive = gzipSync(invalidRecords.map((record) => JSON.stringify(record)).join("\n") + "\n");
+    current = { ...manifest("v-invalid-inflection", createHash("sha256").update(archive).digest("hex")), bytes: archive.byteLength };
+    await assert.rejects(installDictionary("https://api.test"), /term record is invalid/i);
+    assert.equal((await dictionaryStatus()).revision, "v1");
+  }
+
   const unsafeRecords = structuredClone(records);
   // Name the one shape this reaches into, rather than indexing into the union of
   // every record type in the fixture (a header has no senses).
@@ -508,6 +577,17 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   current = { ...offSiteAudio, audio: { ...offSiteAudio.audio, baseUrl: "https://example.com/audio" } } as unknown as typeof current; // deliberately off-site
   await assert.rejects(installDictionary("https://api.test"), /manifest is invalid/i);
   assert.equal((await dictionaryStatus()).revision, "v1");
+
+  archive = compressed;
+  current = { ...manifest("v-old-schema"), schemaVersion: 5 } as unknown as typeof current;
+  await assert.rejects(installDictionary("https://api.test"), /schema 5/i);
+  assert.equal((await dictionaryStatus()).revision, "v1");
+
+  archive = compressed;
+  current = { ...manifest("v-old-recipe"), buildRecipeVersion: 12 } as unknown as typeof current;
+  await assert.rejects(installDictionary("https://api.test"), /dictionary pack.*outdated.*rebuild/i);
+  assert.equal((await dictionaryStatus()).revision, "v1");
+  assert.equal((await lookupOffline("食べました", ["eng"], "https://shirabe.test"))?.entry, "jmdict:1");
 
   archive = compressed;
   current = { ...manifest("v-future"), minimumExtensionVersion: "9.0.0" } as unknown as typeof current; // deliberately too new

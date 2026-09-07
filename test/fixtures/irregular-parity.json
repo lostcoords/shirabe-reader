@@ -1,0 +1,3926 @@
+[
+  {
+    "surface": "行く",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行きます",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かない",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きません",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行った",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きました",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かなかった",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きませんでした",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行って",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きまして",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かなくて",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かないで",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きませんで",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行けば",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きますなら",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行きますならば",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行かなければ",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きませんなら",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行きませんならば",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行ける",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行けます",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行けない",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行けません",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かれる",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かれます",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かれない",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かれません",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かせる",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かす",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かせます",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かします",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かせない",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かさない",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かせません",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かしません",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かせられる",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かされる",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かせられます",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かされます",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かせられない",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かされない",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かせられません",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かされません",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行こう",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きましょう",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行くまい",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きませんまい",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行け",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きなさい",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行くな",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行きなさるな",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行ったら",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きましたら",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かなかったら",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きませんでしたら",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行ったり",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きましたり",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行かなかったり",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行きませんでしたり",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行き",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "行いた",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行いて",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行いたら",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "行いたり",
+    "base": "行く",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いく",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いきます",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかない",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきません",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いった",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきました",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかなかった",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきませんでした",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いって",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきまして",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかなくて",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかないで",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきませんで",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いけば",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきますなら",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いきますならば",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いかなければ",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきませんなら",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いきませんならば",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いける",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いけます",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いけない",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いけません",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかれる",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかれます",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかれない",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかれません",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかせる",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかす",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかせます",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかします",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかせない",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかさない",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかせません",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかしません",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかせられる",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかされる",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかせられます",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかされます",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかせられない",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかされない",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかせられません",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかされません",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いこう",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきましょう",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いくまい",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきませんまい",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いけ",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきなさい",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いくな",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いきなさるな",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いったら",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきましたら",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかなかったら",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきませんでしたら",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いったり",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきましたり",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いかなかったり",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いきませんでしたり",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いき",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": true
+  },
+  {
+    "surface": "いいた",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いいて",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いいたら",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "いいたり",
+    "base": "いく",
+    "pos": "v5k-s",
+    "accepted": false
+  },
+  {
+    "surface": "問う",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問います",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わない",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いません",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問うた",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いました",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わなかった",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いませんでした",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問うて",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いまして",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わなくて",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わないで",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いませんで",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問えば",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いますなら",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問いますならば",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問わなければ",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いませんなら",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問いませんならば",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問える",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問えます",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問えない",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問えません",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問われる",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問われます",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問われない",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問われません",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わせる",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わす",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わせます",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わします",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わせない",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わさない",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わせません",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わしません",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わせられる",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わされる",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わせられます",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わされます",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わせられない",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わされない",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わせられません",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わされません",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問おう",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いましょう",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問うまい",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いませんまい",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問え",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いなさい",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問うな",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問いなさるな",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問うたら",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いましたら",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わなかったら",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いませんでしたら",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問うたり",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いましたり",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問わなかったり",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問いませんでしたり",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問い",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": true
+  },
+  {
+    "surface": "問った",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問って",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問ったら",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "問ったり",
+    "base": "問う",
+    "pos": "v5u-s",
+    "accepted": false
+  },
+  {
+    "surface": "ある",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あります",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "ない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "ありません",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あった",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "ありました",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "なかった",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "ありませんでした",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あって",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "ありまして",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "なくて",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "ないで",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "ありませんで",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あれば",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "ありますなら",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "ありますならば",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "なければ",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "ありませんなら",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "ありませんならば",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あれる",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あれます",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あれない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あれません",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あられる",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あられます",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あられない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あられません",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらせる",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらす",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらせます",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらします",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらせない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらさない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらせません",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらしません",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらせられる",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらされる",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらせられます",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらされます",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらせられない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらされない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらせられません",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらされません",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あろう",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "ありましょう",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あるまい",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "ありませんまい",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あれ",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "ありなさい",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あるな",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "ありなさるな",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あったら",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "ありましたら",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "なかったら",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "ありませんでしたら",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あったり",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "ありましたり",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "なかったり",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "ありませんでしたり",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あり",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": true
+  },
+  {
+    "surface": "あらない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらなかった",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらなくて",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらないで",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらなければ",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらなかったら",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらなかったり",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "くださる",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださいます",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらない",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいません",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださった",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいました",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらなかった",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいませんでした",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださって",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいまして",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらなくて",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらないで",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいませんで",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くだされば",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいますなら",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださいますならば",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださらなければ",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいませんなら",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださいませんならば",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くだされる",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くだされます",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くだされない",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くだされません",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださられる",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださられます",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださられない",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださられません",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらせる",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらす",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらせます",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらします",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらせない",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらさない",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらせません",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらしません",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらせられる",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらされる",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらせられます",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらされます",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらせられない",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらされない",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらせられません",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらされません",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださろう",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいましょう",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださるまい",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいませんまい",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "ください",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいなさい",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださるな",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださいなさるな",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださったら",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいましたら",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらなかったら",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいませんでしたら",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださったり",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいましたり",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださらなかったり",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださいませんでしたり",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださります",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりません",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりました",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりませんでした",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりまして",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりませんで",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりますなら",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりますならば",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりませんなら",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりませんならば",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりましょう",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりませんまい",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くだされ",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださりなさい",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださりなさるな",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くださりましたら",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりませんでしたら",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりましたり",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださりませんでしたり",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "くださり",
+    "base": "くださる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さる",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さいます",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらない",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいません",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さった",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいました",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらなかった",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいませんでした",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さって",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいまして",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらなくて",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらないで",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいませんで",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下されば",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいますなら",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さいますならば",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さらなければ",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいませんなら",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さいませんならば",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下される",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下されます",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下されない",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下されません",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さられる",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さられます",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さられない",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さられません",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらせる",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらす",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらせます",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらします",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらせない",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらさない",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらせません",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらしません",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらせられる",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらされる",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらせられます",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらされます",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらせられない",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらされない",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらせられません",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらされません",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さろう",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいましょう",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さるまい",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいませんまい",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さい",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいなさい",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さるな",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さいなさるな",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さったら",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいましたら",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらなかったら",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいませんでしたら",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さったり",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいましたり",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さらなかったり",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さいませんでしたり",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さります",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりません",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりました",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりませんでした",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりまして",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりませんで",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりますなら",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりますならば",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりませんなら",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりませんならば",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりましょう",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりませんまい",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下され",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さりなさい",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さりなさるな",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "下さりましたら",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりませんでしたら",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりましたり",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さりませんでしたり",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": false
+  },
+  {
+    "surface": "下さり",
+    "base": "下さる",
+    "pos": "v5aru",
+    "accepted": true
+  },
+  {
+    "surface": "くれる",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "くれます",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれない",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれません",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれた",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれました",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれなかった",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれませんでした",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれて",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれまして",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれなくて",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれないで",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれませんで",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "くれれば",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれますなら",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "くれますならば",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "くれなければ",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれませんなら",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "くれませんならば",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "くれられる",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれれる",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれられます",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれれます",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれられない",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれれない",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれられません",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれれません",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさせる",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさす",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさせます",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさします",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさせない",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれささない",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさせません",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさしません",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさせられる",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさせられます",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさせられない",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれさせられません",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれよう",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれましょう",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれまい",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれますまい",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれ",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれなさい",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれるな",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "くれなさるな",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれたら",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれましたら",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれなかったら",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれませんでしたら",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "くれたり",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれましたり",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれなかったり",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "くれませんでしたり",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "くれろ",
+    "base": "くれる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "呉れる",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "呉れます",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れない",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れません",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れた",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れました",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れなかった",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れませんでした",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れて",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れまして",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れなくて",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れないで",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れませんで",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "呉れれば",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れますなら",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "呉れますならば",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "呉れなければ",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れませんなら",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "呉れませんならば",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "呉れられる",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れれる",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れられます",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れれます",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れられない",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れれない",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れられません",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れれません",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさせる",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさす",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさせます",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさします",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさせない",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れささない",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさせません",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさしません",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさせられる",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさせられます",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさせられない",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れさせられません",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れよう",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れましょう",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れまい",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れますまい",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れ",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れなさい",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れるな",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "呉れなさるな",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れたら",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れましたら",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れなかったら",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れませんでしたら",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "呉れたり",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れましたり",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れなかったり",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": true
+  },
+  {
+    "surface": "呉れませんでしたり",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "呉れろ",
+    "base": "呉れる",
+    "pos": "v1-s",
+    "accepted": false
+  },
+  {
+    "surface": "いい",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いいです",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくない",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくないです",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくありません",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よかった",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よかったです",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくなかった",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくなかったです",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくありませんでした",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくて",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくなくて",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よければ",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくなければ",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくさせる",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よかろう",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いいでしょう",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よかったら",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よくなかったら",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "よかったり",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくない",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくないです",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくありません",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いかった",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いかったです",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくなかった",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくなかったです",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくありませんでした",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくて",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくなくて",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いければ",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくなければ",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくさせる",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いかろう",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いかったら",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いくなかったら",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "いかったり",
+    "base": "いい",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "良い",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "良いです",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "良くない",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "良くないです",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "良くありません",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "良かった",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "良かったです",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "良くなかった",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "良くなかったです",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "良くありませんでした",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "良くて",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "良くなくて",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "良ければ",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "良くなければ",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "良くさせる",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "良かろう",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "良いでしょう",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": false
+  },
+  {
+    "surface": "良かったら",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "良くなかったら",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "良かったり",
+    "base": "良い",
+    "pos": "adj-ix",
+    "accepted": true
+  },
+  {
+    "surface": "愛する",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛します",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛さない",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しません",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛した",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しました",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛さなかった",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しませんでした",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛して",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しまして",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛さなくて",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しないで",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しませんで",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛すれば",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しますなら",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しますなれば",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛さなければ",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しませんなら",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しませんならば",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しえる",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しうる",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しえます",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しえない",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しえません",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛される",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛されます",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛されない",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛されません",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛させる",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛さす",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛させます",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛さします",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛させない",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛ささない",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛させません",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛さしません",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛させられる",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛させられます",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛させられない",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛させられません",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しよう",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しましょう",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛するまい",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しますまい",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しろ",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛せよ",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しなさい",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛するな",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しなさるな",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛したら",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しましたら",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛さなかったら",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しませんでしたら",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛したり",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しましたり",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛さなかったり",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しませんでしたり",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛し",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しない",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しなかった",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しなくて",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しなければ",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛できる",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛できます",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛できない",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛できません",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しなかったら",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  },
+  {
+    "surface": "愛しなかったり",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": false
+  }
+]

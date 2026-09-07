@@ -17,6 +17,7 @@ const manifestVersion = JSON.parse(readFileSync(new URL("../manifest.base.json",
 // another test's still-pending transactions. All of them share one process and
 // one installed pack, so the 58 MB pack is scanned once rather than per corpus.
 const suites = [
+  { name: "background-parity.test.ts", entry: "test/background-parity.test.ts", outfile: join(dir, "background-parity.cjs") },
   { name: "all.test.ts", entry: "test/all.test.ts", outfile: join(dir, "tests.cjs") },
   { name: "segmentation.test.ts", entry: "test/segmentation.test.ts", outfile: join(dir, "segmentation.cjs") },
 ];
@@ -26,6 +27,7 @@ try {
     await build({
       entryPoints: [suite.entry], bundle: true, platform: "node", format: "cjs", outfile: suite.outfile, logLevel: "silent",
       define: {
+        __DEV_RELOAD_URL__: JSON.stringify(""),
         __EXTENSION_VERSION__: JSON.stringify(manifestVersion),
         __DEFAULT_API_BASE__: JSON.stringify("https://shirabe.org"),
         // Straight from the builder, so the host matrix under test is the one that
@@ -42,6 +44,11 @@ try {
   }
   for (const suite of suites) {
     execFileSync(process.execPath, ["--test", suite.outfile], { stdio: "inherit" });
+    if (suite.name === "background-parity.test.ts") {
+      execFileSync(process.execPath, ["--test", suite.outfile], {
+        stdio: "inherit", env: { ...process.env, PARITY_MESSAGE_API: "firefox" },
+      });
+    }
   }
 } finally {
   rmSync(dir, { recursive: true, force: true });

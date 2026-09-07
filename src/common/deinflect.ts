@@ -13,68 +13,26 @@
 // Godan, Kuru, Suru, i-adjective…), so a rule only fires when the form actually
 // permits it. A flat table happily "deinflects" 高くなかった as if 高い were a verb.
 import transformData from "./resources/japanese-transforms.json" with { type: "json" };
+import irregularData from "./resources/irregular-forms.json" with { type: "json" };
+import labelData from "./resources/inflection-labels.json" with { type: "json" };
 
 export type Deinflection = {
   term: string;
   inflections: string[]; // surface → dictionary order, e.g. ["-た", "-ます"]
-  dictionaryForm: boolean; // the chain landed on a real dictionary form
+  dictionaryForm: boolean; // grammatical class only; dictionary existence is checked by the caller
   conditions: number; // grammatical class the dictionary form must satisfy (bitflags)
+  baseSurface: string;
 };
 
-// Friendly names for the rules, kept identical to daidai's LABELS: daidai calls
-// that map "the single source of truth for naming an inflection", and the
-// website renders it (tokens_helper.rb), so the same word reads the same way in
-// both places. Unlisted names fall through to the raw rule name.
-const LABELS: Record<string, string> = {
-  "-いる": "progressive", "-て": "te-form", "-た": "past",
-  "-ます": "polite", negative: "negative", passive: "passive",
-  potential: "potential", "potential or passive": "potential / passive",
-  causative: "causative", "short causative": "short causative",
-  volitional: "volitional", "volitional slang": "volitional (slang)",
-  imperative: "imperative", continuative: "continuative",
-  "-たい": "desiderative (-tai)", "-たら": "conditional (-tara)",
-  "-たり": "representative (-tari)", "-ば": "provisional (-ba)",
-  "-ゃ": "conditional contraction (-ya)", "-ちゃ": "contracted (-cha)",
-  "-ちゃう": "completive (-chau)", "-ちまう": "completive (-chimau)",
-  "-しまう": "completive (-shimau)", "-おく": "preparatory (-oku)",
-  "-そう": "looks like (-sou)", "-すぎる": "excessive (-sugiru)",
-  "-過ぎる": "excessive (-sugiru)", "-なさい": "polite imperative (-nasai)",
-  "-さ": "nominalization (-sa)", "-げ": "appearance (-ge)",
-  "-がる": "showing signs (-garu)", "-やがる": "contemptuous (-yagaru)",
-  "-ないで": "negative (-naide)",
-  "-ず": "negative (-zu)", "-ぬ": "negative (-nu)", "-ん": "negative (-n)",
-  "-ざる": "negative (-zaru)", "-ねば": "negative conditional (-neba)",
-  "-まい": "negative volitional (-mai)", "-く": "adverbial (-ku)",
-  "-き": "attributive (-ki)", "-む": "archaic volitional (-mu)",
-  "-んばかり": "on the verge (-nbakari)", "-んとする": "intentive (-ntosuru)",
-  "-え": "slang (-e)", "n-slang": "n-slang",
-  "imperative negative slang": "imperative negative (slang)",
-  "kansai-ben": "kansai dialect",
-  // Opposites, despite looking alike: obligation negates the verb and then
-  // negates the helper (行かなければならない, "there is no not-going"), while
-  // prohibition leaves the verb plain (食べてはいけない, "eating won't do").
-  obligation: "obligation (must)",
-  prohibition: "prohibition (must not)",
-  permission: "permission (may)",
-  exemption: "exemption (need not)",
-  "-てみる": "attempt (-temiru)", "-てある": "resultant state (-tearu)",
-  "-ていく": "progression away (-teiku)", "-てくる": "progression toward (-tekuru)",
-  "-べき": "obligation (-beki)",
-  "-ながら": "simultaneous (-nagara)", "-つつ": "simultaneous (-tsutsu)",
-  "-やすい": "easy to (-yasui)", "-にくい": "hard to (-nikui)",
-  "-はじめる": "begin (-hajimeru)", "-始める": "begin (-hajimeru)",
-  "-つづける": "continue (-tsuzukeru)", "-続ける": "continue (-tsuzukeru)",
-  "-おわる": "finish (-owaru)", "-終わる": "finish (-owaru)",
-  "-てあげる": "doing for someone (-teageru)", "-てやる": "doing for someone, plain (-teyaru)",
-  "-てさしあげる": "doing for someone, humble (-tesashiageru)",
-  "-てくれる": "done for me (-tekureru)", "-てくださる": "done for me, honorific (-tekudasaru)",
-  "-てもらう": "having someone do (-temorau)", "-ていただく": "having someone do, humble (-teitadaku)",
-  "-てください": "polite request (-tekudasai)",
-  "-がち": "tends to (-gachi)", "-っぱなし": "left as it is (-ppanashi)",
-  "-かねる": "cannot (-kaneru)",
-};
+const LABELS: Record<string, string> = labelData.labels;
 
 export const inflectionLabel = (name: string): string => LABELS[name] ?? name;
+
+export function displayInflections(labels: readonly string[]): string[] {
+  const compound = labels.find((label) => labelData.subsuming.includes(label));
+  const display: Record<string, string> = labelData.display;
+  return (compound ? [compound] : labels).map((label) => display[label] ?? label);
+}
 
 type RawRule = { type: string; inflected: string; deinflected: string; conditionsIn: string[]; conditionsOut: string[] };
 type RawTransform = { name: string; rules: RawRule[] };
@@ -200,13 +158,14 @@ function transform(source: string): TransformedText[] {
 
 // Every candidate base form for `text`, each with its named inflection chain.
 // Drops the zero-transform identity: callers probe the exact form separately.
-export function deinflect(text: string): Deinflection[] {
+export function deinflect(text: string, { contextual = false }: { contextual?: boolean } = {}): Deinflection[] {
   const byKey = new Map<string, Deinflection>();
   for (const result of transform(text)) {
-    if (!result.trace.length) continue;
+    if (!result.trace.length || !result.text.length) continue;
     // trace is innermost-first; reverse so names read surface → dictionary form.
     const inflections = result.trace.slice().reverse().map((frame) => TRANSFORMS_BY_ID.get(frame.transform)?.name ?? frame.transform);
-    const key = `${result.text}\0${inflections.join(",")}`;
+    const baseSurface = result.trace[0]!.text;
+    const key = `${result.text}\0${inflections.join(",")}\0${baseSurface}`;
     // Two rules can reach the same form by the same-named path but declare
     // different classes: 来た → 来る fires both the generic ichidan た→る (v1) and
     // the kuru 来た→来る (vk). OR their conditions so the candidate advertises every
@@ -217,10 +176,19 @@ export function deinflect(text: string): Deinflection[] {
       existing.conditions |= result.conditions;
       existing.dictionaryForm ||= (result.conditions & DICTIONARY_MASK) !== 0;
     } else {
-      byKey.set(key, { term: result.text, inflections, dictionaryForm: (result.conditions & DICTIONARY_MASK) !== 0, conditions: result.conditions });
+      byKey.set(key, { term: result.text, inflections, dictionaryForm: (result.conditions & DICTIONARY_MASK) !== 0, conditions: result.conditions, baseSurface });
     }
   }
-  return [...byKey.values()];
+  const candidates = [...byKey.values()];
+  if (!contextual) return candidates;
+  const nominalClasses = (CONDITION_FLAGS["vs-noun"] ?? 0) | (CONDITION_FLAGS["adj-na"] ?? 0) | (CONDITION_FLAGS.n ?? 0);
+  return candidates.flatMap((candidate) => {
+    const predicatePhrase = candidate.inflections.includes("permission") || candidate.inflections.includes("exemption");
+    const adjectiveAdverb = candidate.inflections.includes("adverbial") ? CONDITION_FLAGS["adj-na"] ?? 0 : 0;
+    const excluded = (nominalClasses & ~adjectiveAdverb) | (predicatePhrase ? CONDITION_FLAGS.copula ?? 0 : 0);
+    const conditions = candidate.conditions & ~excluded;
+    return conditions ? [{ ...candidate, conditions, dictionaryForm: (conditions & DICTIONARY_MASK) !== 0 }] : [];
+  });
 }
 
 // Which grammatical class(es) a set of JMdict part-of-speech codes satisfies, as
@@ -232,13 +200,33 @@ export function deinflect(text: string): Deinflection[] {
 export function posConditionFlags(pos: readonly string[]): number {
   let flags = 0;
   for (const code of pos) {
+    if (code === "vs") flags |= CONDITION_FLAGS["vs-noun"] ?? 0;
     const condition = conditionForPos(code);
     if (condition) flags |= CONDITION_FLAGS[condition] ?? 0;
   }
   return flags;
 }
 
+export function matchesPos(candidate: Deinflection, codes: readonly string[]): boolean {
+  return codes.some((code) => {
+    if (!(candidate.conditions & posConditionFlags([code]))) return false;
+    const rows = (irregularData.rows as Record<string, Array<{ stem: number; okuri: string; euphr: string | null; euphk: string | null }>>)[code];
+    if (!rows || !irregularData.rules.includes(candidate.inflections[candidate.inflections.length - 1]!)) return true;
+    const text = [...candidate.term];
+    if (text.length < 2) return false;
+    const penultimate = text[text.length - 2]!;
+    const kana = penultimate > "あ" && penultimate <= "ん";
+    return rows.some((row) => {
+      const euphony = kana ? row.euphr : row.euphk;
+      const cut = text.length - row.stem - (euphony === null ? 0 : 1);
+      return cut >= 0 && text.slice(0, cut).join("") + (euphony ?? "") + row.okuri === candidate.baseSurface;
+    });
+  });
+}
+
 function conditionForPos(code: string): string | null {
+  if (code === "cop") return "copula";
+  if (code === "n" || code === "adj-na") return code;
   if (code === "adj-i" || code === "adj-ix") return "adj-i";
   if (code === "vk") return "vk"; // 来る
   if (code === "vz") return "vz"; // ずる
