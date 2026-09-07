@@ -1,6 +1,6 @@
 {
   "name": "shirabe-reader",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Parse Japanese on any web page and look it up with Shirabe.",
   "type": "module",
@@ -24,6 +24,8 @@
     "lint:firefox": "web-ext lint --source-dir dist/firefox",
     "verify:build:firefox": "node build.mjs firefox --outdir=dist/verify/firefox",
     "verify:build:chrome": "node build.mjs chrome --outdir=dist/verify/chrome",
+    "verify:installed:chrome": "node test/installed-parity.mjs",
+    "verify:install:firefox": "node test/installed-firefox.mjs",
     "package:firefox": "node test/release-package.mjs firefox && web-ext build --source-dir dist/firefox --artifacts-dir artifacts/firefox --overwrite-dest --filename shirabe-reader-firefox.zip",
     "package:chrome": "node test/release-package.mjs chrome && web-ext build --source-dir dist/chrome --artifacts-dir artifacts/chrome --overwrite-dest --filename shirabe-reader-chrome.zip"
   },
