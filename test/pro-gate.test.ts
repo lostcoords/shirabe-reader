@@ -43,7 +43,7 @@ test("needs-Pro is recognised by code or bare status, and nothing else is", asyn
 
 test("the popup offers plans on a refusal instead of colouring it as an error", async () => {
   const { readFileSync } = await import("node:fs");
-  const popup = readFileSync("../shirabe-sdk/src/word-card/card.ts", "utf8");
+  const popup = readFileSync("../packages/card/src/word-card/card.ts", "utf8");
   const actions = readFileSync("src/content/actions.ts", "utf8");
 
   assert.match(actions, /proRequired: true/, "the write actions flag the refusal");
@@ -66,7 +66,7 @@ test("every upgrade entry point tags itself, so none of them lands as organic tr
   // funnel can't attribute (the web app tags the same way: pricing_path(source:)).
   // The word card builds its own link; the toolbar popup and the settings page
   // share one account card and declare the tag they mount it with.
-  const wordCard = readFileSync("../shirabe-sdk/src/word-card/card.ts", "utf8");
+  const wordCard = readFileSync("../packages/card/src/word-card/card.ts", "utf8");
   assert.match(wordCard, /pricingUrl\?\.\("extension"\)/, "the word card must tag its upgrade link");
   const accountPanel = readFileSync("src/common/account-panel.ts", "utf8");
   assert.match(accountPanel, /pricingUrl\(apiBase, hooks\.pricingSource\)/, "the shared card must tag through its mount");
@@ -76,7 +76,7 @@ test("every upgrade entry point tags itself, so none of them lands as organic tr
   ] as const) {
     assert.match(readFileSync(file, "utf8"), new RegExp(`pricingSource: "${source}"`), `${file} must declare its source`);
   }
-  for (const file of ["../shirabe-sdk/src/word-card/card.ts", "src/action/popup.ts", "src/options/options.ts", "src/common/account-panel.ts"]) {
+  for (const file of ["../packages/card/src/word-card/card.ts", "src/action/popup.ts", "src/options/options.ts", "src/common/account-panel.ts"]) {
     assert.doesNotMatch(readFileSync(file, "utf8"), /\+ "\/pricing"/, `${file} must not hand-build an untagged pricing URL`);
   }
 });
@@ -93,7 +93,7 @@ test("a signed-in free reader is told what's missing, and can act on it", async 
     },
   });
 
-  const { setCardHost, setWriteState, studyUnavailable } = await import("shirabe-sdk/word-card");
+  const { setCardHost, setWriteState, studyUnavailable } = await import("@shirabe-org/card/word-card");
   // The link resolves through the host, which is what a card with no host (an
   // anonymous Anki card, say) is entitled to leave inert.
   const { extensionHost } = await import("../src/content/card-host.js");

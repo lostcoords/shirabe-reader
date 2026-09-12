@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 // Rendering behaviour that needs a real DOM: what the parser puts on the page,
 // and what the status bar cues on top of it.
+
+test("a dictionary replacement dismisses any definition rendered from the previous stack", () => {
+  const content = readFileSync("src/content/content.ts", "utf8");
+  const handler = content.slice(content.indexOf("ext.runtime.onMessage.addListener"), content.indexOf("// Yomitan's other lookup surface"));
+  assert.match(handler, /message\.command === "dictionaryChanged"[^\n]*dismissPopup\(\)/);
+});
 
 test("a token split across inline markup does not stamp its reading on each fragment", async () => {
   const { Window } = await import("happy-dom");

@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import type { GlossLanguage } from "shirabe-sdk/word-card/languages.js";
+import type { GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import { lookupOffline, lookupEntryOffline, parseOffline } from "../src/common/offline-dictionary.js";
 import { installTestPack, packLines, packPayload } from "./support/pack.js";
 import { browserDictionary } from "./support/parity-browser.js";

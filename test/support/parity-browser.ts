@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { BrowserType } from "playwright";
-import type { GlossLanguage } from "shirabe-sdk/word-card/languages.js";
+import type { GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import type * as Offline from "../../src/common/offline-dictionary.js";
 import type { Definition, ParsedToken } from "../../src/common/types.js";
 
@@ -25,7 +25,7 @@ export async function browserDictionary(payload: Buffer, revision: string, terms
   const port = portFile && existsSync(portFile) ? Number(readFileSync(portFile, "utf8")) : 0;
   let origin = "";
   const manifest = {
-    schemaVersion: 6, buildRecipeVersion: 13, minimumExtensionVersion: "0.2.4", contentRevision: revision,
+    schemaVersion: 7, buildRecipeVersion: 15, minimumExtensionVersion: "0.2.6", contentRevision: revision,
     builtAt: new Date().toISOString(), artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
     bytes: payload.byteLength, sha256: createHash("sha256").update(payload).digest("hex"),
     counts: { terms, kanji: 0, sentences: 0 }, languages: ["eng", "spa"],

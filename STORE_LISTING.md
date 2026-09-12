@@ -50,7 +50,7 @@ Shirabe Reader
 > use FSRS, a modern spaced-repetition algorithm.
 >
 > **Reads real sites.** Ordinary web pages and Japanese Wikipedia, Netflix and
-> YouTube subtitles, asbplayer, ttsu Reader, and Mokuro manga OCR.
+> YouTube subtitles, asbplayer, and Mokuro manga OCR.
 >
 > Lookup and page parsing are free. A Shirabe Pro account adds sentence mining,
 > grading, deck selection, and sync.
@@ -61,15 +61,15 @@ Shirabe Reader
 
 Reviewers reject vague answers here. Be specific and tie each one to a user-visible feature.
 
-| Permission                                                       | Justification                                                                                                                                                                                                                          |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `storage`, `unlimitedStorage`                                    | Stores the downloaded Japanese dictionary pack in IndexedDB, plus the user's own settings. The pack is large (hundreds of thousands of entries), which is why unlimited storage is needed. Nothing here leaves the device.             |
-| `activeTab`                                                      | Lets the user parse the page they're looking at from the toolbar button or context menu, as a one-off, without granting any standing site access.                                                                                      |
-| `scripting`                                                      | Injects the content script that finds Japanese text and renders the lookup popup, only on pages where the user has turned the reader on.                                                                                               |
-| `contextMenus`                                                   | Adds a right-click "look up with Shirabe" entry for a selected phrase.                                                                                                                                                                 |
-| `identity`                                                       | Used only for the optional sign-in flow (OAuth redirect back to the extension) when a user chooses to connect a Shirabe account. Not used for ordinary reading.                                                                        |
-| Host access to `shirabe.org`, `cdn.shirabe.org`, `t.shirabe.org` | The API the extension talks to: dictionary pack downloads (`cdn.shirabe.org`), saving cards and syncing knowledge state (`shirabe.org`), and error reporting through the first-party PostHog proxy (`t.shirabe.org`). No other remote host is contacted.                                                   |
-| **Optional** `<all_urls>`                                        | **Never requested at install.** Only requested when the user explicitly turns the reader on for a specific site, so scanning survives a page reload. Declining is fully supported: lookup still works in the open tab via `activeTab`. |
+| Permission                                                       | Justification                                                                                                                                                                                                                                            |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `storage`, `unlimitedStorage`                                    | Stores the downloaded Japanese dictionary pack in IndexedDB, plus the user's own settings. The pack is large (hundreds of thousands of entries), which is why unlimited storage is needed. Nothing here leaves the device.                               |
+| `activeTab`                                                      | Lets the user parse the page they're looking at from the toolbar button or context menu, as a one-off, without granting any standing site access.                                                                                                        |
+| `scripting`                                                      | Injects the content script that finds Japanese text and renders the lookup popup, only on pages where the user has turned the reader on.                                                                                                                 |
+| `contextMenus`                                                   | Adds a right-click "look up with Shirabe" entry for a selected phrase.                                                                                                                                                                                   |
+| `identity`                                                       | Used only for the optional sign-in flow (OAuth redirect back to the extension) when a user chooses to connect a Shirabe account. Not used for ordinary reading.                                                                                          |
+| Host access to `shirabe.org`, `cdn.shirabe.org`, `t.shirabe.org` | The API the extension talks to: dictionary pack downloads (`cdn.shirabe.org`), saving cards and syncing knowledge state (`shirabe.org`), and error reporting through the first-party PostHog proxy (`t.shirabe.org`). No other remote host is contacted. |
+| **Optional** `<all_urls>`                                        | **Never requested at install.** Only requested when the user explicitly turns the reader on for a specific site, so scanning survives a page reload. Declining is fully supported: lookup still works in the open tab via `activeTab`.                   |
 
 ## Data / privacy disclosure
 

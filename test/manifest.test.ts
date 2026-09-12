@@ -68,7 +68,7 @@ test("all extension-owned surfaces preserve focus, reduced-motion, and forced-co
   // answers for motion and forced colours only.
   const withControls = [
     readFileSync("src/action/popup.css", "utf8"),
-    readFileSync("../shirabe-sdk/src/word-card/card.ts", "utf8"),
+    readFileSync("../packages/card/src/word-card/card.ts", "utf8"),
     readFileSync("src/options/options.css", "utf8"),
   ];
   for (const css of withControls) assert.match(css, /focus-visible/);
@@ -212,8 +212,8 @@ test("the word card reaches the world only through its host", () => {
   const code = (path: string) => readFileSync(path, "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^\s*\/\/.*$/gm, "");
-  const card = code("../shirabe-sdk/src/word-card/card.ts");
-  const contract = readFileSync("../shirabe-sdk/src/word-card/host.ts", "utf8");
+  const card = code("../packages/card/src/word-card/card.ts");
+  const contract = readFileSync("../packages/card/src/word-card/host.ts", "utf8");
 
   // The point of the seam: three surfaces want this card (this extension over a
   // local pack, a web page over the API, an Anki card over a script tag), and a
@@ -244,7 +244,8 @@ test("exported settings carry preferences and never a sign-in", () => {
   // is written or read back: an export is a file people mail to each other.
   const secrets = logic.match(/const SECRET_KEYS = \[(.*?)\] as const/s)?.[1] ?? "";
   assert.ok(secrets, "options.ts must name the fields an export strips");
-  for (const field of ["accessToken", "refreshToken", "accessTokenExpiresAt", "account", "scopes", "entitled"]) {
+  for (const field of ["accessToken", "refreshToken", "accessTokenExpiresAt", "account", "scopes", "entitled",
+    "dictionaryStackFingerprint", "dictionaryNames", "availableDictionaries"]) {
     assert.match(config, new RegExp(`\\b${field}[?]?:`), `Config no longer has ${field}`);
     assert.match(secrets, new RegExp(`"${field}"`), `${field} would be written into an exported settings file`);
   }
@@ -279,7 +280,8 @@ test("concurrent watch builds replace manifests atomically", () => {
 
 test("offline storage indexes lookup keys off the term record", () => {
   const dictionary = readFileSync("src/common/offline-dictionary.ts", "utf8");
-  assert.match(dictionary, /const DB_NAME = "shirabe-offline-dictionary-v4"/);
+  assert.match(dictionary, /const PUBLIC_DB_NAME = "shirabe-offline-dictionary-public-v1"/);
+  assert.match(dictionary, /const PRIVATE_DB_NAME = "shirabe-offline-dictionary-private-v1"/);
   // A term's keys live on the record, indexed multiEntry: no join table, so one
   // put per record instead of one per key, and a probe returns the record.
   assert.match(dictionary, /ensureIndex\(terms, "lookupKeys", "keys", \{ multiEntry: true \}\)/);
@@ -310,7 +312,7 @@ test("dictionary installation uses a persistent background port", () => {
   // The pack is the extension host's business, not the card's: the card only
   // knows a lookup came back pending and asks the host to resolve it.
   const cardHost = readFileSync("src/content/card-host.ts", "utf8");
-  const wordPopup = readFileSync("../shirabe-sdk/src/word-card/card.ts", "utf8");
+  const wordPopup = readFileSync("../packages/card/src/word-card/card.ts", "utf8");
   const background = readFileSync("src/background/background.ts", "utf8");
   assert.match(browser, /connect\(connectInfo\?: \{ name\?: string \}\): RuntimePort/);
   assert.match(dictionaryPort, /ext\.runtime\.connect\(\{ name: "shirabe-dictionary" \}\)/);
@@ -339,8 +341,7 @@ test("anonymous dictionary use is the default and OAuth is an explicit account a
   assert.doesNotMatch(popup, /Search, parsing, and the offline dictionary need no account/);
   assert.match(popup, /Not connected/);
   assert.match(popup, /Connect account/);
-  assert.doesNotMatch(api, /const OAUTH_SCOPES = \[[^\]]*READ_DICTIONARY/);
-  assert.match(api, /const OAUTH_SCOPES = \["READ_ACCOUNT", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"\]/);
+  assert.match(api, /const OAUTH_SCOPES = \["READ_ACCOUNT", "READ_DICTIONARY", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"\]/);
   assert.match(api, /"\/api\/v1\/preferences"/);
   assert.match(popupLogic, /send\(\{ type: "updateLanguages", languages \}\)/);
   // Connecting is an explicit click on the shared account card, never something
@@ -363,8 +364,8 @@ test("opening the action activates raw-text scanning without parsing the page", 
 });
 
 test("pronunciation audio only plays processed R2 clips and never browser speech", () => {
-  const popup = readFileSync("../shirabe-sdk/src/word-card/card.ts", "utf8");
-  const audio = readFileSync("../shirabe-sdk/src/word-card/audio.ts", "utf8");
+  const popup = readFileSync("../packages/card/src/word-card/card.ts", "utf8");
+  const audio = readFileSync("../packages/card/src/word-card/audio.ts", "utf8");
   const background = readFileSync("src/background/background.ts", "utf8");
   const webAudio = readFileSync("../app/javascript/controllers/audio_controller.js", "utf8");
 
@@ -383,12 +384,6 @@ test("pronunciation audio only plays processed R2 clips and never browser speech
   assert.match(popup, /new Audio\(clip\.dataUrl\)/);
   assert.doesNotMatch(popup, /send\(\{/);
 
-  // The card CAN point <audio> straight at the CDN, and here it never does:
-  // that path is gated on having no host audio port, and this host always
-  // supplies one. It exists for an Anki card, which has no background worker to
-  // route through and no page CSP in the way, and where routing through a port
-  // it does not have meant the button silently did nothing.
-  assert.match(popup, /if \(!optional\(\)\.audio\)/);
   assert.match(cardHost, /^ {2}audio: \{/m, "the extension host always has an audio port");
 
   assert.doesNotMatch(popup, /speechSynthesis|SpeechSynthesisUtterance/);
@@ -396,7 +391,7 @@ test("pronunciation audio only plays processed R2 clips and never browser speech
 });
 
 test("reader grading is off, and returns due-only and click-locked when it is not", () => {
-  const popup = readFileSync("../shirabe-sdk/src/word-card/card.ts", "utf8");
+  const popup = readFileSync("../packages/card/src/word-card/card.ts", "utf8");
   const actions = readFileSync("src/content/actions.ts", "utf8");
   const keybind = readFileSync("src/common/keybind.ts", "utf8");
   // Reviewing lives on the site: the row is still wired, just not rendered, and
@@ -416,13 +411,10 @@ test("reader grading is off, and returns due-only and click-locked when it is no
   assert.match(popup, /control\.disabled = true/);
 });
 
-test("offline parsing does not wait for profile-state network hydration", () => {
+test("page parsing does not wait for profile-state network hydration", () => {
   const background = readFileSync("src/background/background.ts", "utf8");
   const parser = readFileSync("src/content/parser.ts", "utf8");
-  assert.match(background, /return lists;/);
   assert.doesNotMatch(background, /hydrateCachedStates|hydrateStates/);
-  assert.match(background, /const LOCAL_PARSE_CONCURRENCY = 4/);
-  assert.match(background, /await Promise\.all\(Array\.from/);
   assert.match(background, /const fresh = await api\.states\(lemmas\)/);
   assert.match(background, /pendingRemoteStateLemmas/);
   assert.match(background, /drainRemoteStateRefresh/);
@@ -448,15 +440,16 @@ test("offline parsing does not wait for profile-state network hydration", () => 
   assert.match(parser, /texts: blocks\.map\(\(item\) => item\.text\)/);
   assert.match(parser, /recordPerformance\("parse-render"/);
   const dictionary = readFileSync("src/common/offline-dictionary.ts", "utf8");
-  assert.match(dictionary, /activeGenerationCache/);
+  assert.match(dictionary, /publicGenerationCache/);
+  assert.match(dictionary, /privateGenerationCache/);
   assert.match(dictionary, /lookupProbeCache = new BoundedCache/);
 });
 
 test("missing offline storage self-heals and the word popup has a stable scrollable frame", () => {
   const background = readFileSync("src/background/background.ts", "utf8");
   const dictionary = readFileSync("src/common/offline-dictionary.ts", "utf8");
-  const popup = readFileSync("../shirabe-sdk/src/word-card/card.ts", "utf8");
-  assert.match(dictionary, /if \(!active\) \{\s*await installDictionary\(apiBase\)/);
+  const popup = readFileSync("../packages/card/src/word-card/card.ts", "utf8");
+  assert.match(dictionary, /if \(!active\) \{\s*await installDictionary\(apiBase, authorization\)/);
   assert.match(background, /DictionaryNotInstalledError/);
   assert.match(background, /dictionaryInstalling: true/);
   // The wording belongs to whoever knows there is a pack: the card renders
@@ -469,7 +462,7 @@ test("missing offline storage self-heals and the word popup has a stable scrolla
 
   // Side-choice for vertical (tategaki) text lives in placement.ts now, not in
   // popup.ts: prefer the left column, fall back to whichever side has room.
-  const placement = readFileSync("../shirabe-sdk/src/word-card/placement.ts", "utf8");
+  const placement = readFileSync("../packages/card/src/word-card/placement.ts", "utf8");
   assert.match(placement, /const roomRight = view\.width - avoid\.right - margin \* 2/);
   assert.match(placement, /roomLeft >= size\.width \|\| roomLeft >= roomRight/);
 });

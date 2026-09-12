@@ -6,6 +6,7 @@ import { mountDictionaryPanel } from "../common/dictionary-panel.js";
 import { formatKeybind, KEYBIND_ACTIONS, KEYBIND_LABELS, keybindFromEvent, type Keybind, type KeybindAction } from "../common/keybind.js";
 import { send } from "../common/messages.js";
 import { installClientReporter } from "../common/client-reporter.js";
+import { uiLanguagesFrom } from "@shirabe-org/card/word-card/languages";
 
 installClientReporter("options");
 
@@ -105,12 +106,101 @@ loadConfig().then((loaded) => {
   renderKeybinds();
   void refreshDictionary();
   void refreshAccount();
+  renderDictionarySources();
 });
 
 onConfigChanged((next) => {
   config = next;
   prefs.languages.value = next.languages.join(",");
+  renderDictionarySources();
 });
+
+function renderDictionarySources(): void {
+  const container = $<HTMLElement>("dictionarySources");
+  const hint = $<HTMLElement>("dictionarySourcesHint");
+  if (!config || !isConnected(config)) {
+    container.replaceChildren();
+    hint.hidden = false;
+    return;
+  }
+  hint.hidden = true;
+  const activeOrder = config.dictionaryStack.map((source) => source.split(":", 1)[0]).filter((slug, index, all) => all.indexOf(slug) === index);
+  const available = config.availableDictionaries;
+  const ordered = [...activeOrder, ...available.map((item) => item.slug).filter((slug) => !activeOrder.includes(slug))];
+  container.replaceChildren(...ordered.flatMap((slug) => {
+    const option = available.find((item) => item.slug === slug);
+    if (!option) return [];
+    const enabled = activeOrder.includes(slug);
+    const row = document.createElement("div");
+    row.className = "dictionary-source";
+    const label = document.createElement("label");
+    label.className = "dictionary-source-name";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = enabled;
+    checkbox.disabled = enabled && activeOrder.length === 1;
+    checkbox.addEventListener("change", () => void setDictionaryEnabled(slug, checkbox.checked));
+    label.append(checkbox, document.createTextNode(option.name));
+    const reveal = document.createElement("select");
+    reveal.disabled = !enabled;
+    reveal.append(new Option("Show", "show"), new Option("On hover", "hover"));
+    reveal.value = config.dictionaryReveal[slug] ?? "show";
+    reveal.setAttribute("aria-label", `${option.name} reveal mode`);
+    reveal.addEventListener("change", () => void saveDictionarySources(config.dictionaryStack,
+      { ...config.dictionaryReveal, [slug]: reveal.value as "show" | "hover" }));
+    const actions = document.createElement("div");
+    actions.className = "dictionary-source-actions";
+    const activeIndex = activeOrder.indexOf(slug);
+    for (const [labelText, movement] of [["↑", -1], ["↓", 1]] as const) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = labelText;
+      button.disabled = !enabled || activeIndex + movement < 0 || activeIndex + movement >= activeOrder.length;
+      button.setAttribute("aria-label", `Move ${option.name} ${movement < 0 ? "up" : "down"}`);
+      button.addEventListener("click", () => void moveDictionary(slug, movement));
+      actions.append(button);
+    }
+    row.append(label, reveal, actions);
+    return [row];
+  }));
+}
+
+async function setDictionaryEnabled(slug: string, enabled: boolean): Promise<void> {
+  let stack = config.dictionaryStack.filter((source) => source.split(":", 1)[0] !== slug);
+  if (enabled) {
+    const option = config.availableDictionaries.find((item) => item.slug === slug);
+    const preferred = uiLanguagesFrom(config.languages).filter((language) => option?.languages.includes(language));
+    const languages = preferred.length ? preferred : option?.languages.slice(0, 1) ?? [];
+    stack = [...stack, ...languages.map((language) => `${slug}:${language}`)];
+  }
+  await saveDictionarySources(stack, config.dictionaryReveal);
+}
+
+async function moveDictionary(slug: string, movement: -1 | 1): Promise<void> {
+  const groups = config.dictionaryStack.reduce<string[][]>((result, source) => {
+    const group = result.find((items) => items[0]?.split(":", 1)[0] === source.split(":", 1)[0]);
+    if (group) group.push(source); else result.push([source]);
+    return result;
+  }, []);
+  const from = groups.findIndex((items) => items[0]?.split(":", 1)[0] === slug);
+  const to = from + movement;
+  if (from < 0 || to < 0 || to >= groups.length) return;
+  [groups[from], groups[to]] = [groups[to]!, groups[from]!];
+  await saveDictionarySources(groups.flat(), config.dictionaryReveal);
+}
+
+async function saveDictionarySources(dictionaries: string[], dictionaryReveal: Record<string, "show" | "hover">): Promise<void> {
+  const response = await send({ type: "updateDictionaryStack", dictionaries, dictionaryReveal });
+  if (!response.ok) {
+    status(response.error);
+    renderDictionarySources();
+    return;
+  }
+  config = { ...config, dictionaryStack: dictionaries, dictionaryReveal };
+  renderDictionarySources();
+  status("Dictionary stack synced");
+  await refreshDictionary();
+}
 
 // A blank or junk field falls back to the default rather than saving NaN, and a
 // number outside the range the input advertises is pulled back into it.
@@ -184,7 +274,8 @@ $<HTMLFormElement>("advancedPrefs").addEventListener("change", async () => {
 // the account they belong to. Exporting a refresh token would put a live sign-in
 // in a file people mail to each other, and importing one would hand this browser
 // somebody else's account.
-const SECRET_KEYS = ["accessToken", "accessTokenExpiresAt", "refreshToken", "account", "accountCheckedAt", "scopes", "entitled"] as const;
+const SECRET_KEYS = ["accessToken", "accessTokenExpiresAt", "refreshToken", "account", "accountCheckedAt", "scopes", "entitled",
+  "dictionaryStackFingerprint", "dictionaryNames", "availableDictionaries"] as const;
 
 function shareable(config: Config): Partial<Config> {
   const copy: Record<string, unknown> = { ...config };

@@ -15,7 +15,7 @@ import { installTestPack, packPayload } from "./support/pack.js";
 // would be showing a reader a spelling nobody writes.
 
 const HOST = "https://shirabe.test";
-const HEADER = JSON.stringify({ type: "header", schemaVersion: 6, languages: [ "eng", "spa" ], source: "Shirabe forms" });
+const HEADER = JSON.stringify({ type: "header", schemaVersion: 7, languages: [ "eng", "spa" ], source: "Shirabe forms" });
 
 const opener = JSON.stringify({
   type: "term", id: "jmdict:1202650", dictionary: "jmdict", headword: "開く",
@@ -95,4 +95,215 @@ test("a sense with neither carries neither", async () => {
 
   assert.equal(definition?.senses[0]?.notes, undefined);
   assert.equal(definition?.senses[0]?.xrefs, undefined);
+});
+
+test("a note-only sense remains visible without inventing a gloss", async () => {
+  const lines = [HEADER, JSON.stringify({
+    type: "term", id: "jmdict:note-only", dictionary: "jmdict", headword: "洗い出す",
+    expressions: [{ text: "洗い出す", script: "kanji", common: true, tags: [] }],
+    readings: [{ text: "あらいだす", kind: "kana" }],
+    senses: [{ glosses: {}, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [], notes: { jpn: [ "（他五）" ] } }],
+  })];
+  await installTestPack(packPayload(lines), {
+    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
+  });
+
+  const definition = await lookupOffline("洗い出す", [ "eng" ], HOST);
+
+  assert.deepEqual(definition?.senses[0]?.glosses, []);
+  assert.deepEqual(definition?.senses[0]?.notes, [ "（他五）" ]);
+});
+
+test("a relation-only sense remains visible without inventing a gloss", async () => {
+  const lines = [HEADER, JSON.stringify({
+    type: "term", id: "jmdict:relation-only", dictionary: "jmdict", headword: "関連語",
+    expressions: [{ text: "関連語", script: "kanji", common: true, tags: [] }],
+    readings: [{ text: "かんれんご", kind: "kana" }],
+    senses: [{ glosses: {}, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [],
+      xrefs: [{ kind: "related", text: "関係", reading: "かんけい" }] }],
+  })];
+  await installTestPack(packPayload(lines), {
+    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
+  });
+
+  const definition = await lookupOffline("関連語", [ "eng" ], HOST);
+
+  assert.deepEqual(definition?.senses[0]?.glosses, []);
+  assert.deepEqual(definition?.senses[0]?.xrefs, [{ kind: "related", text: "関係", reading: "かんけい" }]);
+});
+
+test("an empty sense is excluded while a relation-only sense keeps its position", async () => {
+  const lines = [HEADER, JSON.stringify({
+    type: "term", id: "jmdict:empty-and-relation", dictionary: "jmdict", headword: "空関係",
+    expressions: [{ text: "空関係", script: "kanji", common: true, tags: [] }],
+    readings: [{ text: "からかんけい", kind: "kana" }],
+    senses: [
+      { glosses: {}, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [] },
+      { glosses: {}, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [],
+        xrefs: [{ kind: "antonym", text: "充実", reading: "じゅうじつ" }] },
+    ],
+  })];
+  await installTestPack(packPayload(lines), {
+    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
+  });
+
+  const definition = await lookupOffline("空関係", [ "eng" ], HOST);
+
+  assert.deepEqual(definition?.senses.map((sense) => sense.position), [1]);
+  assert.deepEqual(definition?.senses[0]?.xrefs, [{ kind: "antonym", text: "充実", reading: "じゅうじつ" }]);
+});
+
+test("source tags retain publisher metadata and the matching term pair", async () => {
+  const sourceTag = { name: "arch", category: "register", notes: "publisher note", order: -1.5, score: -3 };
+  const lines = [HEADER, JSON.stringify({
+    type: "term", id: "jmdict:source-tags", dictionary: "jmdict", headword: "標識語",
+    expressions: [{ text: "標識語", script: "kanji", common: false, tags: [] }],
+    readings: [{ text: "ひょうしきご", kind: "kana" }],
+    senses: [{ glosses: { eng: ["to eat"] }, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [], sourceTags: [sourceTag] }],
+    sourceHeadwords: [{ text: "標識語", reading: "ひょうしきご", tags: [sourceTag], rules: ["v1"], score: 7 }],
+  })];
+  await installTestPack(packPayload(lines), {
+    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
+  });
+
+  const definition = await lookupOffline("標識語", ["eng"], HOST);
+  assert.ok(definition, "the source-tag term is searchable");
+  assert.deepEqual(definition?.senses[0]?.sourceTags, [sourceTag]);
+  assert.deepEqual(definition?.sourceHeadwordsByEntry, { "jmdict:source-tags": [{ text: "標識語", reading: "ひょうしきご", tags: [sourceTag], rules: ["v1"], score: 7 }] });
+});
+
+test("a stacked offline definition keeps source headwords from every dictionary", async () => {
+  const firstTag = { name: "first", category: "register", order: 1, score: 1 };
+  const secondTag = { name: "second", category: "register", order: 2, score: 2 };
+  const lines = [HEADER, JSON.stringify({
+    type: "term", id: "jmdict:mixed", dictionary: "jmdict", headword: "混在",
+    expressions: [{ text: "混在", script: "kanji", common: true, tags: [] }],
+    readings: [{ text: "こんざい", kind: "kana" }],
+    senses: [{ glosses: { eng: ["first meaning"] }, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [] }],
+    sourceHeadwords: [{ text: "混在", reading: "こんざい", tags: [firstTag], rules: [], score: 1 }],
+  }), JSON.stringify({
+    type: "term", id: "jmnedict:mixed", dictionary: "jmnedict", headword: "混在",
+    expressions: [{ text: "混在", script: "kanji", common: true, tags: [] }],
+    readings: [{ text: "こんざい", kind: "kana" }],
+    senses: [{ glosses: { eng: ["second meaning"] }, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [] }],
+    sourceHeadwords: [{ text: "混在", reading: "こんざい", tags: [secondTag], rules: [], score: 2 }],
+  })];
+  await installTestPack(packPayload(lines), {
+    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 2,
+  });
+
+  const definition = await lookupOffline("混在", ["eng"], HOST);
+  assert.deepEqual(definition?.sourceHeadwordsByEntry, {
+    "jmdict:mixed": [{ text: "混在", reading: "こんざい", tags: [firstTag], rules: [], score: 1 }],
+    "jmnedict:mixed": [{ text: "混在", reading: "こんざい", tags: [secondTag], rules: [], score: 2 }],
+  });
+});
+
+test("offline gloss rows preserve same text across languages and repetitions", async () => {
+  const lines = [HEADER, JSON.stringify({
+    type: "term", id: "jmdict:duplicate-gloss", dictionary: "jmdict", headword: "重複",
+    expressions: [{ text: "重複", script: "kanji", common: true, tags: [] }],
+    readings: [{ text: "ちょうふく", kind: "kana" }],
+    senses: [{ glosses: { eng: ["same", "same"], spa: ["same"] }, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [] }],
+  }), JSON.stringify({
+    type: "term", id: "jmdict:fallback-gloss", dictionary: "jmdict", headword: "代替",
+    expressions: [{ text: "代替", script: "kanji", common: true, tags: [] }],
+    readings: [{ text: "だいたい", kind: "kana" }],
+    senses: [{ glosses: { eng: ["same", "same"] }, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [] }],
+  })];
+  await installTestPack(packPayload(lines), {
+    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 2,
+  });
+
+  const explicit = await lookupOffline("重複", ["eng", "spa"], HOST);
+  assert.deepEqual(explicit?.senses[0]?.glosses, [
+    { lang: "eng", tag: "EN", text: "same" },
+    { lang: "eng", tag: "EN", text: "same" },
+    { lang: "spa", tag: "ES", text: "same" },
+  ]);
+
+  const fallback = await lookupOffline("代替", ["spa", "eng"], HOST);
+  assert.deepEqual(fallback?.senses[0]?.glosses, [
+    { lang: "eng", tag: "EN", text: "same" },
+    { lang: "eng", tag: "EN", text: "same" },
+  ]);
+});
+
+test("publisher titles and usage-only content survive offline lookup", async () => {
+  const lines = [HEADER, JSON.stringify({
+    type: "term", id: "jmdict:usage", dictionary: "jmdict", headword: "鼻にかける",
+    expressions: [{ text: "鼻にかける", script: "kanji", common: false, tags: [] }],
+    readings: [{ text: "はなにかける", kind: "kana" }],
+    senses: [{
+      glosses: { jpn: ["自慢する"] },
+      glossTitles: { jpn: ["意味"] },
+      usages: { jpn: [{ text: "学歴を鼻にかける", title: "使用例" }, { text: "家柄の良さを鼻にかける" }] },
+      partsOfSpeech: ["v1"], fields: [], misc: [], dialects: [], restrictions: [],
+    }],
+  })];
+  await installTestPack(packPayload(lines), {
+    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
+  });
+
+  const definition = await lookupOffline("鼻にかける", ["jpn"], HOST);
+  assert.ok(definition);
+  assert.deepEqual(definition?.senses[0]?.glosses, [{ lang: "jpn", tag: "JA", text: "自慢する", title: "意味" }]);
+  assert.deepEqual((definition?.senses[0] as unknown as { usages?: unknown }).usages, [
+    { lang: "jpn", tag: "JA", text: "学歴を鼻にかける", title: "使用例" },
+    { lang: "jpn", tag: "JA", text: "家柄の良さを鼻にかける" },
+  ]);
+});
+
+test("offline hierarchy keeps published labels, depth, and scoped grammar", async () => {
+  const lines = [HEADER, JSON.stringify({
+    type: "term", id: "jmdict:hierarchy", dictionary: "jmdict", headword: "階層",
+    expressions: [{ text: "階層", script: "kanji", common: true, tags: [] }],
+    readings: [{ text: "かいそう", kind: "kana" }],
+    senses: [{
+      label: "一㋐", depth: 2,
+      glosses: { eng: ["nested meaning"] },
+      partsOfSpeech: ["n", "v1"], fields: [], misc: [], dialects: [], restrictions: [],
+      scopedTags: [
+        { category: "part_of_speech", code: "n", scope: "entry" },
+        { category: "part_of_speech", code: "v1", scope: "group" },
+        { category: "part_of_speech", code: "n", scope: "sense" },
+      ],
+    }],
+  })];
+  await installTestPack(packPayload(lines), {
+    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
+  });
+
+  const definition = await lookupOffline("階層", ["eng"], HOST);
+  assert.deepEqual(definition?.entryTagsByEntry, {
+    "jmdict:hierarchy": [{ label: "Noun", code: "n", category: "pos", scope: "entry" }],
+  });
+  assert.equal(definition?.senses[0]?.label, "一㋐");
+  assert.equal(definition?.senses[0]?.depth, 2);
+  assert.deepEqual(definition?.senses[0]?.groupTags, [{ label: "Ichidan verb", code: "v1", category: "pos", scope: "group" }]);
+  assert.deepEqual(definition?.senses[0]?.partsOfSpeech, [{ label: "Noun", code: "n", category: "pos", scope: "sense" }]);
+});
+
+test("offline cross-reference labels preserve same targets as distinct rows", async () => {
+  const lines = [HEADER, JSON.stringify({
+    type: "term", id: "jmdict:xref-label", dictionary: "jmdict", headword: "機械",
+    expressions: [{ text: "機械", script: "kanji", common: true, tags: [] }],
+    readings: [{ text: "きかい", kind: "kana" }],
+    senses: [{
+      glosses: { eng: ["machine"] }, partsOfSpeech: ["n"], fields: [], misc: [], dialects: [], restrictions: [],
+      xrefs: [
+        { kind: "related", text: "器械" },
+        { kind: "related", text: "器械", reading: "きかい", label: "①" },
+      ],
+    }],
+  })];
+  await installTestPack(packPayload(lines), {
+    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
+  });
+
+  const definition = await lookupOffline("機械", ["eng"], HOST);
+  assert.deepEqual(definition?.senses[0]?.xrefs, [
+    { kind: "related", text: "器械" },
+    { kind: "related", text: "器械", reading: "きかい", label: "①" },
+  ]);
 });

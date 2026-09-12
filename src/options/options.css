@@ -121,6 +121,14 @@ input[type="checkbox"] { width: 17px; height: 17px; margin: 1px 0 0; accent-colo
 
 /* Dictionary pack + account status panes */
 .status-stack { display: grid; gap: 12px; margin-top: 16px; }
+.dictionary-sources { display: grid; gap: 8px; margin-top: 16px; }
+.dictionary-source { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; border: 1px solid var(--outline); border-radius: 10px; padding: 9px 10px; }
+.dictionary-source-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; font-weight: 650; }
+.dictionary-source-actions { display: flex; gap: 4px; }
+.dictionary-source-actions button { min-width: 32px; min-height: 32px; border: 1px solid var(--outline); border-radius: 8px; background: var(--surface); color: var(--ink-muted); cursor: pointer; }
+.dictionary-source-actions button:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-tint); color: var(--primary); }
+.dictionary-source-actions button:disabled { opacity: .35; cursor: default; }
+.dictionary-source select { width: auto; min-width: 92px; }
 .status-stack > div { display: grid; gap: 10px; }
 .status-line { margin: 0; font-size: 14px; font-weight: 700; }
 .primary, .ghost {

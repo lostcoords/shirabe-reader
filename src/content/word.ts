@@ -1,5 +1,5 @@
 import type { ParsedToken, TokenCandidate, WordState } from "../common/types.js";
-import { appendFurigana, furiganaSegments, hasKanji, type FuriganaSegment } from "shirabe-sdk/word-card/furigana.js";
+import { appendFurigana, furiganaSegments, hasKanji, type FuriganaSegment } from "@shirabe-org/card/word-card/furigana";
 
 export { appendFurigana, furiganaSegments, hasKanji, type FuriganaSegment };
 

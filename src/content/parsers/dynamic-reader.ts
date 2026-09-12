@@ -1,18 +1,16 @@
 import { parse } from "../parser.js";
 import { noteCue } from "../cues.js";
 
-export type DynamicIntegration = "netflix" | "ttsu" | "mokuro";
+export type DynamicIntegration = "netflix" | "mokuro";
 type ParseTarget = (root: HTMLElement, showFurigana: boolean) => Promise<number>;
 
 const SELECTORS: Record<DynamicIntegration, string> = {
   netflix: ".player-timedtext-text-container",
-  ttsu: ".book-content-container",
   mokuro: ".textBox",
 };
 
 const LABELS: Record<DynamicIntegration, string> = {
   netflix: "netflix_captions",
-  ttsu: "ttsu_reader",
   mokuro: "mokuro_ocr",
 };
 

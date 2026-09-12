@@ -754,7 +754,7 @@ function term(id: string, headword: string, kanji: string | null, kana: string, 
   });
 }
 
-const HEADER = JSON.stringify({ type: "header", schemaVersion: 6, languages: [ "eng", "spa" ], source: "Shirabe candidates" });
+const HEADER = JSON.stringify({ type: "header", schemaVersion: 7, languages: [ "eng", "spa" ], source: "Shirabe candidates" });
 
 // The revision has to differ per pack: the installer treats a repeated one as
 // "already have this" and keeps whatever is installed, so two tests sharing a

@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { deinflect } from "../../src/common/deinflect.js";
-import { installDictionary, lookupVariants, removeDictionary } from "../../src/common/offline-dictionary.js";
+import { installDictionary, lookupVariants, removeDictionary, type PackManifest } from "../../src/common/offline-dictionary.js";
 
 // Dictionary-pack plumbing shared by every corpus harness: the segmentation
 // suites and the divergence sweep. All three used to carry their own copy of
@@ -118,16 +118,13 @@ export function packPayload(lines: string[]): Buffer {
   return gzipSync(lines.join("\n") + "\n");
 }
 
-/**
- * Serve `payload` as the current pack and install it, replacing whatever was
- * installed before.
- */
-export async function installTestPack(
-  payload: Buffer,
+export function testPackManifest(
+  payload: Uint8Array,
   { contentRevision, terms }: { contentRevision: string; terms: number },
-): Promise<void> {
-  const manifest = {
-    schemaVersion: 6, buildRecipeVersion: 13, minimumExtensionVersion: "0.2.4", contentRevision,
+  overrides: Partial<PackManifest> = {},
+): PackManifest {
+  return {
+    schemaVersion: 7, buildRecipeVersion: 15, minimumExtensionVersion: "0.2.6", contentRevision,
     audio: {
       baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f",
       engineVersion: 1, salt: "test-salt", defaultVoice: "male",
@@ -137,9 +134,24 @@ export async function installTestPack(
     mediaType: "application/x-ndjson", bytes: payload.byteLength,
     sha256: createHash("sha256").update(payload).digest("hex"),
     counts: { terms, kanji: 0, sentences: 0 }, languages: ["eng", "spa"],
-    dictionaries: [{ slug: "jmdict", version: contentRevision }], modifications: [], sources: [],
-    downloadUrl: "https://packs.test/dictionary.gz",
+    dictionaries: [
+      { slug: "jmdict", version: contentRevision },
+      { slug: "jmnedict", version: contentRevision },
+    ],
+    modifications: [], sources: [], downloadUrl: "https://packs.test/dictionary.gz",
+    ...overrides,
   };
+}
+
+/**
+ * Serve `payload` as the current pack and install it, replacing whatever was
+ * installed before.
+ */
+export async function installTestPack(
+  payload: Buffer,
+  { contentRevision, terms }: { contentRevision: string; terms: number },
+): Promise<void> {
+  const manifest = testPackManifest(payload, { contentRevision, terms });
 
   await removeDictionary();
   // A Buffer is a Uint8Array, but over `ArrayBufferLike`, which `BodyInit` does

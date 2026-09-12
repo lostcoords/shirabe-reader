@@ -1,13 +1,12 @@
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
-import { cancelDictionaryInstall, checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupEntryOffline, lookupKanjiOffline, lookupOffline, lookupVariants, parseOffline, removeDictionary } from "../src/common/offline-dictionary.js";
+import { cancelDictionaryInstall, checkDictionaryUpdate, deactivatePrivateDictionaries, dictionaryStatus, installDictionary, lookupEntryOffline, lookupKanjiOffline, lookupOffline, lookupVariants, parseOffline, removeDictionary, type DictionaryStackManifest, type PackManifest } from "../src/common/offline-dictionary.js";
 
 const records = [
-  { type: "header", schemaVersion: 6, languages: ["eng", "spa"], source: "Shirabe open-core" },
+  { type: "header", schemaVersion: 7, languages: ["eng", "spa"], source: "Shirabe open-core" },
   {
     type: "term", id: "jmdict:1", dictionary: "jmdict", headword: "食べる",
     expressions: [{ text: "食べる", script: "mixed", common: true, tags: [] }],
@@ -19,6 +18,22 @@ const records = [
       { text: "たべる", reading: "たべる", downstep: 0 },
     ],
     frequencies: [{ source: "jiten-global", text: "食べる", reading: "たべる", rank: 100 }],
+  },
+  {
+    type: "term", id: "jmdict:hierarchy", dictionary: "jmdict", headword: "階層",
+    expressions: [{ text: "階層", script: "mixed", common: true, tags: [] }],
+    readings: [{ text: "かいそう", kind: "kana" }],
+    senses: [{
+      glosses: { eng: ["hierarchy"], spa: ["jerarquía"] },
+      partsOfSpeech: ["n", "v5k", "v5r"], fields: [], misc: [], dialects: [], restrictions: [],
+      scopedTags: [
+        { category: "part_of_speech", code: "n", scope: "entry" },
+        { category: "part_of_speech", code: "v1", scope: "group" },
+        { category: "part_of_speech", code: "n", scope: "sense" },
+        { category: "part_of_speech", code: "v5k", scope: "sense" },
+        { category: "part_of_speech", code: "v5r", scope: "sense" },
+      ],
+    }],
   },
   ...[
     // POS are real JMdict class codes so deinflection's part-of-speech gate lets
@@ -218,7 +233,7 @@ const counts = {
 
 function manifest(revision: string, sha256 = checksum) {
   return {
-    schemaVersion: 6, buildRecipeVersion: 13, minimumExtensionVersion: "0.2.4", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
+  schemaVersion: 7, buildRecipeVersion: 15, minimumExtensionVersion: "0.2.6", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
     audio: { baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f", engineVersion: 1, salt: "test-salt", defaultVoice: "male", voices: { male: 1_628_969_216, female: 345_585_728 } },
     artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
     bytes: compressed.byteLength, sha256, counts, languages: ["eng", "spa"],
@@ -226,11 +241,28 @@ function manifest(revision: string, sha256 = checksum) {
   } as const;
 }
 
+async function dictionaryTermCount(database: string, dictionary: string): Promise<number> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(database);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  try {
+    return await new Promise<number>((resolve, reject) => {
+      const request = db.transaction("terms").objectStore("terms").index("dictionary").count(dictionary);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
 test("an outdated stored pack is unavailable and updates without the daily delay", async (context) => {
   await removeDictionary();
   await dictionaryStatus();
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open("shirabe-offline-dictionary-v4", 2);
+    const request = indexedDB.open("shirabe-offline-dictionary-public-v1", 2);
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
@@ -251,13 +283,167 @@ test("an outdated stored pack is unavailable and updates without the daily delay
   await assert.rejects(lookupOffline("食べる", ["eng"], "https://shirabe.test"), /Install the Shirabe dictionary/);
   await assert.rejects(parseOffline("食べる", ["eng"], "https://shirabe.test"), /Install the Shirabe dictionary/);
 
+  let replacement = manifest("replacement");
   globalThis.fetch = (async (input: string | URL | Request) => String(input).endsWith("/current")
-    ? new Response(JSON.stringify(manifest("replacement")), { headers: { "Content-Type": "application/json" } })
+    ? new Response(JSON.stringify(replacement), { headers: { "Content-Type": "application/json" } })
     : new Response(new Uint8Array(compressed), { headers: { "Content-Type": "application/gzip" } })) as typeof fetch;
   await checkDictionaryUpdate("https://api.test");
   assert.equal((await dictionaryStatus()).revision, "replacement");
   assert.equal((await dictionaryStatus()).installed, true);
   assert.equal((await lookupOffline("食べる", ["eng"], "https://shirabe.test"))?.entry, "jmdict:1");
+
+  replacement = manifest("replacement-2");
+  await installDictionary("https://api.test");
+  replacement = manifest("replacement-3");
+  await installDictionary("https://api.test");
+  const installed = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open("shirabe-offline-dictionary-public-v1");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const oldSentences = await new Promise<number>((resolve, reject) => {
+    const request = installed.transaction("sentences").objectStore("sentences").index("generation").count("replacement");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  installed.close();
+  assert.equal(oldSentences, 0, "cleanup removes sentences outside the retained generations");
+});
+
+test("an authenticated stack installs personal overlays and applies source changes before refreshing bytes", async (context) => {
+  await removeDictionary();
+  const originalFetch = globalThis.fetch;
+  context.after(async () => { globalThis.fetch = originalFetch; await removeDictionary(); });
+
+  const personalRecords = [
+    { type: "header", schemaVersion: 7, languages: ["jpn"], source: "Shirabe private dictionary" },
+    {
+      type: "term", id: "yomitan-test:1", dictionary: "yomitan-test", headword: "言葉",
+      expressions: [{ text: "言葉", script: "kanji", common: false, tags: [] }],
+      readings: [{ text: "ことば", kind: "kana" }],
+      senses: [{ glosses: { jpn: ["意味"] }, partsOfSpeech: ["n"], fields: [], misc: [], dialects: [], restrictions: [] }],
+    },
+    {
+      type: "term", id: "yomitan-test:2", dictionary: "yomitan-test", headword: "食べる",
+      expressions: [{ text: "食べる", script: "mixed", common: false, tags: [] }],
+      readings: [{ text: "たべる", kind: "kana" }],
+      senses: [{ glosses: { jpn: ["食物を口に入れる"] }, partsOfSpeech: ["v1"], fields: [], misc: [], dialects: [], restrictions: [] }],
+    },
+  ];
+  const personalArchive = gzipSync(personalRecords.map((record) => JSON.stringify(record)).join("\n") + "\n");
+  const personal = {
+    ...manifest("personal-v1"), artifact: "dictionary-personal.ndjson.gz", bytes: personalArchive.byteLength,
+    sha256: createHash("sha256").update(personalArchive).digest("hex"),
+    counts: { terms: 2, kanji: 0, sentences: 0 }, languages: ["jpn"],
+    dictionaries: [{ slug: "yomitan-test", version: "1" }], sources: [],
+    downloadUrl: "https://api.test/api/v1/dictionary-packs/stack/yomitan-test/personal-v1/download",
+  } as unknown as PackManifest;
+  let stack: DictionaryStackManifest = {
+    stackFingerprint: "a".repeat(16), dictionaries: ["yomitan-test:ja", "jmdict:en"],
+    dictionaryReveal: { "yomitan-test": "hover", jmdict: "show" },
+    dictionaryNames: { "yomitan-test": "私の国語辞典", jmdict: "Shirabe" },
+    publicPack: structuredClone(manifest("public-v1")) as unknown as PackManifest, personalPacks: [personal],
+  };
+  let downloads = 0;
+  let privateAvailable = true;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/stack")) {
+      assert.equal((init?.headers as Record<string, string>)?.Authorization, "Bearer secret");
+      return new Response(JSON.stringify(stack), { headers: { "Content-Type": "application/json" } });
+    }
+    downloads += 1;
+    if (url.includes("yomitan-test")) {
+      assert.equal((init?.headers as Record<string, string>)?.Authorization, "Bearer secret");
+      if (!privateAvailable) return new Response(null, { status: 503 });
+      return new Response(Uint8Array.from(personalArchive), { headers: { "Content-Type": "application/gzip" } });
+    }
+    return new Response(Uint8Array.from(compressed), { headers: { "Content-Type": "application/gzip" } });
+  }) as typeof fetch;
+
+  await installDictionary("https://api.test", "Bearer secret");
+  assert.deepEqual(
+    (await indexedDB.databases()).map(({ name }) => name).filter((name) => name?.startsWith("shirabe-offline-dictionary")).sort(),
+    ["shirabe-offline-dictionary-private-v1", "shirabe-offline-dictionary-public-v1"],
+    "published and account-private records have separate deletion boundaries",
+  );
+  assert.equal(await dictionaryTermCount("shirabe-offline-dictionary-public-v1", "yomitan-test"), 0);
+  assert.equal(await dictionaryTermCount("shirabe-offline-dictionary-private-v1", "jmdict"), 0);
+  assert.equal(await dictionaryTermCount("shirabe-offline-dictionary-private-v1", "yomitan-test"), 2);
+  assert.equal((await dictionaryStatus()).stackFingerprint, "a".repeat(16));
+  const definition = await lookupOffline("言葉", ["jpn"], "https://shirabe.test");
+  assert.equal(definition?.entry, "yomitan-test:1");
+  assert.equal(definition?.senses[0]?.dictionary, "私の国語辞典");
+  assert.equal(definition?.senses[0]?.covered, true);
+  assert.deepEqual(definition?.senses[0]?.glosses, [{ lang: "jpn", tag: "JA", text: "意味" }]);
+  const japaneseFirst = await lookupOffline("食べる", ["jpn", "eng"], "https://shirabe.test");
+  assert.equal(japaneseFirst?.entry, "yomitan-test:2");
+  assert.deepEqual(japaneseFirst?.senses.flatMap((sense) => sense.glosses.map((gloss) => gloss.text)),
+    ["食物を口に入れる", "to eat"], "each enabled dictionary contributes its result in stack order");
+  assert.equal(downloads, 2);
+
+  await deactivatePrivateDictionaries();
+  assert.equal((await dictionaryStatus()).terms, counts.terms, "status reports only the records that remain after disconnect");
+  assert.equal(await lookupOffline("言葉", ["jpn"], "https://shirabe.test"), null,
+    "disconnect makes private entries unreachable without waiting for a public-pack download");
+  assert.equal((await lookupOffline("食べる", ["eng"], "https://shirabe.test"))?.entry, "jmdict:1",
+    "the already-installed public dictionary remains available offline after disconnect");
+  assert.deepEqual(
+    (await indexedDB.databases()).map(({ name }) => name).filter((name) => name?.startsWith("shirabe-offline-dictionary")).sort(),
+    ["shirabe-offline-dictionary-public-v1"],
+    "disconnect deletes the account-private database",
+  );
+  privateAvailable = false;
+  await assert.rejects(installDictionary("https://api.test", "Bearer secret"), /Dictionary download failed \(503\)/);
+  assert.equal((await lookupOffline("食べる", ["eng"], "https://shirabe.test"))?.entry, "jmdict:1",
+    "a failed reconnect keeps the public dictionary active");
+  privateAvailable = true;
+  await installDictionary("https://api.test", "Bearer secret");
+  assert.equal(downloads, 4, "reconnecting downloads the private records that disconnect purged");
+  assert.equal((await lookupOffline("言葉", ["jpn"], "https://shirabe.test"))?.entry, "yomitan-test:1");
+
+  stack = { ...stack, stackFingerprint: "b".repeat(16), personalPacks: [{ ...personal, contentRevision: "personal-v2" }] };
+  await installDictionary("https://api.test", "Bearer secret");
+  assert.equal(downloads, 5, "a personal dictionary revision downloads only the private overlay");
+
+  stack = { ...stack, stackFingerprint: "c".repeat(16), dictionaries: ["jmdict:en", "yomitan-test:ja"],
+    dictionaryReveal: { jmdict: "show", "yomitan-test": "show" } };
+  await installDictionary("https://api.test", "Bearer secret");
+  assert.equal((await dictionaryStatus()).stackFingerprint, "c".repeat(16));
+  assert.equal(downloads, 5, "order and reveal metadata reuse unchanged dictionary bytes");
+  const publicFirst = await lookupOffline("食べる", ["eng", "jpn"], "https://shirabe.test");
+  assert.equal(publicFirst?.entry, "jmdict:1");
+  assert.deepEqual(publicFirst?.senses.flatMap((sense) => sense.glosses.map((gloss) => gloss.text)),
+    ["to eat", "食物を口に入れる"]);
+  assert.equal(publicFirst?.senses[publicFirst.senses.length - 1]?.covered, undefined);
+
+  privateAvailable = false;
+  stack = { ...stack, stackFingerprint: "d".repeat(16), dictionaries: ["jmdict:en"],
+    personalPacks: [{ ...personal, contentRevision: "personal-v3" }] };
+  await assert.rejects(installDictionary("https://api.test", "Bearer secret"), /Dictionary download failed \(503\)/);
+  assert.equal(await lookupOffline("言葉", ["jpn"], "https://shirabe.test"), null,
+    "disabling a private source takes effect even when refreshing its stored bytes fails");
+  await assert.rejects(lookupEntryOffline("yomitan-test:1", "言葉", ["jpn"], "https://shirabe.test"),
+    /Not available in this dictionary/, "a stale page handle cannot reopen the disabled source after a failed refresh");
+  assert.equal((await dictionaryStatus()).stackFingerprint, "d".repeat(16));
+
+  privateAvailable = true;
+  stack = { ...stack, stackFingerprint: "d".repeat(16), dictionaries: ["jmdict:en"],
+    personalPacks: [{ ...personal, contentRevision: "personal-v2" }] };
+  await installDictionary("https://api.test", "Bearer secret");
+  assert.equal(downloads, 6, "disabling a source only changes active stack metadata after the failed refresh");
+  await assert.rejects(lookupEntryOffline("yomitan-test:2", "食べる", ["jpn"], "https://shirabe.test"),
+    /Not available in this dictionary/, "a stale page handle cannot reopen a disabled dictionary entry");
+
+  stack = { ...stack, stackFingerprint: "e".repeat(16), personalPacks: [] };
+  await installDictionary("https://api.test", "Bearer secret");
+  assert.equal(await lookupOffline("言葉", ["jpn"], "https://shirabe.test"), null,
+    "losing personal dictionary access removes its installed records");
+  await deactivatePrivateDictionaries();
+  assert.deepEqual(
+    (await indexedDB.databases()).map(({ name }) => name).filter((name) => name?.startsWith("shirabe-offline-dictionary")).sort(),
+    ["shirabe-offline-dictionary-public-v1"],
+  );
 });
 
 test("installs, deinflects, parses, and rolls back a corrupt offline pack", async (context) => {
@@ -311,6 +497,18 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.deepEqual(definition?.senses[0]?.glosses, [{ lang: "spa", tag: "ES", text: "comer" }]);
   assert.deepEqual(definition?.senses[0]?.partsOfSpeech.map((chip) => chip.label), ["Ichidan verb", "Transitive verb"],
     "offline POS codes resolve to the same short labels as the site");
+  const hierarchy = await lookupOffline("階層", ["eng"], "https://shirabe.test");
+  assert.deepEqual(hierarchy?.entryTagsByEntry, {
+    "jmdict:hierarchy": [{ label: "Noun", code: "n", category: "pos", scope: "entry" }],
+  });
+  assert.deepEqual(hierarchy?.senses[0]?.groupTags, [
+    { label: "Ichidan verb", code: "v1", category: "pos", scope: "group" },
+  ]);
+  assert.deepEqual(hierarchy?.senses[0]?.posCodes, ["n", "v5k", "v5r"]);
+  assert.deepEqual(
+    (await parseOffline("階層", ["eng"], "https://shirabe.test")).filter((token) => token.content).map((token) => token.lemma),
+    ["階層"],
+  );
   assert.deepEqual(definition?.pitch.map((pitch) => pitch.downstep), [2], "alternate-spelling pitch rows do not leak into the displayed headword");
   // The clip URL is no longer shipped per row (that was 40% of the pack): it is
   // hashed from the manifest's recipe. Recomputed here the way Audio::Clip#digest
@@ -650,15 +848,4 @@ test("a narrow spelling reaches the wide one the dictionary files it under", () 
 
   // Kana and kanji are not alnum, so nothing else moves.
   assert.deepEqual(texts("猫"), [ "猫" ]);
-});
-
-test("a parsed token's part of speech is the JMdict code, not the label the popup prints", () => {
-  const source = readFileSync("src/common/offline-dictionary.ts", "utf8");
-  // A definition is built for display, so its `partsOfSpeech` are already
-  // chips reading "Godan verb", which matches none of the code selectors
-  // in content.css and colours nothing. Everything downstream (underline hues,
-  // the i+1 function-word test, counters) matches on codes.
-  assert.match(source, /posCodes: sense\.partsOfSpeech/);
-  assert.match(source, /const code = sense\.posCodes\?\.\[0\]/);
-  assert.doesNotMatch(source, /pos: definition\.senses\[0\]\?\.partsOfSpeech/);
 });

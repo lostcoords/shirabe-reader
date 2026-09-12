@@ -1,7 +1,7 @@
 import { dictionaryStatus, installDictionary, lookupOffline, lookupEntryOffline, parseOffline } from "../src/common/offline-dictionary.js";
 import { renderToken, candidatesFor } from "../src/content/word.js";
 import type { Definition, ParsedToken } from "../src/common/types.js";
-import { dismissPopup, setCardHost, showNow } from "shirabe-sdk/word-card/card.js";
+import { dismissPopup, setCardHost, showNow } from "@shirabe-org/card/word-card/card";
 
 function container(id: string): HTMLElement {
   let element = document.getElementById(id);

@@ -20,7 +20,7 @@ test("match patterns anchor the host instead of matching anywhere in the URL", a
   // URL that merely *contains* the host: a redirect target, a share link, a
   // search result carrying the URL in its query string.
   assert.equal(matchUrl("*://example.com/*", "https://evil.test/?q=https://example.com/"), false);
-  assert.equal(matchUrl("*://reader.ttsu.app/*", "https://evil.test/page?next=https://reader.ttsu.app/x"), false);
+  assert.equal(matchUrl("*://example.com/*", "https://evil.test/page?next=https://example.com/x"), false);
   assert.equal(matchUrl("*://shirabe.org/*", "https://evil.test/a?x=://shirabe.org/"), false);
 
   // Neighbouring hosts are not substring matches either.
@@ -34,7 +34,7 @@ test("match patterns anchor the host instead of matching anywhere in the URL", a
 
 test("match patterns still cover the hosts the built-in rules target", async () => {
   const { matchUrl } = await load();
-  assert.equal(matchUrl("*://reader.ttsu.app/*", "https://reader.ttsu.app/b?id=1"), true);
+  assert.equal(matchUrl("*://example.com/*", "https://example.com/page?id=1"), true);
   assert.equal(matchUrl("*://www.netflix.com/watch/*", "https://www.netflix.com/watch/12345"), true);
   // Path globs see the query string, so "/browse*" still matches "?jbv=".
   assert.equal(matchUrl("*://www.netflix.com/browse*", "https://www.netflix.com/browse?jbv=1"), true);

@@ -3,10 +3,8 @@
     "target": "ES2021",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    // shirabe-sdk is a sibling project in this repo, not an installed package:
-    // the extension bundles it from source (docs/plans/word-card-library.md).
     "baseUrl": ".",
-    "paths": { "shirabe-sdk/*": ["../shirabe-sdk/src/*"] },
+    "paths": { "@shirabe-org/card/*": ["../packages/card/src/*"] },
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
     "strict": true,
     "noUnusedLocals": true,

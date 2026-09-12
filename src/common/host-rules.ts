@@ -12,7 +12,7 @@ export type HostRule = {
   filter?: string; // CSS selector of elements to exclude
   allFrames?: boolean; // parse sub-frames (video/iframe overlays)
   collapseWhitespace?: boolean; // fold newlines for OCR/manga readers
-  custom?: "youtube" | "netflix" | "ttsu" | "mokuro"; // dedicated dynamic surfaces
+  custom?: "youtube" | "netflix" | "mokuro"; // dedicated dynamic surfaces
 };
 
 // How the current page should behave. `rule` is the matched auto-rule (its
@@ -33,7 +33,6 @@ export const BUILTIN_RULES: HostRule[] = [
   // parse requests back at us. Off on every Shirabe host (and local dev in watch).
   { host: __SHIRABE_OFF_HOSTS__, mode: "off" },
   // ── Dedicated reader apps (reading JP is the whole point) ──
-  { host: ["*://reader.ttsu.app/*", "*://ttu-ebook.web.app/*"], custom: "ttsu" }, // ッツ epub reader
   { host: ["*://reader.mokuro.app/*", "*://*.mokuro.app/*"], custom: "mokuro", collapseWhitespace: true }, // Mokuro manga OCR
   { host: "*://app.readwok.com/*" },
   { host: "*://app.yatsu.moe/*" },
@@ -115,10 +114,9 @@ export function normalizePattern(raw: string): string {
 }
 
 
-// Resolve the page's mode. Parsing is local, so reader-on means auto everywhere:
-// the old manual default existed only to avoid sending arbitrary page text to
-// the server. User and built-in off rules still win; matching rules contribute
-// selectors/integration behavior, while bare pages use the generic parser.
+// Resolve the page's mode. Connected readers parse online; disconnected readers
+// keep the cursor scanner without rewriting the page. User and built-in off rules
+// still win; matching rules contribute selectors/integration behavior.
 export function resolveHostMode(
   url: string,
   opts: { disabledHosts: string[]; rules: HostRule[]; apiBase?: string },

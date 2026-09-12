@@ -17,9 +17,8 @@ const ANNOTATION_SELECTOR = "ruby";
 const PARSED_FLAG = "sbParsed"; // dataset key on the wrapper we insert
 let paused = false;
 
-// One background message covers many text nodes at once. The local worker
-// returns one token list per input, preserving offsets and keeping message and
-// IndexedDB overhead bounded.
+// One background message covers many text nodes at once. The background returns
+// one token list per input, preserving offsets and keeping message overhead bounded.
 const BATCH_CHARS = 8000;
 const DISCOVERY_SLICE_NODES = 300;
 
@@ -207,8 +206,8 @@ function sentenceAt(text: string, offset: number): { text: string; start: number
 export async function parse(root: Node, showFurigana: boolean, opts: ParseOptions = {}): Promise<number> {
   if (paused) return 0;
   const nodes = collectTextNodes(root, opts.filter);
-  // Sequential outer batches keep memory flat; each batch uses bounded
-  // concurrency inside the local worker. A failed batch doesn't sink the rest.
+  // Sequential outer batches keep request size and rendered memory bounded. A
+  // failed batch doesn't sink the rest.
   for (const batch of batchNodes(nodes)) {
     try {
       await parseBatch(batch, showFurigana);

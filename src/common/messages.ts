@@ -1,7 +1,7 @@
 import { ext } from "./browser.js";
 import type { Definition, DeckMembership, IntervalPreviews, ParsedToken, StudyDetails, WordState } from "./types.js";
 import type { DictionaryStatus, PackManifest } from "./offline-dictionary.js";
-import type { GlossLanguage } from "shirabe-sdk/word-card/languages.js";
+import type { GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import type { ClientReport } from "./telemetry.js";
 
 export type { DeckMembership, IntervalPreviews, StudyDetails };
@@ -71,7 +71,7 @@ export type Status = {
 // handshake, and rate limiting. Everything goes through these.
 export type Request =
   // `requestId` lets the content script cancel a batch whose blocks all scrolled
-  // out of view before the local worker finished looking their words up.
+  // out of view before the online parse finished.
   | { type: "parseBatch"; texts: string[]; requestId?: number }
   | { type: "cancelParse"; requestId: number }
   // Words and kanji are separate corpora, as on the web: a word search never
@@ -106,8 +106,7 @@ export type Request =
       notes?: string;
       sentences?: SentenceCapture[];
     }
-  // Grade a due card on the 1–4 FSRS scale, by lemma (+reading). POST /api/v1/srs/reviews.
-  | { type: "grade"; lemma: string; reading?: string; rating: Rating }
+  | { type: "grade"; lemma: string; cardId: number; revision: string; rating: Rating }
   | { type: "decks" }
   | { type: "states"; lemmas: string[] }
   | { type: "pageMetrics"; metrics: PageMetrics }
@@ -116,6 +115,7 @@ export type Request =
   | { type: "connect" } // begin device login; resolves with the code to show
   | { type: "disconnect" }
   | { type: "updateLanguages"; languages: GlossLanguage[] }
+  | { type: "updateDictionaryStack"; dictionaries: string[]; dictionaryReveal: Record<string, "show" | "hover"> }
   // Fetch a pronunciation clip in the background (bypasses the page CSP that
   // blocks cross-origin media) and get it back as a playable data: URL.
   | { type: "audioClip"; url: string }
@@ -148,6 +148,7 @@ export type Response =
   | { ok: true; type: "connect" }
   | { ok: true; type: "disconnect" }
   | { ok: true; type: "updateLanguages"; languages: GlossLanguage[] }
+  | { ok: true; type: "updateDictionaryStack" }
   | { ok: true; type: "audioClip"; dataUrl: string }
   | { ok: true; type: "captureTab"; imageDataUrl: string }
   | { ok: true; type: "telemetry" }

@@ -4,8 +4,8 @@ import { searchReadings } from "./romaji.js";
 import { chooseContextHint, contextCounts } from "./context-hints.js";
 import listingCategoryData from "../../../db/reference/listing_categories.json";
 import { posChips, tagChips } from "./jmdict-tags.js";
-import { GLOSS_TAGS, withEnglishFallback, type GlossLanguage } from "shirabe-sdk/word-card/languages.js";
-import type { Definition, GlossRow, ParsedToken, Sense, SenseXref, TokenCandidate } from "./types.js";
+import { GLOSS_TAGS, withEnglishFallback, type GlossLanguage } from "@shirabe-org/card/word-card/languages";
+import type { Definition, GlossRow, ParsedToken, Sense, SenseChip, SenseScope, SenseXref, SourceHeadword, SourceTag, TokenCandidate } from "./types.js";
 import { sha256 as createSha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
@@ -15,10 +15,11 @@ declare const __EXTENSION_VERSION__: string;
 // dev-built database opens a clean one rather than a shape this code cannot
 // read. Superseded databases are not migrated: a generation is rebuilt from the
 // pack, which is always re-downloadable.
-const DB_NAME = "shirabe-offline-dictionary-v4";
+const PUBLIC_DB_NAME = "shirabe-offline-dictionary-public-v1";
+const PRIVATE_DB_NAME = "shirabe-offline-dictionary-private-v1";
 const DB_VERSION = 2;
-const SUPPORTED_SCHEMA = 6;
-const MINIMUM_PACK_RECIPE = 13;
+const SUPPORTED_SCHEMA = 7;
+const MINIMUM_PACK_RECIPE = 15;
 // Longest term the greedy longest-match will probe from any position: the
 // scanner's caret window (dom-text.ts `maxChars`) mirrors it. Covers long
 // compounds/expressions; unknown katakana runs are coalesced (`unknownRun`)
@@ -61,9 +62,21 @@ export type PackManifest = {
   };
 };
 
+export type DictionaryStackManifest = {
+  stackFingerprint: string;
+  dictionaries: string[];
+  dictionaryReveal: Record<string, "show" | "hover">;
+  dictionaryNames: Record<string, string>;
+  publicPack: PackManifest;
+  personalPacks: PackManifest[];
+};
+
+type ActiveStack = Pick<DictionaryStackManifest, "stackFingerprint" | "dictionaries" | "dictionaryReveal" | "dictionaryNames">;
+
 export type DictionaryStatus = {
   installed: boolean;
   revision: string | null;
+  stackFingerprint: string | null;
   builtAt: string | null;
   bytes: number;
   terms: number;
@@ -93,6 +106,10 @@ export class OfflineLookupUnavailableError extends Error {
 
 type OfflineSense = {
   glosses: Record<string, string[]>;
+  glossTitles?: Record<string, Array<string | null>>;
+  usages?: Record<string, Array<{ text: string; title?: string }>>;
+  label?: string;
+  depth?: number;
   partsOfSpeech: string[];
   fields: string[];
   misc: string[];
@@ -102,7 +119,9 @@ type OfflineSense = {
   // `notes` is per language because a note is written in one ("usu. in kana" is
   // not Spanish); a cross reference points at a Japanese word either way.
   notes?: Record<string, string[]>;
-  xrefs?: Array<{ kind: string; text: string; reading?: string }>;
+  xrefs?: Array<{ kind: string; text: string; reading?: string; label?: string }>;
+  sourceTags?: SourceTag[];
+  scopedTags?: Array<{ category: string; code: string; scope: SenseScope }>;
 };
 
 type OfflineTerm = {
@@ -115,6 +134,7 @@ type OfflineTerm = {
   // narrows: よいてんき spells 良い天気 and よい天気, but never いい天気.
   readings: Array<{ text: string; kind: string; appliesTo?: string[] }>;
   senses: OfflineSense[];
+  sourceHeadwords?: SourceHeadword[];
   pitch?: Array<{ text: string; reading: string; downstep: number }>;
   frequencies?: Array<{ source: string; text: string; reading: string | null; rank: number }>;
   // Sentence record ids ("tatoeba:tatoeba_1297"), most representative first.
@@ -185,9 +205,15 @@ let installProgress = 0;
 let installStage: string | null = null;
 let installError: string | null = null;
 let installApiBase: string | null = null;
-let databasePromise: Promise<IDBDatabase> | null = null;
-let activeGenerationCache: string | undefined | null = null;
+let installAuthorization: string | undefined;
+let publicDatabasePromise: Promise<IDBDatabase> | null = null;
+let privateDatabasePromise: Promise<IDBDatabase> | null = null;
+let privateDatabaseAbsent = false;
+let publicGenerationCache: string | undefined | null = null;
+let privateGenerationCache: string | undefined | null = null;
 let audioRecipeCache: PackManifest["audio"] | null | undefined = undefined;
+let activeStackCache: ActiveStack | null = null;
+let privateActivationEpoch = 0;
 let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 let lastSnapshotWrite = 0;
 const lookupProbeCache = new BoundedCache<Array<Stored<OfflineTerm>>>(4_000);
@@ -207,19 +233,24 @@ type InstallStateSnapshot = {
 export async function dictionaryStatus(): Promise<DictionaryStatus> {
   let db: IDBDatabase;
   try {
-    db = await openDatabase();
+    db = await openPublicDatabase();
   } catch (error) {
-    throw tracedError(`IndexedDB open failed for ${DB_NAME} v${DB_VERSION}`, error);
+    throw tracedError(`IndexedDB open failed for ${PUBLIC_DB_NAME} v${DB_VERSION}`, error);
   }
   let active: string | undefined;
   let manifest: PackManifest | undefined;
+  let stack: ActiveStack | undefined;
   let lastCheckedAt: string | undefined;
   try {
-    [active, manifest, lastCheckedAt] = await Promise.all([
-      activeGeneration(db), meta<PackManifest>(db, "manifest"), meta<string>(db, "lastUpdateCheck"),
+    [active, manifest, stack, lastCheckedAt] = await Promise.all([
+      activePublicGeneration(db), meta<PackManifest>(db, "manifest"), storedActiveStack(), meta<string>(db, "lastUpdateCheck"),
     ]);
   } catch (error) {
     throw tracedError(`IndexedDB metadata read failed; stores=${Array.from(db.objectStoreNames).join(",")}`, error);
+  }
+  const privateManifest = await activePrivateManifest();
+  if (manifest && privateManifest) {
+    manifest = combinedManifest([manifest, privateManifest], `${manifest.contentRevision}.${privateManifest.contentRevision}`, "dictionary-stack.ndjson.gz");
   }
   const estimate = await navigator.storage?.estimate?.().catch((error) => {
     console.error("[Shirabe dictionary] storage estimate failed", error);
@@ -230,6 +261,7 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
   return {
     installed: !!active && !!manifest,
     revision: manifest?.contentRevision ?? null,
+    stackFingerprint: stack?.stackFingerprint ?? null,
     builtAt: manifest?.builtAt ?? null,
     bytes: manifest?.bytes ?? 0,
     terms: manifest?.counts.terms ?? 0,
@@ -245,42 +277,48 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
 }
 
 /** If a previous worker died mid-install, pick the job back up. */
-export function resumeInterruptedDictionaryInstall(apiBase: string): void {
+export function resumeInterruptedDictionaryInstall(apiBase: string, authorization?: string): void {
   if (installPromise) return;
   void readInstallSnapshot().then((snapshot) => {
     if (!snapshot?.installing) return;
-    void installDictionary(snapshot.apiBase || apiBase).catch(() => undefined);
+    void installDictionary(snapshot.apiBase || apiBase, authorization).catch(() => undefined);
   });
 }
 
-export async function checkDictionaryUpdate(apiBase: string): Promise<void> {
-  const db = await openDatabase();
-  const active = await activeGeneration(db);
+export async function checkDictionaryUpdate(apiBase: string, authorization?: string, current = () => true): Promise<void> {
+  const db = await openPublicDatabase();
+  const active = await activePublicGeneration(db);
+  if (!current()) return;
   if (!active) {
-    await installDictionary(apiBase);
+    await installDictionary(apiBase, authorization);
+    if (!current()) return;
     await setMeta(db, "lastUpdateCheck", new Date().toISOString());
     return;
   }
   const last = await meta<string>(db, "lastUpdateCheck");
+  if (!current()) return;
   if (last && Date.now() - Date.parse(last) < 24 * 60 * 60 * 1000) return;
   await setMeta(db, "lastUpdateCheck", new Date().toISOString());
-  const response = await fetch(`${apiBase.replace(/\/$/, "")}/api/v1/dictionary-packs/current`, { cache: "no-store" });
-  if (!response.ok) return;
-  const available = (await response.json()) as PackManifest;
-  validateManifest(available);
-  if (active !== available.contentRevision) await installDictionary(apiBase);
+  if (!current()) return;
+  await installDictionary(apiBase, authorization);
 }
 
-export function installDictionary(apiBase: string): Promise<PackManifest> {
-  if (installPromise) return installPromise;
+export function installDictionary(apiBase: string, authorization?: string): Promise<PackManifest> {
+  if (installPromise) {
+    if (installAuthorization === authorization) return installPromise;
+    installController?.abort();
+    return installPromise.catch(() => undefined).then(() => installDictionary(apiBase, authorization));
+  }
   installProgress = 0;
   installStage = "Preparing dictionary installation";
   installError = null;
   installApiBase = apiBase.replace(/\/$/, "");
+  installAuthorization = authorization;
   installController = new AbortController();
   startInstallKeepAlive();
   void writeInstallSnapshot(true);
-  installPromise = performInstall(apiBase, installController.signal)
+  const activationEpoch = privateActivationEpoch;
+  installPromise = performInstall(apiBase, installController.signal, authorization, activationEpoch)
     .catch((error: unknown) => {
       installError = error instanceof DOMException && error.name === "AbortError" ? null : describeInstallError(error, installStage);
       if (installError && typeof location !== "undefined" && /^(moz|chrome)-extension:$/.test(location.protocol)) {
@@ -293,6 +331,7 @@ export function installDictionary(apiBase: string): Promise<PackManifest> {
       installPromise = null;
       installController = null;
       installApiBase = null;
+      installAuthorization = undefined;
       stopInstallKeepAlive();
       if (failed) void writeInstallSnapshot(false);
       else void clearInstallSnapshot();
@@ -401,24 +440,31 @@ function extensionRuntime(): { getPlatformInfo?: () => Promise<unknown> } | null
 
 export async function removeDictionary(): Promise<void> {
   if (installPromise) throw new Error("Wait for the current dictionary installation to finish.");
-  if (databasePromise) {
-    (await databasePromise).close();
-    databasePromise = null;
-  }
-  await new Promise<void>((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(DB_NAME);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error ?? new Error("Could not remove the local dictionary."));
-    request.onblocked = () => reject(new Error("Close other Shirabe Reader pages and try again."));
-  });
+  await Promise.all([deleteDictionaryDatabase("public"), deleteDictionaryDatabase("private")]);
   installProgress = 0;
   installStage = null;
   installError = null;
-  activeGenerationCache = null;
+  publicGenerationCache = null;
+  privateGenerationCache = null;
   audioRecipeCache = undefined;
+  activeStackCache = null;
   lookupProbeCache.clear();
   candidateCache.clear();
   void clearInstallSnapshot();
+}
+
+export async function deactivatePrivateDictionaries(): Promise<void> {
+  disablePrivateDictionaryLookups();
+  if (installPromise && installAuthorization) {
+    installController?.abort();
+    await installPromise.catch(() => undefined);
+  }
+  await deleteDictionaryDatabase("private");
+  const db = await openPublicDatabase();
+  const manifest = await meta<PackManifest>(db, "manifest");
+  activeStackCache = manifest ? publicStack(manifest) : null;
+  lookupProbeCache.clear();
+  candidateCache.clear();
 }
 
 export async function lookupOffline(query: string, languages: readonly GlossLanguage[], apiBase: string, voice?: string): Promise<Definition | null> {
@@ -426,8 +472,8 @@ export async function lookupOffline(query: string, languages: readonly GlossLang
   const latin = /\p{Script=Latin}/u.test(normalized) && !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(normalized);
   const source = latin ? normalized : normalized.slice(0, MAX_SCAN_CHARS);
   if (!source) return null;
-  const db = await openDatabase();
-  const generation = await activeGeneration(db);
+  const db = await openPublicDatabase();
+  const generation = await activePublicGeneration(db);
   if (!generation) throw new DictionaryNotInstalledError("look up words");
   let found = await lookupInDatabase(db, generation, source, languages, apiBase, false, latin);
   if (!found && latin) {
@@ -455,12 +501,12 @@ export async function lookupOffline(query: string, languages: readonly GlossLang
 export async function lookupEntryOffline(
   entry: string, surface: string, languages: readonly GlossLanguage[], apiBase: string, voice?: string,
 ): Promise<Definition | null> {
-  const db = await openDatabase();
-  const generation = await activeGeneration(db);
+  const db = await openPublicDatabase();
+  const generation = await activePublicGeneration(db);
   if (!generation) throw new DictionaryNotInstalledError("look up words");
 
-  const term = await getByPk<Stored<OfflineTerm>>(db, "terms", `${generation}\0${entry}`);
-  if (!term) throw new OfflineLookupUnavailableError("entry");
+  const term = await getTermByPk(db, generation, entry);
+  if (!term || !dictionaryEnabled(term.dictionary)) throw new OfflineLookupUnavailableError("entry");
 
   const matched = normalize(surface) || term.headword;
   const spellings = new Set([...term.expressions, ...term.readings].map((item) => normalize(item.text)));
@@ -505,8 +551,8 @@ function curatedListingContext(tokens: readonly ParsedToken[], following: string
 }
 
 export async function parseOffline(text: string, languages: readonly GlossLanguage[], apiBase: string): Promise<ParsedToken[]> {
-  const db = await openDatabase();
-  const generation = await activeGeneration(db);
+  const db = await openPublicDatabase();
+  const generation = await activePublicGeneration(db);
   if (!generation) throw new DictionaryNotInstalledError("parse text");
   const tokens: ParsedToken[] = [];
   let position = 0;
@@ -1394,6 +1440,8 @@ function compatibleAlternative(hit: LookupHit, chosen: Definition): boolean {
  * flip.
  */
 function byLadder(a: LookupHit, b: LookupHit): number {
+  const dictionary = dictionaryRung(a, b);
+  if (dictionary) return dictionary;
   const filed = filedRung(a, b);
   if (filed) return filed;
   // Rung 3: the reading the sentence used.
@@ -1493,7 +1541,7 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
   // per-word score shattered 全く (adverb, common, but usually-kana so never
   // confident) into 全 + く on a hair's-breadth score difference.
   if (!confident.length) {
-    hits.sort((a, b) => b.prefixLength - a.prefixLength || score(b, source) - score(a, source));
+    hits.sort((a, b) => b.prefixLength - a.prefixLength || dictionaryRung(a, b) || score(b, source) - score(a, source));
     return { trusted: hits, all: hits };
   }
   confident.sort(contextualCompare);
@@ -1743,7 +1791,7 @@ async function lookupInDatabase(db: IDBDatabase, generation: string, source: str
     const confident = [...deinflectedHits, ...exactHits].filter((hit) => contextuallyConfident(hit));
     if (confident.length) {
       confident.sort(contextualCompare);
-      return termDefinition(confident[0], languages, apiBase);
+      return stackedTermDefinition(confident[0]!, [...deinflectedHits, ...exactHits], languages, apiBase);
     }
   }
 
@@ -1757,10 +1805,11 @@ async function lookupInDatabase(db: IDBDatabase, generation: string, source: str
   // exact one on its own merits.
   const hits = [...deinflectedHits, ...exactHits];
   hits.sort((a, b) => (!contextual ? b.prefixLength - a.prefixLength : 0)
+    || dictionaryRung(a, b)
     || score(b, source) - score(a, source)
     || (!contextual ? filedRung(a, b) : 0)
     || (!contextual ? ownKanjiRank(a.term) - ownKanjiRank(b.term) : 0));
-  return hits[0] ? termDefinition(hits[0], languages, apiBase) : null;
+  return hits[0] ? stackedTermDefinition(hits[0], hits, languages, apiBase) : null;
 }
 
 function ownKanjiRank(term: OfflineTerm): number {
@@ -1768,6 +1817,15 @@ function ownKanjiRank(term: OfflineTerm): number {
   const writings = new Set(term.expressions.filter((item) => /\p{Script=Han}/u.test(item.text)
     && !item.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag))).map((item) => item.text));
   return Math.min(...(term.frequencies ?? []).filter((row) => writings.has(row.text) && row.reading === reading).map((row) => row.rank));
+}
+
+function dictionaryRung(a: LookupHit, b: LookupHit): number {
+  return dictionaryRank(a.term.dictionary) - dictionaryRank(b.term.dictionary);
+}
+
+function dictionaryRank(slug: string): number {
+  const found = (activeStackCache?.dictionaries ?? []).findIndex((source) => source.split(":", 1)[0] === slug);
+  return found < 0 ? Number.MAX_SAFE_INTEGER : found;
 }
 
 // Kanji are a separate corpus, never a word-search result: the server draws the
@@ -1778,8 +1836,8 @@ function ownKanjiRank(term: OfflineTerm): number {
 export async function lookupKanjiOffline(character: string, languages: readonly GlossLanguage[], apiBase: string): Promise<Definition | null> {
   const source = normalize(character);
   if ([...source].length !== 1 || !isKanji(source)) return null;
-  const db = await openDatabase();
-  const generation = await activeGeneration(db);
+  const db = await openPublicDatabase();
+  const generation = await activePublicGeneration(db);
   if (!generation) throw new DictionaryNotInstalledError("look up words");
   const kanji = await getByPk<Stored<OfflineKanji>>(db, "kanji", `${generation}\0${source}`);
   return kanji ? kanjiDefinition(kanji, languages, apiBase) : null;
@@ -1799,11 +1857,10 @@ async function hitsForCandidates(
   // Page text reaches parseOffline unnormalized and its token offsets are
   // measured against that raw text, so normalize the probe only: `prefix` stays
   // the on-page surface.
-  const keys = db.transaction("terms").objectStore("terms").index("lookupKeys");
   const resolved = await Promise.all(probes.map(async (probe) => ({
     ...probe,
-    terms: (await termsForProbe(keys, `${generation}\0${normalize(probe.candidate.text)}`))
-      .filter((term) => posSatisfiesInflection(term, probe.candidate)),
+    terms: (await termsForProbe(db, generation, normalize(probe.candidate.text)))
+      .filter((term) => dictionaryEnabled(term.dictionary) && posSatisfiesInflection(term, probe.candidate)),
   })));
   const longest = resolved.find((probe) => probe.terms.length)?.prefix;
   if (!longest) return [];
@@ -1822,6 +1879,10 @@ async function hitsForCandidates(
       seen.add(key);
       return [{ term, candidate: probe.candidate, prefixLength: [...probe.prefix].length, surface: probe.prefix }];
     }));
+}
+
+function dictionaryEnabled(slug: string): boolean {
+  return activeStackCache?.dictionaries.some((source) => source.split(":", 1)[0] === slug) ?? false;
 }
 
 const CONTEXTUAL_MISC = new Set(["yoji", "id", "proverb"]);
@@ -1843,6 +1904,17 @@ const CONTEXTUAL_FREQUENCY_LIMIT = 50_000;
 // conjugating class simply doesn't match (a noun has no verb rules to fire).
 function posSatisfiesInflection(term: Stored<OfflineTerm>, candidate: Candidate): boolean {
   if (!candidate.deinflection) return true;
+  if (term.sourceHeadwords?.length) {
+    const candidateText = normalize(candidate.text);
+    return term.sourceHeadwords.some((headword) => {
+      const sourceText = normalize(headword.text);
+      const sourceReading = normalize(headword.reading);
+      const candidateMatchesPair = candidateText === sourceText || candidateText === sourceReading;
+      if (!candidateMatchesPair || !matchesPos(candidate.deinflection!, headword.rules)) return false;
+      return term.readings.some((reading) => normalize(reading.text) === normalize(headword.reading) &&
+        (!reading.appliesTo?.length || reading.appliesTo.some((text) => normalize(text) === normalize(headword.text))));
+    });
+  }
   const codes = term.senses.flatMap((sense) => sense.partsOfSpeech);
   if (matchesPos(candidate.deinflection, codes)) return true;
   if (!codes.length || !codes.every((code) => code === "exp" || code === "unc")) return false;
@@ -1996,6 +2068,8 @@ function contextualCompare(a: LookupHit, b: LookupHit): number {
   if (forced) return forced;
   const length = b.prefixLength - a.prefixLength;
   if (length) return length;
+  const dictionary = dictionaryRung(a, b);
+  if (dictionary) return dictionary;
   // Prefer the most literal spelling (Yomitan's shortest text-processing chain):
   // a verbatim match beats one reached by folding katakana or collapsing kana, so
   // a coincidental folded homophone can't outrank the word actually on the page.
@@ -2054,68 +2128,162 @@ function frequencyForHit(hit: LookupHit): number | null {
   return Math.min(...pool.map((item) => item.rank));
 }
 
-async function termsForProbe(index: IDBIndex, key: string): Promise<Array<Stored<OfflineTerm>>> {
+async function termsForProbe(db: IDBDatabase, generation: string, probe: string): Promise<Array<Stored<OfflineTerm>>> {
+  const privateDb = await privateDatabaseIfPresent();
+  const privateGeneration = privateDb ? await activeGeneration(privateDb) : undefined;
+  const key = `${generation}\0${privateGeneration ?? ""}\0${probe}`;
   const cached = lookupProbeCache.get(key);
   if (cached) return cached;
-  const terms = await requestResult<Array<Stored<OfflineTerm>>>(index.getAll(IDBKeyRange.only(key)));
+  const requests = [requestResult<Array<Stored<OfflineTerm>>>(
+    db.transaction("terms").objectStore("terms").index("lookupKeys").getAll(IDBKeyRange.only(`${generation}\0${probe}`)),
+  )];
+  if (privateDb && privateGeneration) {
+    requests.push(requestResult<Array<Stored<OfflineTerm>>>(
+      privateDb.transaction("terms").objectStore("terms").index("lookupKeys").getAll(IDBKeyRange.only(`${privateGeneration}\0${probe}`)),
+    ));
+  }
+  const terms = (await Promise.all(requests)).flat();
   lookupProbeCache.set(key, terms);
   return terms;
 }
 
-async function performInstall(apiBase: string, signal: AbortSignal): Promise<PackManifest> {
+async function performInstall(apiBase: string, signal: AbortSignal, authorization: string | undefined, activationEpoch: number): Promise<PackManifest> {
   const base = apiBase.replace(/\/$/, "");
   reportInstallProgress(0, "Fetching the dictionary manifest");
-  const manifestResponse = await fetch(`${base}/api/v1/dictionary-packs/current`, { cache: "no-store", signal });
+  const manifestResponse = await fetch(`${base}/api/v1/dictionary-packs/${authorization ? "stack" : "current"}`, {
+    cache: "no-store", signal, ...(authorization ? { headers: { Authorization: authorization } } : {}),
+  });
   if (!manifestResponse.ok) throw new Error(await responseFailure("Dictionary manifest", manifestResponse));
-  const manifest = (await manifestResponse.json()) as PackManifest;
-  validateManifest(manifest);
-
+  const payload = await manifestResponse.json() as PackManifest | DictionaryStackManifest;
+  const stack = authorization ? validateStackManifest(payload as DictionaryStackManifest) : null;
+  const packs = stack ? [stack.publicPack, ...stack.personalPacks] : [payload as PackManifest];
+  packs.forEach(validateManifest);
+  if (stack) {
+    if (activationEpoch !== privateActivationEpoch) throw new DOMException("Private dictionary activation was superseded.", "AbortError");
+    const privateDb = await openPrivateDatabase();
+    if (activationEpoch !== privateActivationEpoch) throw new DOMException("Private dictionary activation was superseded.", "AbortError");
+    const installedStack = activeStack(stack);
+    activeStackCache = installedStack;
+    lookupProbeCache.clear();
+    candidateCache.clear();
+    await setMeta(privateDb, "stack", installedStack);
+  }
   reportInstallProgress(installProgress, "Checking offline dictionary storage");
-  // Avoid re-entering snapshot/installing flags via dictionaryStatus during install:
-  // only need the active revision comparison.
-  const dbForCheck = await openDatabase();
-  const activeRevision = await activeGeneration(dbForCheck);
-  const current = { revision: activeRevision ?? null };
-  if (current.revision === manifest.contentRevision) {
+  const publicPack = packs[0]!;
+  const publicDb = await openPublicDatabase();
+  await installPacks(publicDb, publicPack.contentRevision, [publicPack], signal);
+
+  if (!stack) {
+    await deleteDictionaryDatabase("private");
+    activeStackCache = publicStack(publicPack);
     reportInstallProgress(1, null);
-    return manifest;
+    return publicPack;
   }
 
-  reportInstallProgress(installProgress, "Downloading the dictionary pack");
-  const response = await fetch(manifest.downloadUrl, { cache: "no-store", signal });
-  if (!response.ok) throw new Error(await responseFailure("Dictionary download", response));
-  if (!response.body) throw new Error("This browser cannot stream the dictionary download.");
-  const [importBranch, hashBranch] = response.body.tee();
-  const digestPromise = sha256Stream(hashBranch, manifest.bytes, signal);
+  const privateDb = await openPrivateDatabase();
+  const privateRevision = privateGeneration(stack.personalPacks);
+  if (privateRevision) {
+    await installPacks(privateDb, privateRevision, stack.personalPacks, signal, authorization);
+  } else {
+    await clearAllDictionaryRecords(privateDb);
+  }
+  reportInstallProgress(1, null);
+  return combinedManifest(packs, packs.map((pack) => pack.contentRevision).join("."), "dictionary-stack.ndjson.gz");
+}
 
-  reportInstallProgress(installProgress, "Opening offline dictionary storage");
-  const db = await openDatabase();
-  const generation = manifest.contentRevision;
+async function installPacks(
+  db: IDBDatabase, generation: string, packs: PackManifest[], signal: AbortSignal, authorization?: string,
+): Promise<void> {
+  if (await activeGeneration(db) === generation) return;
   await clearGeneration(db, generation);
   try {
-    reportInstallProgress(Math.max(installProgress, 0.2), "Decompressing and importing dictionary records");
-    const stream = importBranch.pipeThrough(new DecompressionStream("gzip"));
-    await importRecords(db, generation, stream, manifest, signal);
-    reportInstallProgress(Math.max(installProgress, 0.95), "Verifying the dictionary checksum");
-    const digest = await digestPromise;
-    if (digest !== manifest.sha256) throw new Error("Dictionary checksum did not match. The previous dictionary is still active.");
-    reportInstallProgress(0.98, "Activating the offline dictionary");
+    for (const [index, pack] of packs.entries()) {
+      reportInstallProgress(Math.max(installProgress, 0.1), `Downloading dictionary ${index + 1} of ${packs.length}`);
+      await importPack(db, generation, pack, signal, authorization);
+    }
+    const manifest = combinedManifest(packs, generation, packs.length === 1 ? packs[0]!.artifact : "dictionary-overlay.ndjson.gz");
     const previous = await meta<string>(db, "activeGeneration");
     if (previous && previous !== generation) await setMeta(db, "previousGeneration", previous);
     await setMeta(db, "activeGeneration", generation);
     await setMeta(db, "manifest", manifest);
-    activeGenerationCache = generation;
-    audioRecipeCache = manifest.audio;
+    setGenerationCache(db, generation);
+    if (db.name === PUBLIC_DB_NAME) audioRecipeCache = manifest.audio;
     lookupProbeCache.clear();
     candidateCache.clear();
-    reportInstallProgress(1, null);
-    void cleanupOtherGenerations(db, new Set([generation, ...(previous ? [previous] : [])]));
-    return manifest;
+    await cleanupOtherGenerations(db, new Set([generation, ...(previous ? [previous] : [])]));
   } catch (error) {
-    await digestPromise.catch(() => undefined);
     await clearGeneration(db, generation);
     throw error;
   }
+}
+
+async function importPack(
+  db: IDBDatabase, generation: string, pack: PackManifest, signal: AbortSignal, authorization?: string,
+): Promise<void> {
+  const response = await fetch(pack.downloadUrl, {
+    cache: "no-store", signal, ...(authorization ? { headers: { Authorization: authorization } } : {}),
+  });
+  if (!response.ok) throw new Error(await responseFailure("Dictionary download", response));
+  if (!response.body) throw new Error("This browser cannot stream the dictionary download.");
+  const [importBranch, hashBranch] = response.body.tee();
+  const digestPromise = sha256Stream(hashBranch, pack.bytes, signal);
+  try {
+    const stream = importBranch.pipeThrough(new DecompressionStream("gzip"));
+    await importRecords(db, generation, stream, pack, signal);
+    const digest = await digestPromise;
+    if (digest !== pack.sha256) throw new Error("Dictionary checksum did not match. The previous dictionary is still active.");
+  } catch (error) {
+    await digestPromise.catch(() => undefined);
+    throw error;
+  }
+}
+
+function activeStack(stack: DictionaryStackManifest): ActiveStack {
+  return { stackFingerprint: stack.stackFingerprint, dictionaries: stack.dictionaries,
+    dictionaryReveal: stack.dictionaryReveal, dictionaryNames: stack.dictionaryNames };
+}
+
+function publicStack(pack: PackManifest): ActiveStack {
+  const dictionaries = pack.dictionaries.flatMap((dictionary) => pack.languages.map((language) => `${dictionary.slug}:${language}`));
+  return {
+    stackFingerprint: pack.contentRevision,
+    dictionaries, dictionaryReveal: {}, dictionaryNames: {},
+  };
+}
+
+function combinedManifest(packs: PackManifest[], contentRevision: string, artifact: string): PackManifest {
+  const publicPack = packs[0]!;
+  return {
+    ...publicPack,
+    contentRevision,
+    artifact,
+    bytes: packs.reduce((sum, pack) => sum + pack.bytes, 0),
+    sha256: publicPack.sha256,
+    counts: {
+      terms: packs.reduce((sum, pack) => sum + pack.counts.terms, 0),
+      kanji: packs.reduce((sum, pack) => sum + pack.counts.kanji, 0),
+      sentences: packs.reduce((sum, pack) => sum + pack.counts.sentences, 0),
+    },
+    languages: [...new Set(packs.flatMap((pack) => pack.languages))],
+    dictionaries: packs.flatMap((pack) => pack.dictionaries),
+    modifications: packs.flatMap((pack) => pack.modifications),
+    sources: publicPack.sources,
+  };
+}
+
+function privateGeneration(packs: PackManifest[]): string | null {
+  if (!packs.length) return null;
+  const identity = packs.map((pack) => `${pack.dictionaries.map(({ slug }) => slug).join(",")}@${pack.contentRevision}`).join("\0");
+  return `private-${bytesToHex(createSha256(new TextEncoder().encode(identity))).slice(0, 32)}`;
+}
+
+function validateStackManifest(stack: DictionaryStackManifest): DictionaryStackManifest {
+  if (!stack || typeof stack !== "object" || !/^[a-f0-9]{16}$/.test(stack.stackFingerprint) ||
+      !stringArray(stack.dictionaries) || !stack.dictionaries.every((source) => source.includes(":")) ||
+      !stack.dictionaryReveal || Object.values(stack.dictionaryReveal).some((mode) => mode !== "show" && mode !== "hover") ||
+      !stack.dictionaryNames || Object.values(stack.dictionaryNames).some((name) => !plainString(name)) ||
+      !stack.publicPack || !Array.isArray(stack.personalPacks)) throw new Error("Dictionary stack manifest is invalid.");
+  return stack;
 }
 
 function describeInstallError(error: unknown, stage: string | null): string {
@@ -2171,7 +2339,7 @@ async function importRecords(db: IDBDatabase, generation: string, stream: Readab
         const header = raw as { type: string; schemaVersion?: number; languages?: unknown; source?: unknown };
         if (!exactKeys(header, ["type", "schemaVersion", "languages", "source"]) ||
             header.schemaVersion !== SUPPORTED_SCHEMA || !Array.isArray(header.languages) || !plainString(header.source) ||
-            !["eng", "spa"].every((language) => (header.languages as unknown[]).includes(language))) {
+            !header.languages.length || (header.languages as unknown[]).some((language) => typeof language !== "string" || !(language in GLOSS_TAGS))) {
           throw new Error(`Unsupported dictionary schema ${raw.schemaVersion}.`);
         }
         headerSeen = true;
@@ -2241,21 +2409,44 @@ function lookupKeysFor(record: OfflineTerm, generation: string): string[] {
   return [...new Set(keys)];
 }
 
-function openDatabase(): Promise<IDBDatabase> {
-  if (databasePromise) return databasePromise;
-  databasePromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+function openPublicDatabase(): Promise<IDBDatabase> {
+  return openDictionaryDatabase("public");
+}
+
+function openPrivateDatabase(): Promise<IDBDatabase> {
+  return openDictionaryDatabase("private");
+}
+
+async function privateDatabaseIfPresent(): Promise<IDBDatabase | undefined> {
+  if (privateDatabaseAbsent) return;
+  if (privateDatabasePromise) return privateDatabasePromise;
+  const databases = await indexedDB.databases();
+  if (!databases.some(({ name }) => name === PRIVATE_DB_NAME)) {
+    privateDatabaseAbsent = true;
+    return;
+  }
+  return openPrivateDatabase();
+}
+
+function openDictionaryDatabase(kind: "public" | "private"): Promise<IDBDatabase> {
+  const existing = kind === "public" ? publicDatabasePromise : privateDatabasePromise;
+  if (existing) return existing;
+  const name = kind === "public" ? PUBLIC_DB_NAME : PRIVATE_DB_NAME;
+  if (kind === "private") privateDatabaseAbsent = false;
+  const promise = new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(name, DB_VERSION);
     request.onupgradeneeded = (event) => {
       try {
         const db = request.result;
         const transaction = request.transaction as IDBTransaction;
         if (typeof location !== "undefined" && /^(moz|chrome)-extension:$/.test(location.protocol)) {
-          console.info("[Shirabe dictionary] upgrading IndexedDB", { name: DB_NAME, from: event.oldVersion, to: DB_VERSION });
+          console.info("[Shirabe dictionary] upgrading IndexedDB", { name, from: event.oldVersion, to: DB_VERSION });
         }
         const metaStore = ensureStore(db, transaction, "meta", "key");
         ensureIndex(metaStore, "key", "key", { unique: true });
         const terms = ensureStore(db, transaction, "terms", "pk");
         ensureIndex(terms, "generation", "generation");
+        ensureIndex(terms, "dictionary", "dictionary");
         // Every writing/reading a term answers to, indexed straight off the
         // record. A separate lookups table cost a row per key: 1.9M extra puts
         // on the full pack, ~2 of every 3 writes during install. And forced
@@ -2277,24 +2468,58 @@ function openDatabase(): Promise<IDBDatabase> {
     request.onsuccess = () => {
       request.result.onversionchange = () => {
         request.result.close();
-        databasePromise = null;
-        activeGenerationCache = null;
-        audioRecipeCache = undefined;
+        setDatabasePromise(kind, null);
+        setGenerationCache(request.result, null);
+        if (kind === "public") audioRecipeCache = undefined;
+        else activeStackCache = null;
         lookupProbeCache.clear();
         candidateCache.clear();
       };
       resolve(request.result);
     };
     request.onerror = () => {
-      databasePromise = null;
+      setDatabasePromise(kind, null);
       reject(tracedError("IndexedDB open request failed", request.error));
     };
     request.onblocked = () => {
-      databasePromise = null;
+      setDatabasePromise(kind, null);
       reject(new Error("Close other Shirabe Reader pages so offline dictionary storage can be upgraded."));
     };
   });
-  return databasePromise;
+  setDatabasePromise(kind, promise);
+  return promise;
+}
+
+function setDatabasePromise(kind: "public" | "private", value: Promise<IDBDatabase> | null): void {
+  if (kind === "public") publicDatabasePromise = value;
+  else privateDatabasePromise = value;
+}
+
+async function deleteDictionaryDatabase(kind: "public" | "private"): Promise<void> {
+  if (kind === "private") disablePrivateDictionaryLookups();
+  const promise = kind === "public" ? publicDatabasePromise : privateDatabasePromise;
+  if (promise) (await promise).close();
+  setDatabasePromise(kind, null);
+  const name = kind === "public" ? PUBLIC_DB_NAME : PRIVATE_DB_NAME;
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(name);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error ?? new Error("Could not remove the local dictionary."));
+    request.onblocked = () => reject(new Error("Close other Shirabe Reader pages and try again."));
+  });
+  if (kind === "public") {
+    publicGenerationCache = null;
+    audioRecipeCache = undefined;
+  }
+}
+
+export function disablePrivateDictionaryLookups(): void {
+  privateActivationEpoch += 1;
+  privateGenerationCache = null;
+  privateDatabaseAbsent = true;
+  activeStackCache = null;
+  lookupProbeCache.clear();
+  candidateCache.clear();
 }
 
 function tracedError(context: string, error: unknown): Error {
@@ -2324,19 +2549,51 @@ async function meta<T>(db: IDBDatabase, key: string): Promise<T | undefined> {
 }
 
 async function activeGeneration(db: IDBDatabase): Promise<string | undefined> {
-  if (activeGenerationCache !== null) return activeGenerationCache;
+  const cached = db.name === PUBLIC_DB_NAME ? publicGenerationCache : privateGenerationCache;
+  if (cached !== null) return cached;
   const [generation, manifest] = await Promise.all([
     meta<string>(db, "activeGeneration"), meta<PackManifest>(db, "manifest"),
   ]);
-  if (!generation || !manifest || manifest.contentRevision !== generation) return;
-  activeGenerationCache = undefined;
-  try {
-    validateManifest(manifest);
-    activeGenerationCache = generation;
-  } catch {
+  if (!generation || !manifest || manifest.contentRevision !== generation) {
+    setGenerationCache(db, undefined);
     return;
   }
-  return activeGenerationCache;
+  try {
+    validateManifest(manifest);
+  } catch {
+    setGenerationCache(db, undefined);
+    return;
+  }
+  setGenerationCache(db, generation);
+  return generation;
+}
+
+async function activePublicGeneration(db: IDBDatabase): Promise<string | undefined> {
+  const generation = await activeGeneration(db);
+  if (!generation) return;
+  const stored = await storedActiveStack();
+  if (stored) activeStackCache = stored;
+  else if (!activeStackCache) {
+    const manifest = await meta<PackManifest>(db, "manifest");
+    if (manifest) activeStackCache = publicStack(manifest);
+  }
+  return generation;
+}
+
+async function storedActiveStack(): Promise<ActiveStack | undefined> {
+  const db = await privateDatabaseIfPresent();
+  return db ? meta<ActiveStack>(db, "stack") : undefined;
+}
+
+async function activePrivateManifest(): Promise<PackManifest | undefined> {
+  const db = await privateDatabaseIfPresent();
+  if (!db || !await activeGeneration(db)) return;
+  return meta<PackManifest>(db, "manifest");
+}
+
+function setGenerationCache(db: IDBDatabase, generation: string | undefined | null): void {
+  if (db.name === PUBLIC_DB_NAME) publicGenerationCache = generation;
+  else privateGenerationCache = generation;
 }
 
 async function audioRecipe(db: IDBDatabase): Promise<PackManifest["audio"] | null> {
@@ -2420,7 +2677,7 @@ async function examplesFor(
 ): Promise<Definition["examples"]> {
   const ids = definition.exampleIds;
   if (!ids?.length) return definition.examples;
-  const stored = await Promise.all(ids.map((id) => getByPk<Stored<OfflineSentence>>(db, "sentences", `${generation}\0${id}`)));
+  const stored = await Promise.all(ids.map((id) => getSentenceByPk(db, generation, id)));
   return stored.filter((sentence): sentence is Stored<OfflineSentence> => !!sentence).map((sentence) => ({
     japanese: sentence.japanese,
     translation: withEnglishFallback(languages).map((language) => sentence.translations[language]).find(Boolean) ?? null,
@@ -2442,12 +2699,46 @@ async function getByPk<T>(db: IDBDatabase, store: string, key: string): Promise<
   return requestResult(db.transaction(store).objectStore(store).get(key));
 }
 
+async function getTermByPk(db: IDBDatabase, generation: string, entry: string): Promise<Stored<OfflineTerm> | undefined> {
+  const privateDb = await privateDatabaseIfPresent();
+  const privateGeneration = privateDb ? await activeGeneration(privateDb) : undefined;
+  const [published, personal] = await Promise.all([
+    getByPk<Stored<OfflineTerm>>(db, "terms", `${generation}\0${entry}`),
+    privateDb && privateGeneration
+      ? getByPk<Stored<OfflineTerm>>(privateDb, "terms", `${privateGeneration}\0${entry}`)
+      : undefined,
+  ]);
+  return [published, personal].filter((term): term is Stored<OfflineTerm> => !!term && dictionaryEnabled(term.dictionary))
+    .sort((a, b) => dictionaryRank(a.dictionary) - dictionaryRank(b.dictionary))[0];
+}
+
+async function getSentenceByPk(
+  db: IDBDatabase, generation: string, id: string,
+): Promise<Stored<OfflineSentence> | undefined> {
+  const privateDb = await privateDatabaseIfPresent();
+  const privateGeneration = privateDb ? await activeGeneration(privateDb) : undefined;
+  const [published, personal] = await Promise.all([
+    getByPk<Stored<OfflineSentence>>(db, "sentences", `${generation}\0${id}`),
+    privateDb && privateGeneration
+      ? getByPk<Stored<OfflineSentence>>(privateDb, "sentences", `${privateGeneration}\0${id}`)
+      : undefined,
+  ]);
+  return personal ?? published;
+}
+
 async function clearGeneration(db: IDBDatabase, generation: string): Promise<void> {
   for (const store of ["terms", "kanji", "sentences"]) await deleteByIndex(db, store, generation, false);
 }
 
+async function clearAllDictionaryRecords(db: IDBDatabase): Promise<void> {
+  const transaction = db.transaction(["meta", "terms", "kanji", "sentences"], "readwrite");
+  for (const store of ["meta", "terms", "kanji", "sentences"]) transaction.objectStore(store).clear();
+  await transactionDone(transaction);
+  setGenerationCache(db, undefined);
+}
+
 async function cleanupOtherGenerations(db: IDBDatabase, retained: Set<string>): Promise<void> {
-  for (const store of ["terms", "kanji"]) await deleteOutsideGenerations(db, store, retained);
+  for (const store of ["terms", "kanji", "sentences"]) await deleteOutsideGenerations(db, store, retained);
 }
 
 function deleteOutsideGenerations(db: IDBDatabase, storeName: string, retained: Set<string>): Promise<void> {
@@ -2513,7 +2804,7 @@ function validateManifest(manifest: PackManifest): void {
       !plainString(manifest.contentRevision) || !Number.isFinite(Date.parse(manifest.builtAt)) ||
       !/^[A-Za-z0-9._-]+\.ndjson\.gz$/.test(manifest.artifact) ||
       !Number.isSafeInteger(manifest.bytes) || manifest.bytes <= 0 || !validCounts(manifest.counts) ||
-      !Array.isArray(manifest.languages) || !["eng", "spa"].every((language) => manifest.languages.includes(language)) ||
+      !Array.isArray(manifest.languages) || !manifest.languages.length || manifest.languages.some((language) => !(language in GLOSS_TAGS)) ||
       !Array.isArray(manifest.dictionaries) || manifest.dictionaries.some((item) => !plainString(item.slug) || (item.version != null && !plainString(item.version))) ||
       !stringArray(manifest.modifications) || !Array.isArray(manifest.sources) ||
       manifest.sources.some((source) => !plainString(source.name) || !plainString(source.license) || !httpUrl(source.url) || (source.licenseUrl != null && !httpUrl(source.licenseUrl))) ||
@@ -2555,11 +2846,12 @@ function compareVersions(left: string, right: string): number {
 }
 
 function validateTerm(term: OfflineTerm): void {
-  const allowed = new Set(["type", "id", "dictionary", "headword", "expressions", "readings", "senses", "pitch", "frequencies", "jlpt", "examples"]);
+  const allowed = new Set(["type", "id", "dictionary", "headword", "expressions", "readings", "senses", "sourceHeadwords", "pitch", "frequencies", "jlpt", "examples"]);
   if (Object.keys(term).some((key) => !allowed.has(key)) || !plainString(term.id) || !plainString(term.dictionary) || !plainString(term.headword) ||
       !Array.isArray(term.expressions) || !term.expressions.length || term.expressions.some((item) => !exactKeys(item, ["text", "script", "common", "tags", "inflectionClass"]) || !plainString(item.text) || !plainString(item.script) || typeof item.common !== "boolean" || !stringArray(item.tags) || (item.inflectionClass !== undefined && (!plainString(item.inflectionClass) || !posConditionFlags([item.inflectionClass])))) ||
       !Array.isArray(term.readings) || term.readings.some((item) => !exactKeys(item, ["text", "kind", "appliesTo"]) || !plainString(item.text) || !plainString(item.kind) || (item.appliesTo != null && !stringArray(item.appliesTo))) ||
       !Array.isArray(term.senses) || !term.senses.length || term.senses.some((sense) => !validSense(sense)) ||
+      (term.sourceHeadwords != null && !sourceHeadwordArray(term.sourceHeadwords)) ||
       (term.pitch != null && (!Array.isArray(term.pitch) || term.pitch.some((item) => !exactKeys(item, ["text", "reading", "downstep"]) || !plainString(item.text) || !plainString(item.reading) || !Number.isInteger(item.downstep)))) ||
       (term.examples != null && !stringArray(term.examples)) ||
       (term.frequencies != null && (!Array.isArray(term.frequencies) || term.frequencies.some((item) => !exactKeys(item, ["source", "text", "reading", "rank"]) || !plainString(item.source) || !plainString(item.text) || (item.reading !== null && !plainString(item.reading)) || !Number.isFinite(item.rank)))) ||
@@ -2573,21 +2865,59 @@ function validateTerm(term: OfflineTerm): void {
 // `notes` and `xrefs` are optional (schema 5) and absent on most senses, so the
 // shape they take when present is what there is to check.
 function validSense(sense: OfflineSense): boolean {
-  const allowed = new Set(["glosses", "partsOfSpeech", "fields", "misc", "dialects", "restrictions", "notes", "xrefs"]);
+  const allowed = new Set(["glosses", "glossTitles", "usages", "label", "depth", "partsOfSpeech", "fields", "misc", "dialects", "restrictions", "notes", "xrefs", "sourceTags", "scopedTags"]);
   return !Object.keys(sense).some((key) => !allowed.has(key)) &&
-    glossMap(sense.glosses, new Set(["eng", "spa"])) &&
+    glossMap(sense.glosses, new Set(Object.keys(GLOSS_TAGS))) &&
+    (sense.glossTitles == null || glossTitleMap(sense.glossTitles, sense.glosses)) &&
+    (sense.usages == null || usageMap(sense.usages)) &&
+    (sense.label === undefined || plainString(sense.label)) &&
+    (sense.depth === undefined || (Number.isSafeInteger(sense.depth) && sense.depth >= 0 && sense.depth <= 2)) &&
     [sense.partsOfSpeech, sense.fields, sense.misc, sense.dialects, sense.restrictions].every(stringArray) &&
-    (sense.notes == null || glossMap(sense.notes, new Set(["eng", "spa"]))) &&
+    (sense.notes == null || glossMap(sense.notes, new Set(Object.keys(GLOSS_TAGS)))) &&
+    (sense.sourceTags == null || sourceTagArray(sense.sourceTags)) &&
+    (sense.scopedTags == null || scopedTagArray(sense.scopedTags)) &&
     (sense.xrefs == null || (Array.isArray(sense.xrefs) && sense.xrefs.every((xref) =>
-      exactKeys(xref, ["kind", "text", "reading"]) && plainString(xref.kind) && plainString(xref.text) &&
-      (xref.reading == null || plainString(xref.reading)))));
+      exactKeys(xref, ["kind", "text", "reading", "label"]) && plainString(xref.kind) && plainString(xref.text) &&
+      (xref.reading == null || plainString(xref.reading)) && (xref.label == null || plainString(xref.label)))));
+}
+
+function scopedTagArray(value: unknown): value is NonNullable<OfflineSense["scopedTags"]> {
+  return Array.isArray(value) && value.length <= 128 && value.every((tag) =>
+    !!tag && typeof tag === "object" && !Array.isArray(tag) && exactKeys(tag, ["category", "code", "scope"]) &&
+    plainString(tag.category) && plainString(tag.code) &&
+    (tag.scope === "entry" || tag.scope === "group" || tag.scope === "sense")
+  );
+}
+
+function sourceTagArray(value: unknown): value is SourceTag[] {
+  return Array.isArray(value) && value.length <= 128 && value.every((tag) =>
+    !!tag && typeof tag === "object" && !Array.isArray(tag) && exactKeys(tag, ["name", "category", "notes", "order", "score"]) &&
+    plainString(tag.name) && sourceCategory(tag.category) &&
+    (tag.notes === undefined || sourceNote(tag.notes)) &&
+    Number.isFinite(tag.order) && Number.isFinite(tag.score)
+  );
+}
+
+function sourceHeadwordArray(value: unknown): value is SourceHeadword[] {
+  return Array.isArray(value) && value.length <= 128 && value.every((headword) =>
+    !!headword && typeof headword === "object" && !Array.isArray(headword) && exactKeys(headword, ["text", "reading", "tags", "rules", "score"]) &&
+    plainString(headword.text) && plainString(headword.reading) && sourceTagArray(headword.tags) && stringArray(headword.rules) && Number.isFinite(headword.score)
+  );
+}
+
+function sourceCategory(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 20_000 && !value.includes("\0");
+}
+
+function sourceNote(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 20_000 && !value.includes("\0");
 }
 
 function validateKanji(kanji: OfflineKanji): void {
   const allowed = new Set(["type", "id", "char", "readings", "meanings", "strokes", "grade", "jlpt", "frequency"]);
   if (Object.keys(kanji).some((key) => !allowed.has(key)) || !plainString(kanji.id) || !plainString(kanji.char) || [...kanji.char].length !== 1 ||
       !glossMap(kanji.readings, new Set(["on", "kun", "nanori", "pinyin", "korean_r", "korean_h", "vietnam"])) ||
-      !glossMap(kanji.meanings, new Set(["eng", "spa"])) ||
+      !glossMap(kanji.meanings, new Set(Object.keys(GLOSS_TAGS))) ||
       [kanji.strokes, kanji.grade, kanji.jlpt, kanji.frequency].some((value) => value != null && (!Number.isInteger(value) || value < 0))) {
     throw new Error("Dictionary kanji record is invalid.");
   }
@@ -2598,7 +2928,7 @@ function validateSentence(sentence: OfflineSentence): void {
   if (!exactKeys(sentence, ["type", "id", "japanese", "translations", "tokens"]) ||
       !plainString(sentence.id) || !plainString(sentence.japanese) ||
       !sentence.translations || typeof sentence.translations !== "object" || Array.isArray(sentence.translations) ||
-      !Object.entries(sentence.translations).every(([language, text]) => ["eng", "spa"].includes(language) && plainString(text)) ||
+      !Object.entries(sentence.translations).every(([language, text]) => language in GLOSS_TAGS && plainString(text)) ||
       !validSentenceTokens(sentence)) {
     throw new Error("Dictionary sentence record is invalid.");
   }
@@ -2645,6 +2975,21 @@ function stringArray(value: unknown): value is string[] {
 
 function glossMap(value: unknown, keys: Set<string>): value is Record<string, string[]> {
   return !!value && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([key, items]) => keys.has(key) && stringArray(items));
+}
+
+function glossTitleMap(value: unknown, glosses: Record<string, string[]>): value is Record<string, Array<string | null>> {
+  return !!value && typeof value === "object" && !Array.isArray(value) &&
+    Object.keys(value).every((key) => key in GLOSS_TAGS && Object.prototype.hasOwnProperty.call(glosses, key)) &&
+    Object.keys(value).length === Object.keys(glosses).length &&
+    Object.entries(value).every(([key, items]) => Array.isArray(items) && items.length === glosses[key]!.length && items.length <= 5_000 &&
+      items.every((item) => item === null || plainString(item)));
+}
+
+function usageMap(value: unknown): value is Record<string, Array<{ text: string; title?: string }>> {
+  return !!value && typeof value === "object" && !Array.isArray(value) &&
+    Object.entries(value).every(([key, items]) => key in GLOSS_TAGS && Array.isArray(items) && items.length <= 5_000 &&
+      items.every((item) => !!item && typeof item === "object" && !Array.isArray(item) && exactKeys(item, ["text", "title"]) &&
+        plainString(item.text) && (item.title === undefined || plainString(item.title))));
 }
 
 function exactKeys(value: object, allowed: string[]): boolean {
@@ -2710,60 +3055,130 @@ function score(hit: LookupHit, source: string): number {
 // themselves, and everything downstream sees a plain Definition.
 type PendingDefinition = Definition & { exampleIds?: string[]; baseForm: string; studyHeadword: string; inflectionClass?: string };
 
+function scopedChips(sense: OfflineSense, scope: SenseScope): SenseChip[] {
+  const annotations = sense.scopedTags?.filter((tag) => tag.scope === scope) ?? [];
+  if (!annotations.length) return [];
+  const pos = posChips(annotations.filter((tag) => tag.category === "part_of_speech").map((tag) => tag.code))
+    .map((chip) => ({ ...chip, scope }));
+  const tags = tagChips({
+    fields: annotations.filter((tag) => tag.category === "field").map((tag) => tag.code),
+    misc: annotations.filter((tag) => tag.category === "misc").map((tag) => tag.code),
+    dialects: annotations.filter((tag) => tag.category === "dialect").map((tag) => tag.code),
+  }).map((chip) => ({ ...chip, scope }));
+  return [...pos, ...tags];
+}
+
+function senseChipsFor(sense: OfflineSense, scope: SenseScope): SenseChip[] {
+  if (sense.scopedTags?.length) return scopedChips(sense, scope);
+  if (scope !== "sense") return [];
+  return [...posChips(sense.partsOfSpeech), ...tagChips(sense)];
+}
+
+function uniqueSenseChips(chips: SenseChip[]): SenseChip[] {
+  return chips.filter((chip, index) => chips.findIndex((other) =>
+    other.category === chip.category && other.code === chip.code && other.scope === chip.scope) === index);
+}
+
 function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], apiBase: string): PendingDefinition {
   const term = hit.term;
   const blocks = languages.length ? languages : ["eng" as const];
   const applicable = term.senses.filter((sense) => !sense.restrictions.length || sense.restrictions.includes(hit.surface) || sense.restrictions.includes(term.headword));
+  const entryTags = uniqueSenseChips(applicable.flatMap((sense) => senseChipsFor(sense, "entry")));
   const senses: Sense[] = applicable.flatMap((sense) => {
     const glosses = glossRows(sense, blocks);
-    if (!glosses.length) return [];
+    const usages = usageRows(sense, blocks);
+    const notes = noteRows(sense, blocks);
+    const xrefs = crossReferences(sense.xrefs ?? []);
+    if (!glosses.length && !usages.length && !notes.length && !xrefs.length) return [];
     return [{
       // Sense's 0-based position in the entry (display-only offline: saving is
       // gated on a connected Pro account, so the picker never appears here).
       position: term.senses.indexOf(sense),
+      sourceEntry: term.id,
       ...(term.dictionary === "jmdict" ? {} : { dictionary: dictionaryName(term.dictionary) }),
+      ...(activeStackCache?.dictionaryReveal[term.dictionary] === "hover" ? { covered: true } : {}),
+      ...(sense.label ? { label: sense.label } : {}),
+      ...(sense.depth !== undefined ? { depth: sense.depth } : {}),
       // Pack stores raw JMdict codes (v5r, vi, uk…); resolve to the same
       // short labels the site chips show so offline popups match the web.
-      partsOfSpeech: posChips(sense.partsOfSpeech),
+      partsOfSpeech: senseChipsFor(sense, "sense").filter((chip) => chip.category === "pos"),
       posCodes: sense.partsOfSpeech,
-      tags: tagChips(sense),
+      tags: senseChipsFor(sense, "sense").filter((chip) => chip.category !== "pos"),
+      ...(uniqueSenseChips(senseChipsFor(sense, "group")).length ? { groupTags: uniqueSenseChips(senseChipsFor(sense, "group")) } : {}),
+      ...(sense.sourceTags?.length ? { sourceTags: sense.sourceTags } : {}),
       glosses,
+      ...(usages.length ? { usages } : {}),
       // In ONE language, unlike the glosses: a note is an aside about the word,
       // and printing the same aside twice in two languages under a meaning
       // already said twice buries the meaning. The reader's own language wins,
       // English answers when it has nothing.
-      ...(noteRows(sense, blocks).length ? { notes: noteRows(sense, blocks) } : {}),
-      ...(sense.xrefs?.length ? { xrefs: crossReferences(sense.xrefs) } : {}),
+      ...(notes.length ? { notes } : {}),
+      ...(xrefs.length ? { xrefs } : {}),
     }];
   });
-  return termCard(hit, term, senses, apiBase);
+  return termCard(hit, term, senses, apiBase, entryTags.length ? { [term.id]: entryTags } : {});
 }
 
-// One row per language the reader asked for, in their order, tagged with the
-// language the TEXT is in.
+function stackedTermDefinition(leader: LookupHit, hits: LookupHit[], languages: readonly GlossLanguage[], apiBase: string): PendingDefinition {
+  const byDictionary = new Map<string, LookupHit>([[leader.term.dictionary, leader]]);
+  for (const hit of hits.filter((candidate) => candidate.prefixLength === leader.prefixLength && candidate.surface === leader.surface).sort(byLadder)) {
+    if (!byDictionary.has(hit.term.dictionary)) byDictionary.set(hit.term.dictionary, hit);
+  }
+  const definitions = [...byDictionary.values()].map((hit) => termDefinition(hit, languages, apiBase)).filter((definition) => definition.senses.length);
+  const primary = definitions.find((definition) => definition.entry === leader.term.id) ?? definitions[0] ?? termDefinition(leader, languages, apiBase);
+  const sourceHeadwordsByEntry = Object.assign({}, ...definitions.map((definition) => definition.sourceHeadwordsByEntry ?? {}));
+  const entryTagsByEntry = Object.assign({}, ...definitions.map((definition) => definition.entryTagsByEntry ?? {}));
+  return {
+    ...primary,
+    senses: definitions.flatMap((definition) => definition.senses),
+    ...(Object.keys(entryTagsByEntry).length ? { entryTagsByEntry } : {}),
+    ...(Object.keys(sourceHeadwordsByEntry).length ? { sourceHeadwordsByEntry } : {}),
+  };
+}
+
+// One row per definition content in the selected source languages, in reader
+// order, tagged with the language the TEXT is in.
 //
 // The fallback is the same walk as the web's WordCard#fallback_db_langs_after
 // (the languages after this one in the stack, English last), and it now says
 // what it did. Filling a Spanish row from English used to print English under
-// the heading "Español · JMdict"; here the row is tagged EN, and a sense that
-// resolves to the same text twice draws it once. A reader with one language
-// sees exactly what they always saw.
+// the heading "Español · JMdict"; here the row is tagged EN. A fallback source
+// is selected once, while every content row in that source remains visible.
 function glossRows(sense: OfflineSense, blocks: readonly GlossLanguage[]): GlossRow[] {
   const rows: GlossRow[] = [];
+  const selectedSources = new Set<GlossLanguage>();
   for (const [index, language] of blocks.entries()) {
     const fallbacks = withEnglishFallback(blocks.slice(index + 1)).filter((code) => code !== language);
     const source = [ language, ...fallbacks ].find((code) => sense.glosses[code]?.length);
-    if (!source) continue;
-    const text = (sense.glosses[source] ?? []).join("; ");
-    if (rows.some((row) => row.text === text)) continue;
-    rows.push({ lang: source, tag: GLOSS_TAGS[source], text });
+    if (!source || selectedSources.has(source)) continue;
+    selectedSources.add(source);
+    for (const [index, text] of (sense.glosses[source] ?? []).entries()) {
+      const title = sense.glossTitles?.[source]?.[index] ?? undefined;
+      rows.push({ lang: source, tag: GLOSS_TAGS[source], text, ...(title ? { title } : {}) });
+    }
   }
   return rows;
 }
 
-// The sense's usage notes in the first language that has any, English last.
+function usageRows(sense: OfflineSense, blocks: readonly GlossLanguage[]): GlossRow[] {
+  const rows: GlossRow[] = [];
+  for (const language of blocks) {
+    for (const usage of sense.usages?.[language] ?? []) {
+      rows.push({ lang: language, tag: GLOSS_TAGS[language], text: usage.text, ...(usage.title ? { title: usage.title } : {}) });
+    }
+  }
+  if (rows.length) return rows;
+  return Object.entries(sense.usages ?? {}).flatMap(([language, usages]) => {
+    if (!(language in GLOSS_TAGS)) return [];
+    const code = language as GlossLanguage;
+    return usages.map((usage) => ({ lang: code, tag: GLOSS_TAGS[code], text: usage.text, ...(usage.title ? { title: usage.title } : {}) }));
+  });
+}
+
 function noteRows(sense: OfflineSense, blocks: readonly GlossLanguage[]): string[] {
-  const source = withEnglishFallback(blocks).find((code) => sense.notes?.[code]?.length);
+  const preferred = withEnglishFallback(blocks);
+  const extra = Object.keys(sense.notes ?? {}) as GlossLanguage[];
+  const source = [...preferred, ...extra].find((code) => sense.notes?.[code]?.length);
   return source ? sense.notes?.[source] ?? [] : [];
 }
 
@@ -2777,10 +3192,11 @@ function crossReferences(xrefs: NonNullable<OfflineSense["xrefs"]>): SenseXref[]
       kind: xref.kind as SenseXref["kind"],
       text: xref.text,
       ...(xref.reading ? { reading: xref.reading } : {}),
+      ...(xref.label ? { label: xref.label } : {}),
     }));
 }
 
-function termCard(hit: LookupHit, term: Stored<OfflineTerm>, senses: Sense[], apiBase: string): PendingDefinition {
+function termCard(hit: LookupHit, term: Stored<OfflineTerm>, senses: Sense[], apiBase: string, entryTagsByEntry: Record<string, SenseChip[]> = {}): PendingDefinition {
   const reading = readingFor(term, matchingExpression(hit)?.text);
   const headword = displayHeadword(hit, reading);
   // A pattern is a property of the READING: its clip is literally
@@ -2823,7 +3239,9 @@ function termCard(hit: LookupHit, term: Stored<OfflineTerm>, senses: Sense[], ap
     // `audioUrl` and `examples` are filled in by `forPopup`: the pack stores a
     // pattern rather than a link to its clip, and cites its sentences by id.
     pitch: displayedPitch.map((item) => ({ downstep: item.downstep, audioUrl: null })),
+    ...(Object.keys(entryTagsByEntry).length ? { entryTagsByEntry } : {}),
     senses,
+    ...(term.sourceHeadwords?.length ? { sourceHeadwordsByEntry: { [term.id]: term.sourceHeadwords } } : {}),
     examples: [],
     exampleIds: term.examples,
     sourceForm: hit.surface,
@@ -2873,7 +3291,7 @@ function kanjiDefinition(kanji: Stored<OfflineKanji>, languages: readonly GlossL
 }
 
 function dictionaryName(slug: string): string {
-  return ({ jmdict: "JMdict", jmnedict: "JMnedict" } as Record<string, string>)[slug] ?? slug;
+  return activeStackCache?.dictionaryNames[slug] ?? ({ jmdict: "JMdict", jmnedict: "JMnedict" } as Record<string, string>)[slug] ?? slug;
 }
 
 // Full-width alphanumerics are ordinary Japanese orthography and start real

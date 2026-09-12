@@ -1,6 +1,6 @@
 import type { Config } from "./config.js";
-import { glossLanguagesFrom, uiLanguagesFrom, type GlossLanguage } from "shirabe-sdk/word-card/languages.js";
-import type { WordState } from "./types.js";
+import { glossLanguagesFrom, uiLanguagesFrom, type GlossLanguage } from "@shirabe-org/card/word-card/languages";
+import type { ParsedToken, WordState } from "./types.js";
 import type { Deck, GradeResult, IntervalPreviews, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
 
 export class ApiError extends Error {
@@ -22,7 +22,7 @@ export class ApiError extends Error {
 // Dictionary lookup is public and local, so connecting must never ask for it.
 // OAuth exists only for the personal online layer: identify the account, read
 // its study state, and save/grade through the SRS.
-const OAUTH_SCOPES = ["READ_ACCOUNT", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"];
+const OAUTH_SCOPES = ["READ_ACCOUNT", "READ_DICTIONARY", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"];
 // Registered on the server (OauthClient), where the consent screen's name and
 // the redirect hosts we may use are decided. A public client: no secret, PKCE
 // binds our codes.
@@ -39,6 +39,19 @@ export type Tokens = { accessToken: string; accessTokenExpiresAt: string; refres
 
 type TokenResponse = { access_token: string; token_type: string; expires_in: number; refresh_token: string; scope: string };
 
+type ParseTokenResponse = {
+  position: number;
+  length: number;
+  surface: string;
+  lemma: string;
+  reading?: string;
+  pos?: string;
+  kind?: string;
+  entry?: { dictionary: string; sourceId: string };
+  state?: WordState;
+  frequency?: number | null;
+};
+
 // One word, as every word-level endpoint reports it (/api/v1 `WordStateEntry`): the
 // batch lookup, setting a state, and saving all answer in this shape, so the
 // reader reads a word the same way whatever changed it.
@@ -47,6 +60,7 @@ type WordStateEntry = {
   state: WordState;
   decks: Array<{ id: number; name: string }>;
   cardId?: number;
+  reviewCard?: { id: number; revision: string };
   cardCount?: number;
   savedSenses?: string[];
   savedWholeWord?: boolean;
@@ -57,6 +71,7 @@ const studyDetails = (word: WordStateEntry): StudyDetails => ({
   state: word.state,
   decks: word.decks,
   ...(word.cardId != null ? { cardId: word.cardId } : {}),
+  ...(word.reviewCard ? { reviewCard: word.reviewCard } : {}),
   ...(word.cardCount != null ? { cardCount: word.cardCount } : {}),
   ...(word.savedSenses ? { savedSenses: word.savedSenses } : {}),
   ...(word.savedWholeWord ? { savedWholeWord: word.savedWholeWord } : {}),
@@ -101,6 +116,7 @@ export class ShirabeApi {
   // user approves the scopes there and the browser redirects a one-time code
   // back to `redirectUri`.
   authorizeUrl(opts: { redirectUri: string; state: string; challenge: string }): string {
+    const base = this.config.apiBase.replace(/\/$/, "");
     const query = new URLSearchParams({
       response_type: "code",
       client_id: OAUTH_CLIENT_ID,
@@ -109,8 +125,9 @@ export class ShirabeApi {
       state: opts.state,
       code_challenge: opts.challenge,
       code_challenge_method: "S256",
+      resource: `${base}/api/v1`,
     });
-    return `${this.config.apiBase.replace(/\/$/, "")}/oauth/authorize?${query}`;
+    return `${base}/oauth/authorize?${query}`;
   }
 
   // Exchange the one-time code (+ PKCE verifier) for the first token pair. No
@@ -121,6 +138,7 @@ export class ShirabeApi {
       {
         grant_type: "authorization_code", client_id: OAUTH_CLIENT_ID,
         code: opts.code, code_verifier: opts.verifier, redirect_uri: opts.redirectUri,
+        resource: `${this.config.apiBase.replace(/\/$/, "")}/api/v1`,
       },
       { auth: false },
     );
@@ -146,7 +164,8 @@ export class ShirabeApi {
     try {
       response = await this.post<TokenResponse>(
         "/api/v1/oauth/token",
-        { grant_type: "refresh_token", client_id: OAUTH_CLIENT_ID, refresh_token: refreshToken },
+        { grant_type: "refresh_token", client_id: OAUTH_CLIENT_ID, refresh_token: refreshToken,
+          resource: `${this.config.apiBase.replace(/\/$/, "")}/api/v1` },
         { auth: false },
       );
     } catch (error) {
@@ -215,9 +234,7 @@ export class ShirabeApi {
     };
   }
 
-  // Grade a due card by lemma (+reading). POST /api/v1/srs/reviews rejects a word
-  // that isn't currently due, so this can't create early or duplicate reviews.
-  async grade(options: { lemma: string; reading?: string; rating: 1 | 2 | 3 | 4 }): Promise<GradeResult> {
+  async grade(options: { cardId: number; revision: string; rating: 1 | 2 | 3 | 4 }): Promise<GradeResult> {
     const response = await this.post<{ card: { id: number; state: WordState }; intervals: IntervalPreviews }>("/api/v1/srs/reviews", options);
     const cardId = response.card?.id;
     return {
@@ -240,6 +257,25 @@ export class ShirabeApi {
     };
   }
 
+  async parse(texts: string[]): Promise<ParsedToken[][]> {
+    const response = await this.post<{ tokens: ParseTokenResponse[][] }>("/api/v1/parse", {
+      texts,
+      include: ["frequency", "furigana", "pitch"],
+    });
+    return response.tokens.map((tokens) => tokens.map((token) => ({
+      start: token.position,
+      length: token.length,
+      surface: token.surface,
+      reading: token.reading ?? null,
+      lemma: token.lemma,
+      ...(token.entry ? { entry: `${token.entry.dictionary}:${token.entry.sourceId}` } : {}),
+      pos: token.pos ?? "",
+      content: token.kind !== "function" && token.kind !== "symbol" && !["prt", "aux"].includes(token.pos ?? ""),
+      state: token.state ?? "none",
+      ...(token.frequency != null ? { frequency: token.frequency } : {}),
+    })));
+  }
+
   // Set a word's state directly: "retired" parks it as learned, "reviewing" brings
   // it into rotation. A state is word-level: it lands on every card the word
   // holds: so the answer is the whole word, not one card.
@@ -252,24 +288,37 @@ export class ShirabeApi {
   // Needs READ_ACCOUNT (the device key has it). `entitled` mirrors the server's
   // srs_entitled? : the popup gates the whole reader on it.
   //
-  // `languages` is the account's ordered gloss languages, in UI codes like
-  // ["es","en"]. Server-side it's *derived* from the reader's dictionary stack
-  // (Prefs#sources): the distinct languages of it, in order. We read the
-  // derived list rather than the stack because this pack is a single
-  // dictionary: dictionary order is a distinction it can't represent.
-  // Carrying it keeps the extension's meaning order identical to the website's
-  // for the same reader; it is empty for an account that has never customized.
-  async me(): Promise<{ name: string; entitled: boolean; languages: GlossLanguage[] }> {
+  // The account response is the extension's control plane for the complete
+  // dictionary stack. The fingerprint changes for ordering, reveal settings,
+  // dictionary content, and access changes, so a connected reader can notice
+  // all of them without inspecting the packs individually.
+  async me(): Promise<{ name: string; entitled: boolean; languages: GlossLanguage[]; dictionaries: string[];
+    stackFingerprint: string;
+    dictionaryReveal: Record<string, "show" | "hover">; dictionaryNames: Record<string, string>;
+    availableDictionaries: Array<{ slug: string; name: string; languages: string[] }> }> {
     const data = await this.get<{
       user: { displayName?: string; name?: string };
       entitlement?: { srs?: boolean };
-      preferences?: { languages?: string[] };
+      preferences?: { languages?: string[]; dictionaries?: string[]; stackFingerprint?: string;
+        dictionaryReveal?: Record<string, "show" | "hover">; dictionaryNames?: Record<string, string>;
+        availableDictionaries?: Array<{ slug: string; name: string; languages: string[] }> };
     }>("/api/v1/me");
     return {
       name: data.user.displayName || data.user.name || "",
       entitled: data.entitlement?.srs === true,
       languages: glossLanguagesFrom(data.preferences?.languages ?? []),
+      dictionaries: data.preferences?.dictionaries ?? [],
+      stackFingerprint: data.preferences?.stackFingerprint ?? "",
+      dictionaryReveal: data.preferences?.dictionaryReveal ?? {},
+      dictionaryNames: data.preferences?.dictionaryNames ?? {},
+      availableDictionaries: data.preferences?.availableDictionaries ?? [],
     };
+  }
+
+  async authorization(): Promise<string> {
+    if (!this.config.refreshToken) throw new ApiError("Not connected. Open the extension and connect to Shirabe.", 401);
+    await this.ensureFreshToken();
+    return `Bearer ${this.config.accessToken}`;
   }
 
   // Sending `languages` (rather than the full `dictionaries` stack) asks the
@@ -282,6 +331,10 @@ export class ShirabeApi {
       { languages: uiLanguagesFrom(languages) },
     );
     return glossLanguagesFrom(data.preferences.languages);
+  }
+
+  async updateDictionaryStack(dictionaries: readonly string[], dictionaryReveal: Record<string, "show" | "hover">): Promise<void> {
+    await this.patch("/api/v1/preferences", { dictionaries, dictionaryReveal });
   }
 
   // ── HTTP plumbing ───────────────────────────────────────────────────────

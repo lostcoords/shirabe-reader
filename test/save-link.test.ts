@@ -2,6 +2,33 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Request } from "../src/common/messages.js";
 
+test("the API client preserves the lookup review target and submits its revision without fetching a newer one", async () => {
+  const original = globalThis.fetch;
+  const requests: Array<{ path: string; body: unknown }> = [];
+  const reviewCard = { id: 15, revision: "b".repeat(64) };
+  globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+    const path = new URL(String(input)).pathname;
+    requests.push({ path, body: JSON.parse(String(init?.body)) });
+    return Response.json(path.endsWith("/lookup")
+      ? { states: [{ lemma: "猫", state: "due", decks: [], cardId: 99, reviewCard }] }
+      : { card: { id: 15, state: "reviewing" }, intervals: { again: "1m", hard: "1d", good: "4d", easy: "8d" } });
+  }) as typeof fetch;
+  try {
+    const { ShirabeApi } = await import("../src/common/api.js");
+    const { DEFAULTS } = await import("../src/common/config.js");
+    const api = new ShirabeApi({ ...DEFAULTS, apiBase: "https://shirabe.test", accessToken: "shra_test", refreshToken: "shrr_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    const snapshot = await api.states(["猫"]);
+    assert.deepEqual(snapshot.details["猫"].reviewCard, reviewCard);
+    await api.grade({ cardId: reviewCard.id, revision: reviewCard.revision, rating: 3 });
+    assert.deepEqual(requests, [
+      { path: "/api/v1/srs/states/lookup", body: { words: ["猫"] } },
+      { path: "/api/v1/srs/reviews", body: { cardId: 15, revision: reviewCard.revision, rating: 3 } },
+    ]);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 // A saved word has to arrive at /api/v1 with the entry it came from. The pack cites
 // an entry as one handle ("jmdict:2517580"); the API links a card by the pair
 // (dictionarySlug, sourceId). Getting that translation wrong is silent: the

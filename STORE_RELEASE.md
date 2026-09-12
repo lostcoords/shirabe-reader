@@ -39,7 +39,6 @@ and revert on:
 - asbplayer over a local video and over a streaming page;
 - native Japanese Netflix captions, then Netflix with asbplayer layered on top;
 - native Japanese YouTube captions, then YouTube with asbplayer layered on top;
-- Ttsu Reader in horizontal and vertical modes;
 - Mokuro horizontal and vertical OCR text boxes.
 
 At 200% and 400% zoom, repeat popup keyboard navigation and mining preview.

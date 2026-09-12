@@ -175,7 +175,7 @@ test("a surface with real cue times overrides what watching the overlay guessed"
 
 test("logical scanner crosses inline links and ignores native ruby readings", async () => {
   const window = installDom("<p id='line'>食<ruby>漢<rt>しょく</rt></ruby><a>べる</a></p>");
-  const { logicalTextAt } = await import("shirabe-sdk/word-card/dom-text.js");
+  const { logicalTextAt } = await import("@shirabe-org/card/word-card/dom-text");
   const first = window.document.querySelector("p")?.firstChild as Text;
   const logical = logicalTextAt(first, 0);
   assert.equal(logical.context, "食漢べる");
@@ -187,14 +187,14 @@ test("logical scanner inserts a boundary between block-level siblings", async ()
   // a block <p>; a naive join glues them into 「日本語。猫」: a word (and sentence)
   // that never existed.
   const window = installDom(`<div id="wrap">日本語。<p id="b">猫</p></div>`);
-  const { logicalTextAt } = await import("shirabe-sdk/word-card/dom-text.js");
+  const { logicalTextAt } = await import("@shirabe-org/card/word-card/dom-text");
   const first = window.document.querySelector("#wrap")?.firstChild as Text;
   const logical = logicalTextAt(first, 0);
   assert.equal(logical.context, "日本語。\n猫", "block siblings are separated by a newline, not glued");
 
   // Inline descendants inside one block stay contiguous (the existing contract).
   const inline = installDom(`<p id="line">日本<a>語</a>を<em>読む</em></p>`);
-  const mod = await import("shirabe-sdk/word-card/dom-text.js");
+  const mod = await import("@shirabe-org/card/word-card/dom-text");
   const head = inline.document.querySelector("#line")?.firstChild as Text;
   assert.equal(mod.logicalTextAt(head, 0).context, "日本語を読む", "inline links/emphasis do not add boundaries");
 });
@@ -204,7 +204,7 @@ test("a caret in a later block is offset past the newlines inserted before it", 
   // index into the joined context, not into its own text node. Get it wrong and
   // the lookup window reads from the wrong character of the wrong block.
   const window = installDom(`<div id="wrap"><p id="first">日本語。</p>猫が鳴く</div>`);
-  const { logicalTextAt } = await import("shirabe-sdk/word-card/dom-text.js");
+  const { logicalTextAt } = await import("@shirabe-org/card/word-card/dom-text");
   const second = window.document.getElementById("wrap")?.lastChild as Text;
   const logical = logicalTextAt(second, 1);
 
@@ -222,7 +222,7 @@ test("scan highlight range snaps to the matched length across inline nodes", asy
   // 食べ<a>られた</a>: a 3-code-unit match from the caret must cover 食べ plus ら
   // (one char into the next inline node), so the highlight lands on the term.
   const window = installDom(`<p id="line">食べ<a>られた</a></p>`);
-  const { rangeFromCaret } = await import("shirabe-sdk/word-card/dom-text.js");
+  const { rangeFromCaret } = await import("@shirabe-org/card/word-card/dom-text");
   const head = window.document.querySelector("#line")?.firstChild as Text;
   const range = rangeFromCaret(head, 0, 3);
   assert.equal(range.toString(), "食べら", "range spans exactly 3 code units across the inline boundary");
@@ -607,7 +607,6 @@ test("the release host matrix resolves to maintained parsing paths", async () =>
   assert.equal(resolve("https://ja.wikipedia.org/wiki/日本語").rule?.parse, "#mw-content-text");
   assert.equal(resolve("https://www.youtube.com/watch?v=1").rule?.custom, "youtube");
   assert.equal(resolve("https://www.netflix.com/watch/1").rule?.custom, "netflix");
-  assert.equal(resolve("https://reader.ttsu.app/b?id=1").rule?.custom, "ttsu");
   assert.equal(resolve("https://reader.mokuro.app/reader/1").rule?.custom, "mokuro");
   assert.equal(resolve("https://jisho.org/search/日本語").rule?.filter, ".furigana, .japanese_word__furigana_wrapper");
   assert.equal(resolve("https://news.example.jp/story").mode, "auto");
@@ -626,7 +625,7 @@ test("Japanese Wikipedia fixture scopes logical text to article content", async 
   const rule = resolveHostMode("https://ja.wikipedia.org/wiki/日本語", { disabledHosts: [], rules: BUILTIN_RULES }).rule;
   const root = window.document.querySelector(rule?.parse ?? "body") as HTMLElement;
   const first = root.querySelector("p")?.firstChild as Text;
-  const { logicalTextAt } = await import("shirabe-sdk/word-card/dom-text.js");
+  const { logicalTextAt } = await import("@shirabe-org/card/word-card/dom-text");
   assert.equal(logicalTextAt(first, 0).context, "日本語を勉強する。");
   assert.ok(!root.textContent?.includes("辞書ではないナビ"));
 });
@@ -676,13 +675,11 @@ test("a reading the page already supplies is never parsed as text", async () => 
   assert.deepEqual(seen.filter(Boolean), ["昨日", "すき", "焼", "き", "食べました", "これは", "です"]);
 });
 
-test("Netflix, Ttsu, and Mokuro fixtures expose text and integration context", async () => {
+test("Netflix and Mokuro fixtures expose text and integration context", async () => {
   const window = installDom(`
     <video></video>
     <div class="player-timedtext-text-container">猫を見た</div>
     <div class="asbplayer-offscreen"><div>Netflixでアニメを見る</div></div>
-    <div class="book-content-container">横書き小説を読む</div>
-    <div class="book-content-container" style="writing-mode:vertical-rl">縦書き小説を読む</div>
     <div class="textBox"><span class="ocr-line">横書き漫画を読む</span></div>
     <div class="textBox" style="writing-mode:vertical-rl"><span class="ocr-line">縦書き漫画を読む</span></div>
   `);
@@ -693,9 +690,8 @@ test("Netflix, Ttsu, and Mokuro fixtures expose text and integration context", a
   const fakeParse = async (root: HTMLElement) => { seen.push(root.textContent ?? ""); return 1; };
   assert.equal(await parseDynamicTargets(window.document, "netflix", true, fakeParse), 1);
   assert.equal(await parseAsbplayerLines(window.document, true, fakeParse), 1);
-  assert.equal(await parseDynamicTargets(window.document, "ttsu", true, fakeParse), 2);
   assert.equal(await parseDynamicTargets(window.document, "mokuro", true, fakeParse), 2);
-  assert.deepEqual(seen, ["猫を見た", "Netflixでアニメを見る", "横書き小説を読む", "縦書き小説を読む", "横書き漫画を読む", "縦書き漫画を読む"]);
+  assert.deepEqual(seen, ["猫を見た", "Netflixでアニメを見る", "横書き漫画を読む", "縦書き漫画を読む"]);
   assert.equal((window.document.querySelector(".player-timedtext-text-container") as HTMLElement).dataset.mediaTimestamp, "12345");
   assert.equal((window.document.querySelector(".textBox") as HTMLElement).dataset.integration, "mokuro_ocr");
 });
@@ -760,6 +756,31 @@ test("YouTube parses the styled segment, not the parent visual line", async () =
   await parseYouTubeSegments(root, true, fakeParse);
   assert.deepEqual(seen, ["ytp-caption-segment"]);
   assert.ok(window.document.querySelector(".ytp-caption-segment"), "styled segment stays in the tree");
+});
+
+test("inline grading submits the displayed review identity and clears it when details no longer include it", async () => {
+  const window = installDom("<span class='sb-word' id='w' data-lemma='猫' data-reading='ねこ'>猫</span>");
+  const { applyStudyDetails, grade } = await import("../src/content/actions.js");
+  const { ext } = await import("../src/common/browser.js");
+  const word = window.document.getElementById("w") as unknown as HTMLElement;
+  const original = ext.runtime.sendMessage;
+  const requests: unknown[] = [];
+  ext.runtime.sendMessage = async (request: unknown) => {
+    requests.push(request);
+    return { ok: false, error: "Card changed" };
+  };
+  try {
+    const details = { state: "due" as const, decks: [], cardId: 99, reviewCard: { id: 15, revision: "a".repeat(64) } };
+    applyStudyDetails(word, details);
+    await grade(word, 3);
+    assert.deepEqual(requests, [{ type: "grade", lemma: "猫", cardId: 15, revision: "a".repeat(64), rating: 3 }]);
+    applyStudyDetails(word, { state: "due", decks: [] });
+    const result = await grade(word, 3);
+    assert.equal(result.ok, false);
+    assert.equal(requests.length, 1);
+  } finally {
+    ext.runtime.sendMessage = original;
+  }
 });
 
 test("Manage opens the card itself, or the browser when a word has one per meaning", async () => {

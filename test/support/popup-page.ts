@@ -15,7 +15,7 @@ import type { Request } from "../../src/common/messages.js";
 export type Page = {
   window: { document: Document };
   word: typeof import("../../src/content/word.js");
-  popup: typeof import("shirabe-sdk/word-card");
+  popup: typeof import("@shirabe-org/card/word-card");
 };
 
 /** What the background worker answers, keyed `lookup:<query>` / `entry:<handle>`.
@@ -58,7 +58,7 @@ async function buildPage(): Promise<Page> {
   // The card has no host until one is given, so the suite installs the real
   // extension one: it runs on the stubbed `sendMessage` above, which keeps these
   // tests exercising the same path the extension takes rather than a fake.
-  const popup = await import("shirabe-sdk/word-card");
+  const popup = await import("@shirabe-org/card/word-card");
   const { extensionHost } = await import("../../src/content/card-host.js");
   popup.setCardHost(extensionHost);
 

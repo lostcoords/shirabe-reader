@@ -26,6 +26,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
+const nobleHashesRoot = dirname(fileURLToPath(import.meta.resolve("@noble/hashes")));
 // The test suite imports this file for the host lists below, so the build only
 // runs when build.mjs is the entry point rather than on every import.
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
@@ -117,10 +118,7 @@ const buildOptions = {
   ),
   outdir,
   bundle: true,
-  // shirabe-sdk lives beside this project in the repository and is bundled from
-  // source: no install step and no version to bump while the extension is its
-  // only consumer (docs/plans/word-card-library.md).
-  alias: { "shirabe-sdk": join(root, "../shirabe-sdk/src") },
+  alias: { "@shirabe-org/card": join(root, "../packages/card/src") },
   format: "iife",
   target: ["firefox115", "chrome110"],
   sourcemap: watch ? "inline" : false,
@@ -217,7 +215,7 @@ async function copyStatic() {
   await copyFile(join(root, "src/action/popup.css"), join(outdir, "action/popup.css"));
   await copyFile(join(root, "src/options/options.html"), join(outdir, "options/options.html"));
   await copyFile(join(root, "src/options/options.css"), join(outdir, "options/options.css"));
-  await copyFile(join(root, "node_modules/@noble/hashes/LICENSE"), join(outdir, "licenses/noble-hashes-MIT.txt"));
+  await copyFile(join(nobleHashesRoot, "LICENSE"), join(outdir, "licenses/noble-hashes-MIT.txt"));
   // The extension is GPL-3.0 (Yomitan-derived deinflection); ship its terms and
   // attribution with the package rather than only in the repository. These files
   // ARE the compliance: GPL-3.0 §4 wants a copy of the licence conveyed with the

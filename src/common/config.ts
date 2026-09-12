@@ -1,6 +1,6 @@
 import { ext } from "./browser.js";
 import { DEFAULT_KEYBINDS, type Keybind, type KeybindAction } from "./keybind.js";
-import type { GlossLanguage } from "shirabe-sdk/word-card/languages.js";
+import type { GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import type { ColorPreset } from "./presets.js";
 import type { WordState } from "./types.js";
 
@@ -58,6 +58,11 @@ export type Config = {
   // Prefs#languages. Synced from GET /api/v1/me while connected; edited locally
   // otherwise. Renders one meaning block per language, in this order.
   languages: GlossLanguage[];
+  dictionaryStack: string[];
+  dictionaryStackFingerprint: string;
+  dictionaryReveal: Record<string, "show" | "hover">;
+  dictionaryNames: Record<string, string>;
+  availableDictionaries: Array<{ slug: string; name: string; languages: string[] }>;
   scanModifier: ScanModifier; // which key (if any) opens the hover popup
   keybinds: Record<KeybindAction, Keybind>; // rebindable shortcuts (parse + grade/save/known)
   enabledHosts: string[]; // sites granted persistent reader access
@@ -122,6 +127,11 @@ export const DEFAULTS: Config = {
   entitled: false,
   furiganaMode: "all",
   languages: ["eng"],
+  dictionaryStack: [],
+  dictionaryStackFingerprint: "",
+  dictionaryReveal: {},
+  dictionaryNames: {},
+  availableDictionaries: [],
   scanModifier: "shift",
   keybinds: DEFAULT_KEYBINDS,
   enabledHosts: [],

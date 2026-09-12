@@ -18,6 +18,7 @@ const manifestVersion = JSON.parse(readFileSync(new URL("../manifest.base.json",
 // one installed pack, so the 58 MB pack is scanned once rather than per corpus.
 const suites = [
   { name: "background-parity.test.ts", entry: "test/background-parity.test.ts", outfile: join(dir, "background-parity.cjs") },
+  { name: "background-private-startup.test.ts", entry: "test/background-private-startup.test.ts", outfile: join(dir, "background-private-startup.cjs") },
   { name: "all.test.ts", entry: "test/all.test.ts", outfile: join(dir, "tests.cjs") },
   { name: "segmentation.test.ts", entry: "test/segmentation.test.ts", outfile: join(dir, "segmentation.cjs") },
 ];

@@ -52,11 +52,12 @@ What works in the current build:
   signed in yet, that window signs you in first: Google finishes inside it, and a
   magic link is sent to your own browser with a Continue button waiting here. The
   key is scoped and revocable.
-- **Tokenize + wrap** visible Japanese into per-word spans locally,
-  including content the page loads later (a `MutationObserver` re-parses it).
-- **Per-user word-state colouring**: new / learning / due / known, fetched by a
-  separate coalesced `states` request (parsing is local and never waits on it)
-  and recoloured across the whole page after every review.
+- **Offline cursor lookup**: read Japanese under the pointer with the local
+  dictionary, including deinflection, candidate matching, and definitions,
+  without wrapping or uploading page text.
+- **Online page parsing**: connected readers can tokenize and wrap selected or
+  full page text with Shirabe's web parser, including study state in the returned
+  tokens and later state refreshes.
 - **Furigana** on kanji words (toggleable).
 - **Part-of-speech colouring**: the site's own groups and hues (nouns blue, verbs
   green, adjectives orange, …) on the word or on its underline. One cue system
@@ -69,8 +70,8 @@ What works in the current build:
   carries on the site. Grading is deliberately not here: reviewing wants the
   history and interval previews around it, so it stays where they are. The row is
   wired but not rendered: see `REVIEW_IN_READER` in `src/content/actions.ts`.
-- **Automatic local parsing** whenever the reader is on. The right-click menu
-  can reparse a page or parse a selection explicitly.
+- **Online parsing** whenever a connected reader is on. The right-click menu can
+  reparse a page or parse a selection explicitly; offline mode remains cursor-only.
 - **Page awareness**: coverage and known/learning/unknown/due counts, i+1
   paragraph highlighting, occurrence/unique coverage, a toolbar badge,
   and Pause/Reparse/Revert controls.
@@ -79,7 +80,7 @@ What works in the current build:
   for hover/save the same way as page text. No Anki required for lookups; clip
   mining still goes through asbplayer→Anki until a Shirabe media ingress lands.
 - **Target surfaces**: ordinary pages and Wikipedia, native YouTube captions,
-  native Netflix timed text, Ttsu Reader novel pages, and Mokuro OCR text boxes
+  native Netflix timed text, and Mokuro OCR text boxes
   each have an explicit dynamic parser and maintained DOM fixture. asbplayer can
   remain layered over Netflix or YouTube.
 
@@ -238,7 +239,8 @@ choose `dist/chrome`.
    scoped, revocable API key it exchanges for itself (OAuth 2.0 + PKCE).
 3. Open **Settings** (bottom bar) to pick a **definition language** and scan
    modifier (Shift by default).
-4. Open a Japanese page. Shirabe parses it locally while the reader toggle is on.
+4. Open a Japanese page. A connected reader parses it online while the reader
+   toggle is on; offline readers use the cursor scanner.
 
 Connecting is the only way in: there is no paste-a-key pane, because a key
 minted by hand carries the wrong scopes for the reader and cannot be revoked
@@ -262,7 +264,7 @@ src/
   background/
     background.ts owns the key + OAuth redirect login; rate-limits + caches
   content/
-    parser.ts     paragraph/fragments → local parse → token spans
+    parser.ts     paragraph/fragments → online parse → token spans
     word.ts       renders one token; lemma→spans index for live recolour
     popup.ts      shadow-DOM hover popup; lazy lookup + grade/mine controls
     actions.ts    save / grade / mark-known, shared by popup + keyboard

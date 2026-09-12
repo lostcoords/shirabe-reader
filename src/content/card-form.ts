@@ -1,7 +1,7 @@
 import { send } from "../common/messages.js";
 import type { SentenceCapture } from "../common/messages.js";
 import type { Definition } from "../common/types.js";
-import { senseText } from "shirabe-sdk/word-card/senses.js";
+import { senseText } from "@shirabe-org/card/word-card/senses";
 
 // The full capture form: the extension's front door to the same Card the web
 // app's save modal and new-card page build (docs/specs/srs.md §1.0, and

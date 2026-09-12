@@ -1,5 +1,5 @@
 import { ext } from "../common/browser.js";
-import { canWriteSrs, isConnected, loadConfig, onConfigChanged, saveConfig, type Config, type ScanModifier } from "../common/config.js";
+import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config, type ScanModifier } from "../common/config.js";
 import { loadHostRules, matchUrl, normalizePattern, resolveHostMode, type HostRule } from "../common/host-rules.js";
 import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
 
@@ -16,10 +16,10 @@ import { youTubeCueSource } from "./cues/youtube-cues.js";
 import { startAsbplayer } from "./parsers/asbplayer.js";
 import { startYouTubeCaptions } from "./parsers/youtube.js";
 import { startDynamicReader } from "./parsers/dynamic-reader.js";
-import { dismissPopup, picksForWord, scheduleShow, scheduleTextLookup, setCardHost, setPopupOptions, setWriteState, showNow } from "shirabe-sdk/word-card";
+import { dismissPopup, picksForWord, scheduleShow, scheduleTextLookup, setCardHost, setPopupOptions, setWriteState, showNow } from "@shirabe-org/card/word-card";
 import { extensionHost } from "./card-host.js";
-import { selectionText } from "shirabe-sdk/word-card/dom-text.js";
-import { scanPointer as sdkScan } from "shirabe-sdk/word-card/scan.js";
+import { selectionText } from "@shirabe-org/card/word-card/dom-text";
+import { scanPointer as sdkScan } from "@shirabe-org/card/word-card/scan";
 import { toast } from "./toast.js";
 import { ensureFurigana } from "./word.js";
 import { installClientReporter } from "../common/client-reporter.js";
@@ -128,7 +128,7 @@ function boot(): void {
     // asbplayer injects subtitle text into arbitrary video hosts (and iframes).
     // Always watch when connected: no-op until `.asbplayer-offscreen` appears.
     // Not exclusive: page scanning and custom adapters still run in the top frame.
-    if ((localDictionaryReady || isConnected(config)) && mode !== "off") startAsbplayer(showFurigana);
+    if (isConnected(config) && mode !== "off") startAsbplayer(showFurigana);
 
     // Subframes only run the asbplayer watcher (above). Host-rule page parsing
     // stays top-frame so nested ads/widgets don't get UI.
@@ -136,11 +136,11 @@ function boot(): void {
       return;
     }
 
-    // Reader-on pages parse on load. Parsing is local, so there is nothing to
-    // ask permission for: the hotkey and context menu re-parse rather than
-    // enable. A rule may name a dedicated custom parser (YouTube captions,
+    // Connected reader pages parse on load. Offline mode stays cursor-only;
+    // the hotkey and context menu re-parse online text. A rule may name a
+    // dedicated custom parser (YouTube captions,
     // Netflix, Mokuro, …) in place of the generic page parser.
-    if (mode === "auto" && (localDictionaryReady || isConnected(config)) && !parsed) {
+    if (mode === "auto" && isConnected(config) && !parsed) {
       if (rule?.custom) startCustomParser(rule.custom);
       else parsePage();
     }
@@ -368,9 +368,13 @@ function boot(): void {
     return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
   }
 
-  // ── Parsing: on-demand from the menu/popup/hotkey, plus dynamic content ───────
+  // ── Online parsing: on-demand from the menu/popup/hotkey, plus dynamic content
   // Parse the selection when there is one, otherwise the whole page.
   function initParse(): void {
+    if (!isConnected(current ?? DEFAULTS)) {
+      toast("Connect to Shirabe to parse page text.", false);
+      return;
+    }
     const selection = window.getSelection()?.toString();
     if (selection && selection.trim()) parseSelection();
     else parsePage();
@@ -390,6 +394,10 @@ function boot(): void {
   }
 
   function parseSelection(): void {
+    if (!isConnected(current ?? DEFAULTS)) {
+      toast("Connect to Shirabe to parse selected text.", false);
+      return;
+    }
     // The command is broadcast to every frame in the tab, and `getRangeAt(0)`
     // throws where there is no selection: which is all of them but one.
     const selection = window.getSelection();
@@ -406,7 +414,7 @@ function boot(): void {
     if (message.command === "parsePage") { if (isTopFrame) parsePage(); }
     else if (message.command === "parseSelection") parseSelection();
     else if (message.command === "lookupSelection") lookupSelection();
-    else if (message.command === "dictionaryChanged") void sendDictionaryStatus();
+    else if (message.command === "dictionaryChanged") { dismissPopup(); void sendDictionaryStatus(); }
   });
 
   // Yomitan's other lookup surface, and the escape hatch when our cut is wrong:

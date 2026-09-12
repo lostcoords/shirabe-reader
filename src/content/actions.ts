@@ -39,6 +39,13 @@ export function applyStudyDetails(word: HTMLElement, details: StudyDetails): voi
   word.dataset.deckNames = (details.decks ?? []).map((deck) => deck.name).join(", ");
   if (details.intervals) word.dataset.intervals = JSON.stringify(details.intervals);
   else delete word.dataset.intervals;
+  if (details.reviewCard) {
+    word.dataset.reviewCardId = String(details.reviewCard.id);
+    word.dataset.reviewRevision = details.reviewCard.revision;
+  } else {
+    delete word.dataset.reviewCardId;
+    delete word.dataset.reviewRevision;
+  }
   // Never clear an existing cardId: a later states payload without one would
   // hide the "Open in Shirabe" link after a successful save.
   if (details.cardId != null) word.dataset.cardId = String(details.cardId);
@@ -381,14 +388,17 @@ function nextPaint(): Promise<void> {
   });
 }
 
-// Grade a due card on Shirabe's 1–4 scale via POST /api/v1/srs/reviews, which rejects
-// a word that isn't currently due. Grading lives apart from saving now.
 export async function grade(word: HTMLElement, rating: Rating): Promise<Outcome> {
   const lemma = lemmaOf(word);
   if (word.dataset.state !== "due") return { ok: false, message: `${lemma} is not due for review` };
-  const res = await send({ type: "grade", lemma, reading: word.dataset.reading, rating });
+  const cardId = Number(word.dataset.reviewCardId);
+  const revision = word.dataset.reviewRevision;
+  if (!Number.isSafeInteger(cardId) || cardId <= 0 || !revision) return { ok: false, message: "Reload this card before grading it." };
+  const res = await send({ type: "grade", lemma, cardId, revision, rating });
   let cardUrl: string | undefined;
   if (res.ok) {
+    delete word.dataset.reviewCardId;
+    delete word.dataset.reviewRevision;
     applyStateEverywhere(lemma, res.result.state);
     // Grading returns no deck list (membership is unchanged), so update state +
     // interval previews + cardId directly rather than via applyStudyDetails.

@@ -26,5 +26,6 @@ import "./sense-card.test.js";
 import "./word-card.test.js";
 import "./shown-cut.test.js";
 import "./selection-lookup.test.js";
+import "./yomitan-source-headword-inflection.test.js";
 import "./lookup-ranking.test.js";
 import "./search-intent.test.js";
