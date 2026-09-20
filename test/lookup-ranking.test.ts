@@ -4,7 +4,12 @@ import test from "node:test";
 import { lookupOffline, parseOffline } from "../src/common/offline-dictionary.js";
 import { installTestPack, packPayload, realPackPath, subsetPack } from "./support/pack.js";
 
-test("lookup ranks whole inflections and distinguishes homophones by their own spellings", async () => {
+type AsyncTest = () => void | Promise<void>;
+
+const testWithPack = (name: string, callback: AsyncTest) =>
+  test(name, { skip: realPackPath() ? false : "requires a local dictionary pack" }, callback);
+
+testWithPack("lookup ranks whole inflections and distinguishes homophones by their own spellings", async () => {
   const path = realPackPath();
   assert.ok(path, "Build the dictionary pack before running lookup ranking tests");
   const lines = subsetPack(path, ["かかなかった", "くださいます", "とうた"]);
@@ -17,7 +22,7 @@ test("lookup ranks whole inflections and distinguishes homophones by their own s
   }
 });
 
-test("explicit kana lookup prefers its grammatical word over a city sharing the reading", async () => {
+testWithPack("explicit kana lookup prefers its grammatical word over a city sharing the reading", async () => {
   const path = realPackPath();
   assert.ok(path);
   const lines = subsetPack(path, ["なら", "ならば", "奈良"]);
@@ -27,7 +32,7 @@ test("explicit kana lookup prefers its grammatical word over a city sharing the 
   }
 });
 
-test("contextual homophones use word frequency without discarding legitimate alternatives", async () => {
+testWithPack("contextual homophones use word frequency without discarding legitimate alternatives", async () => {
   const path = realPackPath();
   assert.ok(path);
   const lines = subsetPack(path, ["きみ", "あめ", "そこにいます。", "かく", "それ", "家", "行った"]);
@@ -56,7 +61,7 @@ test("contextual homophones use word frequency without discarding legitimate alt
   assert.ok(verbs.indexOf("jmdict:1589060") >= 0 && verbs.indexOf("jmdict:1012980") > verbs.indexOf("jmdict:1589060"));
 });
 
-test("a complete word keeps its boundary before punctuation and non-Japanese text", async () => {
+testWithPack("a complete word keeps its boundary before punctuation and non-Japanese text", async () => {
   const path = realPackPath();
   assert.ok(path);
   const sentences = ["はし", "はし。", "はし！", "はし?", "はし\n", "はし abc", "はし\u3000猫", "はし\u00a0猫", "はし\u0085猫", "はし。猫"];
@@ -71,7 +76,7 @@ test("a complete word keeps its boundary before punctuation and non-Japanese tex
   }
 });
 
-test("an adverb reading fits before a verb without replacing standalone or attributive verbs", async () => {
+testWithPack("an adverb reading fits before a verb without replacing standalone or attributive verbs", async () => {
   const path = realPackPath();
   assert.ok(path);
   const sentences = ["かく語った。", "かく", "かく。", "かく人", "字をかく。", "かいて語った。"];
@@ -88,7 +93,7 @@ test("an adverb reading fits before a verb without replacing standalone or attri
   }
 });
 
-test("a particle before an adverb and verb is not swallowed into a noun", async () => {
+testWithPack("a particle before an adverb and verb is not swallowed into a noun", async () => {
   const path = realPackPath();
   assert.ok(path);
   const sentences = ["彼はかく語った。", "彼がかく語った。", "先生もかく語った。", "はかくの商品。"];
@@ -104,7 +109,7 @@ test("a particle before an adverb and verb is not swallowed into a noun", async 
   assert.equal(literal[0]?.entry, "jmdict:1471290");
 });
 
-test("contextual copulas follow nominal predicates without offering verbal auxiliaries", async () => {
+testWithPack("contextual copulas follow nominal predicates without offering verbal auxiliaries", async () => {
   const path = realPackPath();
   assert.ok(path);
   const sentences = ["静かだった", "猫だった", "いつだった"];
@@ -121,7 +126,7 @@ test("contextual copulas follow nominal predicates without offering verbal auxil
   assert.ok(isolated?.candidates?.some((candidate) => candidate.entry === "jmdict:2867372"));
 });
 
-test("contextual particles keep grammatical alternatives rather than noun homophones", async () => {
+testWithPack("contextual particles keep grammatical alternatives rather than noun homophones", async () => {
   const path = realPackPath();
   assert.ok(path);
   const sentences = ["昨日は静かだった。", "先生が来た。", "いつだったか考えた。"];
@@ -139,7 +144,7 @@ test("contextual particles keep grammatical alternatives rather than noun homoph
   }
 });
 
-test("a suru noun constrains its complement without erasing isolated verb ambiguity", async () => {
+testWithPack("a suru noun constrains its complement without erasing isolated verb ambiguity", async () => {
   const path = realPackPath();
   assert.ok(path);
   const lines = subsetPack(path, ["明日勉強します。", "します"]);
