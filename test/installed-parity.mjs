@@ -98,7 +98,7 @@ const server = createServer(async (request, response) => {
         { slug: "jmdict", name: "Shirabe", languages: ["en", "es"] },
       ],
     } }));
-  } else if (request.url === "/api/v1/dictionary-packs/stack") {
+  } else if (request.url === "/api/v1/dictionary-packs") {
     assert.equal(request.headers.authorization, "Bearer installed-token");
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({

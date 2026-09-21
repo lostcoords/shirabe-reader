@@ -40,16 +40,14 @@ export type Tokens = { accessToken: string; accessTokenExpiresAt: string; refres
 type TokenResponse = { access_token: string; token_type: string; expires_in: number; refresh_token: string; scope: string };
 
 type ParseTokenResponse = {
-  position: number;
-  length: number;
+  startOffset: number;
+  endOffset: number;
   surface: string;
   lemma: string;
   reading?: string;
-  pos?: string;
+  partOfSpeech?: string;
   kind?: string;
-  entry?: { dictionary: string; sourceId: string };
-  state?: WordState;
-  frequency?: number | null;
+  study?: { state: WordState };
 };
 
 // One word, as every word-level endpoint reports it (/api/v1 `WordStateEntry`): the
@@ -258,21 +256,19 @@ export class ShirabeApi {
   }
 
   async parse(texts: string[]): Promise<ParsedToken[][]> {
-    const response = await this.post<{ tokens: ParseTokenResponse[][] }>("/api/v1/parse", {
+    const response = await this.post<{ parses: Array<{ tokens: ParseTokenResponse[] }> }>("/api/v1/parse", {
       texts,
-      include: ["frequency", "furigana", "pitch"],
+      include: ["furigana", "study"],
     });
-    return response.tokens.map((tokens) => tokens.map((token) => ({
-      start: token.position,
-      length: token.length,
+    return response.parses.map(({ tokens }) => tokens.map((token) => ({
+      start: token.startOffset,
+      length: token.endOffset - token.startOffset,
       surface: token.surface,
       reading: token.reading ?? null,
       lemma: token.lemma,
-      ...(token.entry ? { entry: `${token.entry.dictionary}:${token.entry.sourceId}` } : {}),
-      pos: token.pos ?? "",
-      content: token.kind !== "function" && token.kind !== "symbol" && !["prt", "aux"].includes(token.pos ?? ""),
-      state: token.state ?? "none",
-      ...(token.frequency != null ? { frequency: token.frequency } : {}),
+      pos: token.partOfSpeech ?? "",
+      content: token.kind !== "symbol",
+      state: token.study?.state ?? "none",
     })));
   }
 

@@ -59,7 +59,7 @@ test("an anonymous background start purges an orphaned private dictionary before
   };
   globalThis.fetch = (async (input: unknown) => {
     const url = String(input);
-    if (url.endsWith("/api/v1/dictionary-packs/stack")) {
+    if (url.endsWith("/api/v1/dictionary-packs")) {
       return new Response(JSON.stringify(stack), { headers: { "Content-Type": "application/json" } });
     }
     if (url.endsWith("/public.gz")) return new Response(new Uint8Array(publicPayload));

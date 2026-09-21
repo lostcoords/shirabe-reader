@@ -2150,7 +2150,7 @@ async function termsForProbe(db: IDBDatabase, generation: string, probe: string)
 async function performInstall(apiBase: string, signal: AbortSignal, authorization: string | undefined, activationEpoch: number): Promise<PackManifest> {
   const base = apiBase.replace(/\/$/, "");
   reportInstallProgress(0, "Fetching the dictionary manifest");
-  const manifestResponse = await fetch(`${base}/api/v1/dictionary-packs/${authorization ? "stack" : "current"}`, {
+  const manifestResponse = await fetch(`${base}/api/v1/dictionary-packs${authorization ? "" : "/current"}`, {
     cache: "no-store", signal, ...(authorization ? { headers: { Authorization: authorization } } : {}),
   });
   if (!manifestResponse.ok) throw new Error(await responseFailure("Dictionary manifest", manifestResponse));

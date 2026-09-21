@@ -38,7 +38,7 @@
     "yaml": "^2.9.0"
   },
   "dependencies": {
-    "@shirabe-org/card": "0.1.0",
+    "@shirabe-org/card": "0.1.1",
     "@noble/hashes": "^2.0.1",
     "kanji-processor": "^1.0.2"
   }

@@ -80,7 +80,7 @@ test("background messages preserve online parse offsets and picked entry identit
       disconnected = true;
       return new Response(null, { status: 204 });
     }
-    if (url.endsWith("/api/v1/dictionary-packs/stack")) {
+    if (url.endsWith("/api/v1/dictionary-packs")) {
       return new Response(JSON.stringify(stack), { headers: { "Content-Type": "application/json" } });
     }
     if (url.endsWith("/api/v1/dictionary-packs/current")) {

@@ -16,13 +16,6 @@ export type ParsedToken = {
   surface: string;
   reading: string | null; // hiragana reading, or null when no furigana needed
   lemma: string; // dictionary form: what we look up / save
-  /** The dictionary entry this token resolved to, as the pack's stable
-      `slug:sourceId` handle ("jmdict:1009470"): the same handle
-      `Definition.entry` carries on a lookup, and the same `(dictionary,
-      sourceId)` pair `/api/v1/parse` answers with. A lemma is what a form REDUCES
-      to and the two tokenizers disagree about it by design, so this is what a
-      save should travel under and what cross-engine parity is asserted on.
-      Absent where the token resolved to no entry (a numeral, an unknown run). */
   entry?: string;
   /** Every word this span could be, best first, `candidates[0]` being the one
       `entry` names. The offline half of `POST /api/v1/words/identify`, and the

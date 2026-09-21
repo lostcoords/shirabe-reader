@@ -336,7 +336,7 @@ test("an authenticated stack installs personal overlays and applies source chang
     sha256: createHash("sha256").update(personalArchive).digest("hex"),
     counts: { terms: 2, kanji: 0, sentences: 0 }, languages: ["jpn"],
     dictionaries: [{ slug: "yomitan-test", version: "1" }], sources: [],
-    downloadUrl: "https://api.test/api/v1/dictionary-packs/stack/yomitan-test/personal-v1/download",
+    downloadUrl: "https://api.test/api/v1/dictionary-packs/yomitan-test/personal-v1",
   } as unknown as PackManifest;
   let stack: DictionaryStackManifest = {
     stackFingerprint: "a".repeat(16), dictionaries: ["yomitan-test:ja", "jmdict:en"],
