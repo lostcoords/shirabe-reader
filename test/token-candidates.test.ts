@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { lookupEntryOffline, lookupOffline, parseOffline } from "../src/common/offline-dictionary.js";
+import { lookupEntryOffline, lookupOffline, parseOffline, resolveParsedSpan } from "../src/common/offline-dictionary.js";
 import { installTestPack, packPayload } from "./support/pack.js";
 import contextEvidence from "../../db/reference/context_hints.json";
 
@@ -19,29 +19,142 @@ import contextEvidence from "../../db/reference/context_hints.json";
 
 const HOST = "https://shirabe.test";
 
-test("an ambiguous written word uses its applicable dictionary reading while explicit kana preserves the chosen reading", async () => {
+test("a passive suru span offers its intermediate form before its frequent base", async () => {
+  const suru = JSON.parse(term("jmdict:do", "する", null, "する", "do", true, "vs-i"));
+  suru.frequencies = [{ source: "test", text: "する", reading: "する", rank: 10 }];
+  const sareru = JSON.parse(term("jmdict:passive", "される", null, "される", "be done", true, "v1"));
+  sareru.frequencies = [{ source: "test", text: "される", reading: "される", rank: 23_483 }];
+  await install([suru, sareru].map((entry) => JSON.stringify(entry)));
+  const answer = await resolveParsedSpan("されている", {
+    start: 0, length: 5, surface: "されている", lemma: "する", reading: "サレテイル",
+    inflection: ["progressive", "te-form", "passive"], pos: "verb", kind: "inflected", content: true, state: "none",
+  });
+  assert.deepEqual(answer.groups.slice(0, 2), [["jmdict:passive"], ["jmdict:do"]]);
+});
+
+test("a listed past copula stays ahead of its base in an offline card", async () => {
+  await install([
+    term("jmdict:past", "だった", null, "だった", "was", true, "exp"),
+    term("jmdict:copula", "だ", null, "だ", "be", true, "cop"),
+  ]);
+  const token = (await parseOffline("だった", ["eng"], HOST))[0]!;
+  assert.equal(token.lemma, "だ");
+  const answer = await resolveParsedSpan("だった", token);
+  assert.deepEqual(answer.groups.slice(0, 2), [["jmdict:past"], ["jmdict:copula"]]);
+});
+
+test("a parsed noun drops a verb inflection in context but keeps it in isolation", async () => {
+  await install([
+    term("jmdict:rain", "雨", "雨", "あめ", "rain", true, "n"),
+    term("jmdict:weave", "編む", "編む", "あむ", "weave", true, "v5m"),
+  ]);
+  const token = {
+    start: 0, length: 2, surface: "あめ", lemma: "あめ", reading: "アメ",
+    pos: "noun", kind: "word", content: true, state: "none" as const,
+  };
+  assert.deepEqual((await resolveParsedSpan("あめを食べた。", token)).groups, [["jmdict:rain"]]);
+  assert.deepEqual((await resolveParsedSpan("あめ", token)).groups.map((group) => group[0]),
+    ["jmdict:rain", "jmdict:weave"]);
+});
+
+test("a conjunction offers its inflected verb and an adverb offers its base", async () => {
+  await install([
+    term("jmdict:then", "そうしたら", null, "そうしたら", "then", true, "conj"),
+    term("jmdict:do-so", "そうする", null, "そうする", "do so", true, "vs-i"),
+    term("jmdict:so-much", "そんなに", null, "そんなに", "so much", true, "adv"),
+    term("jmdict:like-that", "そんな", null, "そんな", "like that", true, "adj-pn"),
+  ]);
+  const conjunction = await resolveParsedSpan("そうしたら問題があった。", {
+    start: 0, length: 5, surface: "そうしたら", lemma: "そうしたら", reading: "ソウシタラ",
+    pos: "conj", kind: "expression", content: true, state: "none",
+  });
+  assert.deepEqual(conjunction.groups.map((group) => group[0]), ["jmdict:then", "jmdict:do-so"]);
+  const adverb = await resolveParsedSpan("そんなに難しくない。", {
+    start: 0, length: 4, surface: "そんなに", lemma: "そんな", reading: "ソンナニ",
+    pos: "adj", kind: "word", content: true, state: "none",
+  });
+  assert.deepEqual(adverb.groups.map((group) => group[0]), ["jmdict:so-much", "jmdict:like-that"]);
+});
+
+test("a suru noun constrains a clicked span even without a preceding token", async () => {
+  const study = JSON.parse(term("jmdict:study", "勉強", "勉強", "べんきょう", "study", true, "n"));
+  study.senses[0].partsOfSpeech.push("vs");
+  const rub = JSON.parse(term("jmdict:rub", "擦る", "擦る", "する", "rub", true, "v5r"));
+  rub.expressions.push({ text: "する", script: "kana", common: false, tags: [] });
+  await install([
+    JSON.stringify(study),
+    term("jmdict:do", "する", null, "する", "do", true, "vs-i"),
+    JSON.stringify(rub),
+  ]);
+  const token = {
+    start: 2, length: 2, surface: "する", lemma: "する", reading: "スル",
+    pos: "verb", kind: "word", content: true, state: "none" as const,
+  };
+  assert.deepEqual((await resolveParsedSpan("勉強する。", token)).groups, [["jmdict:do"]]);
+  assert.deepEqual((await resolveParsedSpan("する", { ...token, start: 0 })).groups.map((group) => group[0]),
+    ["jmdict:do", "jmdict:rub"]);
+});
+
+test("a sentence-final で offers the copula as an alternative", async () => {
+  await install([
+    term("jmdict:particle", "で", null, "で", "at", true, "prt"),
+    term("jmdict:copula", "だ", null, "だ", "be", true, "cop"),
+  ]);
+  const span = (text: string) => resolveParsedSpan(text, {
+    start: 0, length: 1, surface: "で", lemma: "で", reading: "デ",
+    pos: "prt", kind: "function", content: true, state: "none",
+  });
+  assert.deepEqual((await span("で")).groups, [["jmdict:particle"], ["jmdict:copula"]]);
+  assert.deepEqual((await span("で見る")).groups, [["jmdict:particle"]]);
+});
+
+test("a rare kana headword keeps the frequency of its own written form", async () => {
+  const rows = [
+    ["common", "いい", null, 33], ["easy", "易々", "易々", 42_000],
+    ["saying", "いい", "謂", 93_847], ["obedient", "唯々", "唯々", 116_369],
+  ] as const;
+  await install(rows.map(([id, headword, kanji, rank]) => {
+    const entry = JSON.parse(term(`jmdict:${id}`, headword, kanji, "いい", id, id === "common", "adv"));
+    if (kanji && headword === "いい") entry.expressions.push({ text: "いい", script: "kana", common: false, tags: [] });
+    if (headword !== "いい") entry.expressions.push({ text: "いい", script: "kana", common: false, tags: [] });
+    entry.frequencies = [{ source: "test", text: kanji ?? headword, reading: "いい", rank }];
+    return JSON.stringify(entry);
+  }));
+  const answer = await resolveParsedSpan("いい", {
+    start: 0, length: 2, surface: "いい", lemma: "いい", reading: "イイ",
+    pos: "adj", kind: "word", content: true, state: "none",
+  });
+  assert.deepEqual(answer.groups.map((group) => group[0]),
+    ["jmdict:common", "jmdict:easy", "jmdict:saying", "jmdict:obedient"]);
+});
+
+test("a kana occurrence keeps its reading while the popup uses the dictionary heading", async () => {
   const tomorrow = JSON.parse(term("jmdict:tomorrow", "明日", "明日", "あした", "tomorrow", true, "n"));
   tomorrow.readings.push({ text: "あす", kind: "kana" }, { text: "みょうにち", kind: "kana" });
   tomorrow.expressions.push(...tomorrow.readings.map(({ text }: { text: string }) => ({ text, script: "kana", common: true, tags: [] })));
   await install([JSON.stringify(tomorrow)]);
   assert.equal((await parseOffline("明日。", ["eng"], HOST))[0].reading, "あした");
   for (const reading of ["あした", "あす", "みょうにち"]) {
+    assert.equal((await parseOffline(`${reading}。`, ["eng"], HOST))[0].reading, reading);
     for (const popup of [await lookupOffline(reading, ["eng"], HOST),
       await lookupEntryOffline("jmdict:tomorrow", reading, ["eng"], HOST)]) {
       assert.equal(popup?.entry, "jmdict:tomorrow");
-      assert.equal(popup?.reading, reading);
+      assert.equal(popup?.headword, "明日");
+      assert.equal(popup?.reading, "あした");
+      assert.equal(popup?.sourceForm, reading);
     }
   }
 });
 
-test("a kana popup displays the matched spelling but studies the selected entry's canonical headword", async () => {
+test("a kana popup keeps the occurrence separately from the dictionary heading", async () => {
   const word = JSON.parse(term("jmdict:bridge", "橋", "橋", "はし", "bridge", true, "n"));
   word.expressions.push({ text: "はし", script: "kana", common: true, tags: [] });
   await install([JSON.stringify(word)]);
   const popup = await lookupEntryOffline("jmdict:bridge", "はし", ["eng"], HOST);
-  assert.equal(popup?.headword, "はし");
+  assert.equal(popup?.headword, "橋");
   assert.equal(popup?.baseForm, "橋");
   assert.equal(popup?.reading, "はし");
+  assert.equal(popup?.sourceForm, "はし");
   assert.equal(popup?.entry, "jmdict:bridge");
 });
 
@@ -498,6 +611,9 @@ test("de connects a na-adjective through the copula without changing a noun's ca
     const token = (await parseOffline(text, ["eng"], HOST)).find((candidate) => candidate.surface === "で");
     assert.equal(token?.entry, "jmdict:copula", text);
     assert.equal(token?.lemma, "だ", text);
+    if (text === "静かで美しい。") {
+      assert.deepEqual((await resolveParsedSpan(text, token!)).groups, [["jmdict:copula"]], text);
+    }
   }
   for (const text of ["学校で学ぶ。", "で"]) {
     const token = (await parseOffline(text, ["eng"], HOST)).find((candidate) => candidate.surface === "で");
@@ -518,6 +634,9 @@ test("an unfinished noun plus de retains both case particle and copula readings"
     const entries = token?.candidates?.map((candidate) => candidate.entry) ?? [token?.entry];
     assert.ok(entries.includes("jmdict:particle"), text);
     assert.ok(entries.includes("jmdict:copula"), text);
+    const groups = (await resolveParsedSpan(text, token!)).groups.flat();
+    assert.ok(groups.includes("jmdict:particle"), text);
+    assert.ok(groups.includes("jmdict:copula"), text);
   }
 });
 
@@ -820,20 +939,20 @@ test("ASCII and full-width digits enter the same Japanese word lookup", async ()
     assert.ok(tokens.every((token) => !token.entry));
   }
   const card = await lookupEntryOffline("jmdict:three", "3つ", ["eng"], HOST);
-  assert.equal(card?.headword, "３つ");
+  assert.equal(card?.headword, "三つ");
   assert.equal(card?.baseForm, "三つ");
 });
 
-test("kana and digit numeral spellings share a base without changing their popup spelling", async () => {
+test("kana and digit numeral spellings share a dictionary heading", async () => {
   const one = JSON.parse(term("jmdict:one", "一つ", "一つ", "ひとつ", "one", true, "num"));
   one.expressions.push({ text: "ひとつ", script: "kana", common: true, tags: [] });
   one.expressions.push({ text: "１つ", script: "kanji", common: false, tags: [] });
   await install([JSON.stringify(one)]);
-  for (const [surface, title] of [["ひとつ", "ひとつ"], ["一つ", "一つ"], ["1つ", "１つ"], ["１つ", "１つ"]]) {
+  for (const surface of ["ひとつ", "一つ", "1つ", "１つ"]) {
     const [token] = await parseOffline(surface!, ["eng"], HOST);
     assert.equal(token?.entry, "jmdict:one", surface);
     assert.equal(token?.lemma, "一つ", surface);
-    assert.equal((await lookupOffline(surface!, ["eng"], HOST))?.headword, title, surface);
+    assert.equal((await lookupOffline(surface!, ["eng"], HOST))?.headword, "一つ", surface);
     assert.equal((await lookupOffline(surface!, ["eng"], HOST))?.baseForm, "一つ", surface);
     assert.equal((await lookupEntryOffline("jmdict:one", surface!, ["eng"], HOST))?.baseForm, "一つ", surface);
   }

@@ -6,7 +6,7 @@ import type { Rating, WordCardHost } from "@shirabe-org/card/word-card";
 import type { LookupResult } from "@shirabe-org/card/word-card/host";
 import { applyStudyDetails, captureFor, grade, markKnown, REVIEW_IN_READER, save, setScanOrigin, studyUrlForWord } from "./actions.js";
 import { renderCardForm } from "./card-form.js";
-import { candidatesFor } from "./word.js";
+import { candidatesFor, groupsFor, isParsedWord } from "./word.js";
 import { refreshMetrics } from "./metrics-reporter.js";
 import { toast } from "./toast.js";
 import { reportEvent } from "../common/client-reporter.js";
@@ -15,6 +15,7 @@ import { reportEvent } from "../common/client-reporter.js";
 // arrives as a string is a property nobody can average.
 const stringify = (detail?: Record<string, string | number | boolean>): Record<string, string> =>
   Object.fromEntries(Object.entries(detail ?? {}).map(([key, value]) => [key, String(value)]));
+const initialEntries = new WeakMap<HTMLElement, string>();
 
 async function unavailable(query: string, message: string, entry?: string): Promise<LookupResult> {
   const config = await loadConfig();
@@ -29,7 +30,13 @@ async function unavailable(query: string, message: string, entry?: string): Prom
 // web host implements the same type with `fetch` and none of this.
 
 export const extensionHost: WordCardHost = {
-  async lookup(query, kind) {
+  async lookup(query, kind, context) {
+    if (kind !== "kanji" && context?.text && context.startOffset !== undefined && context.endOffset !== undefined) {
+      const res = await send({ type: "lookupSpan", text: context.text, startOffset: context.startOffset,
+        endOffset: context.endOffset, reading: context.reading, pos: context.pos });
+      return res.ok ? { status: "found", definition: res.definition, alternatives: res.alternatives }
+        : { status: "failed", message: res.error };
+    }
     // A raw-text scan IS this engine's word lookup: it is handed the text from
     // the cursor and takes the longest match from it, which is the cutting a
     // host over the API has to ask the server to do first.
@@ -44,7 +51,31 @@ export const extensionHost: WordCardHost = {
     return { status: "found", definition: res.definition };
   },
 
-  async lookupEntry(entry, surface) {
+  async lookupEntry(entry, surface, word) {
+    const groups = word ? groupsFor(word) : [];
+    if (groups.length) {
+      const res = await send({ type: "lookupParsed", entry, surface, groups });
+      return res.ok ? { status: "found", definition: res.definition, alternatives: res.alternatives }
+        : { status: "failed", message: res.error };
+    }
+    if (word && isParsedWord(word) && word.dataset.sentence) {
+      const startOffset = Number(word.dataset.targetStart);
+      const endOffset = Number(word.dataset.targetEnd);
+      if (Number.isInteger(startOffset) && Number.isInteger(endOffset)) {
+        const initialEntry = initialEntries.get(word) ?? entry;
+        const res = await send({ type: "lookupSpan", text: word.dataset.sentence, startOffset, endOffset,
+          lemma: word.dataset.lemma, kind: word.dataset.kind, reading: word.dataset.reading, pos: word.dataset.pos,
+          inflection: word.dataset.inflection ? JSON.parse(word.dataset.inflection) as string[] : undefined,
+          entry: initialEntry });
+        if (!res.ok) return { status: "failed", message: res.error };
+        const selected = initialEntries.has(word)
+          ? res.alternatives.find((candidate) => candidate.entry === entry) ?? res.definition
+          : res.definition;
+        initialEntries.set(word, initialEntry);
+        if (selected?.entry) word.dataset.entry = selected.entry;
+        return { status: "found", definition: selected, alternatives: res.alternatives };
+      }
+    }
     const res = await send({ type: "lookupEntry", entry, surface });
     if (!res.ok && res.code === "OFFLINE_LOOKUP_UNAVAILABLE") return unavailable(surface, res.error, entry);
     return res.ok ? { status: "found", definition: res.definition } : { status: "failed", message: res.error };

@@ -150,6 +150,7 @@ html:not(.sb-reader-off) :is(
 [data-sb-marked~="new"][data-sb-state-coloring="underline"] .sb-word.sb-new { --sb-cue: #0369a1; }
 [data-sb-marked~="learning"][data-sb-state-coloring="underline"] .sb-word.sb-learning { --sb-cue: #f59e0b; }
 [data-sb-marked~="due"][data-sb-state-coloring="underline"] .sb-word.sb-due { --sb-cue: #ef4444; }
+[data-sb-marked~="suspended"][data-sb-state-coloring="underline"] .sb-word.sb-suspended { --sb-cue: #64748b; --sb-cue-style: dashed; }
 [data-sb-marked~="retired"][data-sb-state-coloring="underline"] .sb-word.sb-retired { --sb-cue: transparent; }
 /* Not yet tracked: a faint dotted hint that it's interactive. */
 [data-sb-marked~="none"][data-sb-state-coloring="underline"] .sb-word.sb-none:not(.sb-frequent) { --sb-cue: rgba(3, 105, 161, 0.5); --sb-cue-style: dotted; }
@@ -164,11 +165,13 @@ html:not(.sb-reader-off) :is(
 [data-sb-marked~="new"][data-sb-state-coloring="text"] .sb-word.sb-new { color: #0369a1; }
 [data-sb-marked~="learning"][data-sb-state-coloring="text"] .sb-word.sb-learning { color: #b45309; }
 [data-sb-marked~="due"][data-sb-state-coloring="text"] .sb-word.sb-due { color: #dc2626; }
+[data-sb-marked~="suspended"][data-sb-state-coloring="text"] .sb-word.sb-suspended { color: #64748b; }
 [data-sb-marked~="retired"][data-sb-state-coloring="text"] .sb-word.sb-retired { color: #15803d; }
 @media (prefers-color-scheme: dark) {
   [data-sb-marked~="new"][data-sb-state-coloring="text"] .sb-word.sb-new { color: oklch(72% 0.15 245); }
   [data-sb-marked~="learning"][data-sb-state-coloring="text"] .sb-word.sb-learning { color: oklch(78% 0.15 75); }
   [data-sb-marked~="due"][data-sb-state-coloring="text"] .sb-word.sb-due { color: oklch(70% 0.19 25); }
+  [data-sb-marked~="suspended"][data-sb-state-coloring="text"] .sb-word.sb-suspended { color: oklch(75% 0.03 245); }
   [data-sb-marked~="retired"][data-sb-state-coloring="text"] .sb-word.sb-retired { color: oklch(74% 0.17 150); }
 }
 
@@ -283,6 +286,8 @@ html:not(.sb-reader-off) :is(
   [data-sb-marked~="learning"][data-sb-state-coloring="text"] .sb-word.sb-learning { --sb-cue: LinkText; --sb-cue-style: dashed; }
   [data-sb-marked~="due"][data-sb-state-coloring="underline"] .sb-word.sb-due,
   [data-sb-marked~="due"][data-sb-state-coloring="text"] .sb-word.sb-due { --sb-cue: LinkText; --sb-cue-style: dotted; }
+  [data-sb-marked~="suspended"][data-sb-state-coloring="underline"] .sb-word.sb-suspended,
+  [data-sb-marked~="suspended"][data-sb-state-coloring="text"] .sb-word.sb-suspended { --sb-cue: LinkText; --sb-cue-style: dashed; }
   [data-sb-pos-coloring="underline"]:not([data-sb-state-coloring="underline"]) .sb-word[data-pos] { --sb-cue: LinkText; --sb-cue-style: solid; }
   /* Forced colors drops background and box-shadow, so the i+1 block cue would
      vanish. An inset outline survives it and still costs no layout: drawn

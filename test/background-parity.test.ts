@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Request, Response as WorkerResponse } from "../src/common/messages.js";
 
-test("background messages preserve online parse offsets and picked entry identity", async () => {
+test("background messages parse locally with stable offsets and entry identity", async () => {
   const firefox = process.env.PARITY_MESSAGE_API === "firefox";
   let listener: (request: Request, sender: object, respond: (response: WorkerResponse) => void) => unknown;
   const storage: Record<string, unknown> = {};
@@ -57,21 +57,25 @@ test("background messages preserve online parse offsets and picked entry identit
     downloadUrl: "https://packs.test/private.gz",
   });
   const stack = {
-    stackFingerprint: "a".repeat(16), dictionaries: ["yomitan-test:en", "jmdict:en"],
-    dictionaryReveal: {}, dictionaryNames: { "yomitan-test": "Private test dictionary" },
-    publicPack: publicManifest, personalPacks: [privateManifest],
+    dictionaryStack: { fingerprint: "a".repeat(16), sources: [
+      { dictionary: "yomitan-test", languages: ["en"], reveal: "show" },
+      { dictionary: "jmdict", languages: ["en"], reveal: "show" },
+    ] },
+    packs: [{ ...publicManifest, kind: "base" }, { ...privateManifest, kind: "overlay" }], pendingPacks: [],
   };
   Object.assign(storage, { config: {
     ...DEFAULTS, apiBase: "https://api.test", accessToken: "access-token",
     accessTokenExpiresAt: "2999-01-01T00:00:00Z", refreshToken: "refresh-token",
-    scopes: ["READ_ACCOUNT", "READ_DICTIONARY"], account: "Reader", accountCheckedAt: new Date().toISOString(),
-    languages: ["eng"], dictionaryStack: stack.dictionaries,
-    dictionaryStackFingerprint: stack.stackFingerprint, errorReports: false,
+    scopes: ["user:profile:read", "user:dictionary:read"], account: "Reader", accountCheckedAt: new Date().toISOString(),
+    languages: ["eng"], dictionaryStack: ["yomitan-test:en", "jmdict:en"],
+    dictionaryStackFingerprint: stack.dictionaryStack.fingerprint, errorReports: false,
   } });
   let disconnected = false;
   let revokeUnavailable = true;
+  let onlineParses = 0;
+  let parsePackRevision = publicManifest.contentRevision;
   globalThis.fetch = (async (input: unknown) => {
-    const url = String(input);
+    const url = input instanceof Request ? input.url : String(input);
     if (url.endsWith("/api/v1/oauth/revoke")) {
       if (revokeUnavailable) {
         revokeUnavailable = false;
@@ -89,16 +93,19 @@ test("background messages preserve online parse offsets and picked entry identit
         : new Response(JSON.stringify(publicManifest), { headers: { "Content-Type": "application/json" } });
     }
     if (url.endsWith("/api/v1/parse")) {
-      return new Response(JSON.stringify({ results: [
-        { text: "ﾊﾞﾅﾅ。", tokens: [
-          { startOffset: 0, endOffset: 4, surface: "ﾊﾞﾅﾅ", lemma: "バナナ", partOfSpeech: "noun", kind: "word" },
-          { startOffset: 4, endOffset: 5, surface: "。", lemma: "。", kind: "symbol" },
-        ] },
-        { text: "バナナ。", tokens: [
-          { startOffset: 0, endOffset: 3, surface: "バナナ", lemma: "バナナ", partOfSpeech: "noun", kind: "word" },
-          { startOffset: 3, endOffset: 4, surface: "。", lemma: "。", kind: "symbol" },
-        ] },
-      ] }));
+      onlineParses += 1;
+      return new Response(JSON.stringify({ stackFingerprint: stack.dictionaryStack.fingerprint,
+        packRevision: parsePackRevision, sources: ["yomitan-test:en", "jmdict:en"],
+        results: [
+          { text: "ﾊﾞﾅﾅ。", tokens: [
+            { startOffset: 0, endOffset: 4, surface: "ﾊﾞﾅﾅ", lemma: "バナナ", partOfSpeech: "noun", kind: "word" },
+            { startOffset: 4, endOffset: 5, surface: "。", kind: "symbol" },
+          ] },
+          { text: "バナナ。", tokens: [
+            { startOffset: 0, endOffset: 3, surface: "バナナ", lemma: "バナナ", partOfSpeech: "noun", kind: "word" },
+            { startOffset: 3, endOffset: 4, surface: "。", kind: "symbol" },
+          ] },
+        ] }), { headers: { "Content-Type": "application/json" } });
     }
     if (url.endsWith("/public.gz")) return new Response(new Uint8Array(publicPayload));
     if (url.endsWith("/private.gz")) return new Response(new Uint8Array(privatePayload));
@@ -117,10 +124,28 @@ test("background messages preserve online parse offsets and picked entry identit
   });
   const parsed = await send({ type: "parseBatch", texts: ["ﾊﾞﾅﾅ。", "バナナ。"] });
   assert.ok(parsed.ok && parsed.type === "parseBatch");
-  assert.equal(parsed.tokens[0][0].entry, undefined);
+  assert.equal(parsed.tokens[0][0].entry, "jmdict:banana");
   assert.equal(parsed.tokens[0][0].surface, "ﾊﾞﾅﾅ");
   assert.equal(parsed.tokens[0][1].start, 4);
   assert.equal(parsed.tokens[1][1].start, 3);
+  assert.equal(onlineParses, 0);
+  const enhanced = await send({ type: "parseBatchOnline", texts: ["ﾊﾞﾅﾅ。", "バナナ。"] });
+  assert.ok(enhanced.ok && enhanced.type === "parseBatchOnline");
+  assert.equal(enhanced.accepted, true);
+  assert.equal(enhanced.tokens[0][0].entry, "jmdict:banana");
+  assert.deepEqual(enhanced.tokens[0][0].groups, [["jmdict:banana"]]);
+  assert.equal(onlineParses, 1);
+  parsePackRevision = "stale-pack";
+  const stale = await send({ type: "parseBatchOnline", texts: ["バナナ。"] });
+  assert.ok(stale.ok && stale.type === "parseBatchOnline");
+  assert.equal(stale.accepted, false);
+  const span = await send({ type: "lookupSpan", text: "バナナ。", startOffset: 0, endOffset: 3 });
+  assert.ok(span.ok && span.type === "lookupSpan");
+  assert.equal(span.definition?.entry, "jmdict:banana");
+  const parsedCard = await send({ type: "lookupParsed", surface: "バナナ", entry: "jmdict:banana",
+    groups: [["jmdict:banana"]] });
+  assert.ok(parsedCard.ok && parsedCard.type === "lookupParsed");
+  assert.deepEqual(parsedCard.alternatives.map((definition) => definition.entry), ["jmdict:banana"]);
   const romaji = await send({ type: "lookup", query: "banana" });
   assert.ok(romaji.ok && romaji.type === "lookup");
   assert.equal(romaji.definition?.entry, "jmdict:banana");

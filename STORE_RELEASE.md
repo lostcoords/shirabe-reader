@@ -21,9 +21,9 @@ source maps, a development API host, test fixtures, or a local dictionary pack.
 - Diff both generated manifests against the previous submitted manifests.
   Explain every permission, host-pattern, content-script, CSP, background, and
   web-accessible-resource change in reviewer notes.
-- Verify the required hosts remain only Shirabe production/development API
-  hosts. `<all_urls>` remains optional and is requested per site when the user
-  enables automatic parsing; `activeTab` supports an explicit one-page action.
+- Verify `<all_urls>` is the one required browser grant for page reading.
+  Hover lookup must not parse the page. Parse page and Parse selection stay
+  explicit commands, while the toolbar can pause a tab or disable a site.
 - Confirm no remote executable JavaScript exists. Dictionary packs and
   `/api/v1/reader/host-rules` are schema-validated data only.
 - Confirm the popup links to offline data notices and the privacy disclosure.

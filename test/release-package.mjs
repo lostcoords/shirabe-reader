@@ -10,18 +10,12 @@ const targets = requestedTarget ? [requestedTarget] : ["firefox", "chrome"];
 for (const target of targets) {
   const root = join("dist", target);
   const manifest = JSON.parse(await readFile(join(root, "manifest.json"), "utf8"));
-  // Required hosts are first-party Shirabe origins ONLY, listed exhaustively so a
-  // new one has to be added here deliberately: shirabe.org (API), cdn.shirabe.org
-  // (audio clips the background worker fetches: src/common/audio.ts), and
-  // t.shirabe.org (PostHog, through our own domain rather than
-  // *.i.posthog.com, which content blockers filter by name:
-  // src/common/telemetry.ts). Page access stays optional, asserted below.
   assert.deepEqual(
     manifest.host_permissions,
-    ["https://shirabe.org/*", "https://cdn.shirabe.org/*", "https://t.shirabe.org/*"],
+    ["<all_urls>", "https://shirabe.org/*", "https://cdn.shirabe.org/*", "https://t.shirabe.org/*"],
     `${target} has unexpected required hosts`,
   );
-  assert.deepEqual(manifest.optional_host_permissions, ["<all_urls>"], `${target} page access must remain optional`);
+  assert.equal(manifest.optional_host_permissions, undefined, `${target} must not request page access per site`);
 
   for (const file of await filesBelow(root)) {
     const path = relative(root, file);
@@ -40,7 +34,7 @@ for (const target of targets) {
   }
 }
 
-console.log("Release manifests and dist contents contain only production hosts/assets.");
+console.log("Release manifests and dist contents contain the expected permissions and production assets.");
 
 async function filesBelow(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

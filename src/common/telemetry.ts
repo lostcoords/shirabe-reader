@@ -1,13 +1,6 @@
 // Extension telemetry, shaped for the shared Grafana Faro receiver
 // PostHog, which is where every Shirabe surface reports.
 //
-// Privacy is the hard constraint. The extension's promise is local, offline
-// lookup that sends no page text, so telemetry reports failure *shape* only :
-// error class, message, our own stack frames, versions, browser: and never
-// page content: no headwords, lookups, selections, page text, or URL paths.
-// A page's registrable host is the most that may ever be attached, and only
-// when a signal genuinely needs it. Everything here is pure so it can be unit
-// tested; the actual network send lives in background/telemetry.ts.
 
 export const MAX_MESSAGE = 300;
 const MAX_STACK = 4000;

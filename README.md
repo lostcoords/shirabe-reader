@@ -20,9 +20,11 @@ tag what they already know, without needing a second integration.
 
 ## Product boundary
 
-Normal lookup and page parsing are free, local, and offline after installing the
-maintained Shirabe EN/ES dictionary pack. Connecting an account is optional;
-**Pro + online** adds exact-context sentence mining, FSRS grading, deck selection,
+Normal lookup and page parsing work offline after installing the maintained
+Shirabe EN/ES dictionary pack. Stable page text can also use the public `/parse`
+API to refine token boundaries. This is free and does not require an account.
+Settings can keep all analysis local. Connecting an account is optional;
+**Pro** adds exact-context sentence mining, FSRS grading, deck selection,
 sync, and knowledge-state colouring. Full product spec:
 [`docs/specs/browser-extension.md`](../docs/specs/browser-extension.md).
 
@@ -55,9 +57,9 @@ What works in the current build:
 - **Offline cursor lookup**: read Japanese under the pointer with the local
   dictionary, including deinflection, candidate matching, and definitions,
   without wrapping or uploading page text.
-- **Online page parsing**: connected readers can tokenize and wrap selected or
-  full page text with Shirabe's web parser, including study state in the returned
-  tokens and later state refreshes.
+- **Optional online analysis**: stable page text is parsed locally first. When
+  allowed, the public API can refine its token boundaries if the installed pack
+  and active dictionary sources still match. Live subtitles stay local.
 - **Furigana** on kanji words (toggleable).
 - **Part-of-speech colouring**: the site's own groups and hues (nouns blue, verbs
   green, adjectives orange, …) on the word or on its underline. One cue system
@@ -65,13 +67,17 @@ What works in the current build:
 - **Hover popup** with headword, reading, and definitions in your chosen
   language from IndexedDB, isolated in a shadow root so it renders the same
   on every site. Show it on plain hover, or only on **Alt/Option + hover**.
+  Hovering reads only the word under the pointer; parsing a whole page is an
+  explicit action. One browser permission enables reading across ordinary
+  sites, with controls to pause a page or turn the reader off for a site.
 - **Mine inline**: **＋ Save** creates a card, **✓ Known** parks it, and a word
   you already study offers **Manage**, the same control its dictionary result
   carries on the site. Grading is deliberately not here: reviewing wants the
   history and interval previews around it, so it stays where they are. The row is
   wired but not rendered: see `REVIEW_IN_READER` in `src/content/actions.ts`.
-- **Online parsing** whenever a connected reader is on. The right-click menu can
-  reparse a page or parse a selection explicitly; offline mode remains cursor-only.
+- **Page and selection parsing** without an account. The right-click menu can
+  reparse a page or parse a selection explicitly. A page can be paused without
+  changing its saved site rule.
 - **Page awareness**: coverage and known/learning/unknown/due counts, i+1
   paragraph highlighting, occurrence/unique coverage, a toolbar badge,
   and Pause/Reparse/Revert controls.
@@ -239,8 +245,9 @@ choose `dist/chrome`.
    scoped, revocable API key it exchanges for itself (OAuth 2.0 + PKCE).
 3. Open **Settings** (bottom bar) to pick a **definition language** and scan
    modifier (Shift by default).
-4. Open a Japanese page. A connected reader parses it online while the reader
-   toggle is on; offline readers use the cursor scanner.
+4. Open a Japanese page. Reader sites parse locally when enabled. Stable text
+   may receive a matching online parse afterward; the local-only setting disables
+   that request.
 
 Connecting is the only way in: there is no paste-a-key pane, because a key
 minted by hand carries the wrong scopes for the reader and cannot be revoked
@@ -264,7 +271,7 @@ src/
   background/
     background.ts owns the key + OAuth redirect login; rate-limits + caches
   content/
-    parser.ts     paragraph/fragments → online parse → token spans
+    parser.ts     paragraph/fragments → local spans → optional online refinement
     word.ts       renders one token; lemma→spans index for live recolour
     popup.ts      shadow-DOM hover popup; lazy lookup + grade/mine controls
     actions.ts    save / grade / mark-known, shared by popup + keyboard
@@ -275,10 +282,11 @@ src/
 
 Content scripts never touch storage or remote APIs directly. The background
 worker owns the offline dictionary, scoped key, state hydration, connected
-writes, and caches. Installed-pack lookup and local page parsing send no page
-text. If no pack is installed, the extension installs/repairs it and reports
-progress; it never uploads the page as a parsing fallback. URL/title/sentence
-context is sent only on an explicit save action.
+writes, and caches. Lookup and live subtitle parsing stay local. Stable page
+text can be sent to `/api/v1/parse` after local parsing unless local-only
+analysis is selected. If no pack is installed, the extension installs or
+repairs it and reports progress. URL and title are sent on an explicit save
+action, along with the selected sentence.
 
 ## Parsing engine
 

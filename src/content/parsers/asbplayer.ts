@@ -8,9 +8,8 @@ type ParseTarget = (root: HTMLElement, showFurigana: boolean) => Promise<number>
 // nodes are moved between the cache and the on-screen overlay, so wrapping them
 // once keeps hover/save working when the line is visible.
 //
-// This is deliberately NOT a exclusive host rule: asbplayer runs on Netflix,
-// YouTube, local files, etc. We always watch (cheap when the class never
-// appears) so host-specific auto-parse for Wikipedia/Mokuro still works.
+// This is deliberately not an exclusive host rule: asbplayer can appear on
+// Netflix, YouTube, local files, and other pages.
 
 const OFFSCREEN = ".asbplayer-offscreen";
 const LINE = ".asbplayer-offscreen > div";

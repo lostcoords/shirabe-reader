@@ -109,7 +109,7 @@ test("a sense with neither draws neither row", async () => {
 // and its cross references. Four of those fill it, and `senses.slice(0, 8)` used
 // to drop the ninth onward while saying nothing, which reads as "this word has
 // eight meanings".
-test("a long list of meanings leads with four and counts the rest", async () => {
+test("a long list of meanings remains available in the scrollable card", async () => {
   const many = Array.from({ length: 7 }, (_, index) => ({
     position: index, partsOfSpeech: [], tags: [],
     glosses: [ { lang: "eng", tag: "EN", text: `meaning ${index}` } ],
@@ -117,14 +117,8 @@ test("a long list of meanings leads with four and counts the rest", async () => 
   Object.assign(answers, { "lookup:多義": definition(many as unknown as Definition["senses"]) });
   await hover({ lemma: "多義", surface: "多義", pos: "noun" });
 
-  assert.equal((await drawn(".sb-senses > li")).length, 4);
-  const more = (await drawn(".sb-more-senses"))[0];
-  assert.equal(more?.textContent, "+3 more meanings", "a card that truncates has to admit it");
-
-  more?.click();
-
   assert.equal((await drawn(".sb-senses > li")).length, 7);
-  assert.equal((await drawn(".sb-more-senses")).length, 0, "nothing left to reveal");
+  assert.equal((await drawn(".sb-more-senses")).length, 0);
 });
 
 test("a label is a chip, coloured by the kind of claim it makes", async () => {

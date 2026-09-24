@@ -64,8 +64,8 @@ type WebExt = {
     unregisterContentScripts(filter?: { ids?: string[] }): Promise<void>;
   };
   permissions: {
-    contains(permissions: { origins?: string[]; permissions?: string[] }): Promise<boolean>;
-    request(permissions: { origins?: string[]; permissions?: string[] }): Promise<boolean>;
+    contains(permissions: { origins?: string[]; permissions?: string[]; data_collection?: string[] }): Promise<boolean>;
+    request(permissions: { origins?: string[]; permissions?: string[]; data_collection?: string[] }): Promise<boolean>;
   };
   contextMenus?: {
     create(props: Record<string, unknown>): void;
@@ -94,3 +94,14 @@ export const ext: WebExt =
   (() => {
     throw new Error("No WebExtension API available");
   })();
+
+export const ERROR_REPORTS_PERMISSION = { data_collection: ["technicalAndInteraction"] };
+
+export async function canReportErrors(): Promise<boolean> {
+  if (!usesPromiseMessageResponses) return true;
+  try {
+    return await ext.permissions.contains(ERROR_REPORTS_PERMISSION);
+  } catch {
+    return false;
+  }
+}

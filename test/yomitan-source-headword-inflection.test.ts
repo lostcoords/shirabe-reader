@@ -40,16 +40,14 @@ async function installPrivateTerms(records: string[]): Promise<void> {
     downloadUrl: "https://packs.test/source-headword-private.gz",
   });
   const stack = {
-    stackFingerprint: "f".repeat(16),
-    dictionaries: ["yomitan-test:jpn"],
-    dictionaryReveal: { "yomitan-test": "show" as const },
-    dictionaryNames: { "yomitan-test": "Private Yomitan" },
-    publicPack: publicManifest,
-    personalPacks: [privateManifest],
+    dictionaryStack: { fingerprint: "f".repeat(16), sources: [
+      { dictionary: "yomitan-test", languages: ["ja"], reveal: "show" as const },
+    ] },
+    packs: [{ ...publicManifest, kind: "base" }, { ...privateManifest, kind: "overlay" }], pendingPacks: [],
   };
   globalThis.fetch = (async (input: string | URL | Request) => {
-    const url = String(input);
-    if (url.endsWith("/api/v1/dictionary-packs")) return new Response(JSON.stringify(stack), { headers: { "Content-Type": "application/json" } });
+    const url = input instanceof Request ? input.url : String(input);
+    if (url.endsWith("/dictionary-packs")) return new Response(JSON.stringify(stack), { headers: { "Content-Type": "application/json" } });
     if (url === publicManifest.downloadUrl) return new Response(new Uint8Array(publicPayload));
     if (url === privateManifest.downloadUrl) return new Response(new Uint8Array(privatePayload));
     return new Response(null, { status: 404 });

@@ -118,7 +118,10 @@ const buildOptions = {
   ),
   outdir,
   bundle: true,
-  alias: { "@shirabe-org/card": join(root, "../packages/card/src") },
+  alias: {
+    "@shirabe-org/api": join(root, "../packages/api/src/index.ts"),
+    "@shirabe-org/card": join(root, "../packages/card/src"),
+  },
   format: "iife",
   target: ["firefox115", "chrome110"],
   sourcemap: watch ? "inline" : false,
@@ -182,16 +185,9 @@ async function manifest() {
         // while a broken dev origin can never poison a user's release data.
         id: watch ? "reader-dev@shirabe.org" : "reader@shirabe.org",
         strict_min_version: "142.0",
-        // What we actually send, not what we could reach. Reading a page sends
-        // nothing: parsing and lookup are local, and telemetry carries failure
-        // shape only (error class, our own frames, versions, browser). The two
-        // optional entries are user-initiated: connecting an account transmits
-        // its key, and mining a sentence transmits that sentence. Keep this
-        // honest against src/common/telemetry.ts and STORE_LISTING.md, since a
-        // reviewer compares all three.
         data_collection_permissions: {
-          required: ["none"],
-          optional: ["technicalAndInteraction", "authenticationInfo", "websiteContent"],
+          required: ["websiteContent"],
+          optional: ["technicalAndInteraction", "authenticationInfo"],
         },
       },
       gecko_android: {},

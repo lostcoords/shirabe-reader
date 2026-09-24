@@ -1,4 +1,4 @@
-import { ext } from "../common/browser.js";
+import { canReportErrors, ext } from "../common/browser.js";
 import {
   toException,
   toPostHogBatch,
@@ -70,10 +70,6 @@ function identity(): PostHogIdentity {
   };
 }
 
-// The reader's switch (Config#errorReports), not a sampling knob: off means
-// nothing is queued and nothing already queued is sent. Firefox only allows
-// technicalAndInteraction collection when it can be turned off, so this is what
-// makes the manifest's declaration true rather than aspirational.
 let enabled = true;
 
 export function setTelemetryEnabled(on: boolean): void {
@@ -99,9 +95,10 @@ async function flush(): Promise<void> {
   }
   if (sending || queue.length === 0) return;
   sending = true;
-  sessionId = await loadSession(); // resolve the stable id before tagging the batch
   const batch = queue.splice(0, queue.length);
   try {
+    if (!await canReportErrors()) return;
+    sessionId = await loadSession(); // resolve the stable id before tagging the batch
     await fetch(`${__POSTHOG_HOST__}/batch/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -40,10 +40,10 @@ Object.assign(answers, {
 test("a word names its other spellings, and says which are rare", async () => {
   await hover({ lemma: "開く", surface: "開いた", pos: "verb" });
 
-  const forms = await drawn(".sb-form");
+  const forms = await drawn(".sb-word-form");
   assert.deepEqual(forms.map((form) => form.textContent), [ "空く", "明く" ],
     "the headword is not repeated here: it is already at the top of the card");
-  assert.deepEqual(forms.map((form) => form.classList.contains("sb-form-rare")), [ false, true ],
+  assert.deepEqual(forms.map((form) => form.classList.contains("sb-word-form-rare")), [ false, true ],
     "a rare spelling is shown, dimmed: it is exactly the one a reader cannot place");
   assert.equal(forms[1]?.lang, "ja");
 });

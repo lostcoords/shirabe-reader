@@ -8,7 +8,7 @@ export type DetailedPageMetrics = PageMetrics;
 export type WordMetrics = Omit<PageMetrics, "iPlusOne">;
 export type IPlusOneOptions = { includesLearning: boolean; frequencyMax: number };
 
-const priority: Record<WordState, number> = { none: 0, new: 1, learning: 2, due: 3, retired: 4 };
+const priority: Record<WordState, number> = { none: 0, suspended: 0, new: 1, learning: 2, due: 3, retired: 4 };
 
 // A reverted page has no words: the same shape, all zero, so callers never
 // special-case "parsed but empty" against "not parsed".
@@ -145,7 +145,7 @@ export const isIPlusOne = (words: HTMLElement[], options: IPlusOneOptions): bool
 
 function wordState(word: HTMLElement): WordState {
   const state = word.dataset.state;
-  return state === "new" || state === "learning" || state === "due" || state === "retired" ? state : "none";
+  return state === "new" || state === "learning" || state === "due" || state === "suspended" || state === "retired" ? state : "none";
 }
 
 function emptyCounts(): StateCounts {

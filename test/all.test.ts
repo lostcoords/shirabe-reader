@@ -13,6 +13,7 @@ import "./card-form.test.js";
 import "./manifest.test.js";
 import "./telemetry.test.js";
 import "./pro-gate.test.js";
+import "./public-parse.test.js";
 import "./save-link.test.js";
 import "./background-cache.test.js";
 import "./sweep-merge.test.js";

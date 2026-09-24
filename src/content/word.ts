@@ -1,5 +1,6 @@
 import type { ParsedToken, TokenCandidate, WordState } from "../common/types.js";
 import { appendFurigana, furiganaSegments, hasKanji, type FuriganaSegment } from "@shirabe-org/card/word-card/furigana";
+import { cardTokenAttributes } from "@shirabe-org/card/word-card/host";
 
 export { appendFurigana, furiganaSegments, hasKanji, type FuriganaSegment };
 
@@ -9,7 +10,7 @@ export { appendFurigana, furiganaSegments, hasKanji, type FuriganaSegment };
 // lazily: detached nodes are skipped on recolour, not tracked for removal.
 const byLemma = new Map<string, Set<HTMLElement>>();
 
-const STATE_CLASS = /sb-(none|new|learning|due|retired)/;
+const STATE_CLASS = /sb-(none|new|learning|due|suspended|retired)/;
 
 // The other words each span could be, for the popup's picker. A WeakMap rather
 // than a `data-` attribute: a long page has thousands of ambiguous spans and
@@ -17,11 +18,21 @@ const STATE_CLASS = /sb-(none|new|learning|due|retired)/;
 // and a JSON round trip per hover for something only the popup ever reads.
 // Keyed on the element, so it is collected with the element.
 const candidatesByWord = new WeakMap<HTMLElement, TokenCandidate[]>();
+const groupsByWord = new WeakMap<HTMLElement, string[][]>();
+const parsedWords = new WeakSet<HTMLElement>();
 
 // Every word the tapped span can name, best first, `[0]` being the one the
 // parser chose. Empty where the span names one word, which is most of them.
 export function candidatesFor(word: HTMLElement): TokenCandidate[] {
   return candidatesByWord.get(word) ?? [];
+}
+
+export function groupsFor(word: HTMLElement): string[][] {
+  return groupsByWord.get(word) ?? [];
+}
+
+export function isParsedWord(word: HTMLElement): boolean {
+  return parsedWords.has(word);
 }
 
 /** The cut of one sentence as the reader saw it, and which chip they mined. */
@@ -53,27 +64,25 @@ export function shownCut(word: HTMLElement): ShownCut | undefined {
 // state-colored spans (optionally with furigana); particles and punctuation
 // stay as plain text so the page reads naturally and only meaningful words
 // invite a hover.
-export function renderToken(token: ParsedToken, showFurigana: boolean): Node {
+export function renderToken(token: ParsedToken, showFurigana: boolean, context?: { sentence: string; start: number; end?: number }): Node {
   if (!token.content) return document.createTextNode(token.surface);
 
   const word = document.createElement("span");
+  parsedWords.add(word);
   word.className = `sb-word sb-${token.state}`;
-  word.dataset.lemma = token.lemma;
-  word.dataset.surface = token.surface;
-  word.dataset.state = token.state; // popup reads this to gate the review buttons
-  // The entry the parser landed on, so a save carries the word's IDENTITY and not
-  // just the form this engine reduced it to. Without it `entryFor` has to go back
-  // to the dictionary keyed on the lemma, which is the one field the two
-  // tokenizers disagree about by design: a save that travels under it can land on
-  // a different word than the same save from the website, and the learner ends up
-  // with two cards for one word.
-  if (token.entry) word.dataset.entry = token.entry;
+  for (const [name, value] of Object.entries(cardTokenAttributes(
+    { ...token, reading: token.reading ?? undefined },
+    context?.sentence,
+    context?.start ?? token.start,
+    context?.end ?? (context?.start ?? token.start) + token.length,
+  ))) word.setAttribute(name, value);
+  word.dataset.state = token.state;
+  if (token.kind) word.dataset.kind = token.kind;
   // Present only where the span names more than one word, so the popup can test
   // for a picker rather than counting a list that is usually one long.
   if (token.candidates?.length) candidatesByWord.set(word, token.candidates);
-  if (token.pos) word.dataset.pos = token.pos; // i+1 reads this to tell context words from copulas
+  if (token.groups?.length) groupsByWord.set(word, token.groups);
   if (token.frequency != null) word.dataset.frequency = String(token.frequency);
-  if (token.reading) word.dataset.reading = token.reading;
 
   if (showFurigana && token.reading && hasKanji(token.surface)) {
     const reading = surfaceReading(token.surface, token.lemma, token.reading);

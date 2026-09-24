@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("the local scanner loads on ordinary pages while required API hosts stay Shirabe-only", () => {
+test("the reader has one standing grant for ordinary pages", () => {
   const manifest = JSON.parse(readFileSync("manifest.base.json", "utf8")) as {
     host_permissions?: string[];
     optional_host_permissions?: string[];
@@ -16,23 +16,17 @@ test("the local scanner loads on ordinary pages while required API hosts stay Sh
   // and PostHog through our own domain rather than *.i.posthog.com, which
   // content blockers filter by name. `o.shirabe.org` went with the telemetry
   // that used to go there.
-  assert.deepEqual(manifest.host_permissions, ["https://shirabe.org/*", "https://cdn.shirabe.org/*", "https://t.shirabe.org/*"]);
-  assert.deepEqual(manifest.optional_host_permissions, ["<all_urls>"]);
+  assert.deepEqual(manifest.host_permissions, ["<all_urls>", "https://shirabe.org/*", "https://cdn.shirabe.org/*", "https://t.shirabe.org/*"]);
+  assert.equal(manifest.optional_host_permissions, undefined);
   assert.deepEqual(manifest.content_scripts, [{
     matches: ["<all_urls>"], js: ["content.js"], css: ["content.css"], all_frames: true, run_at: "document_idle",
   }]);
 });
 
-// A reviewer reads the manifest, the listing, and the code together, and an
-// add-on that declares more than it takes gets asked to justify the difference.
-// Reading a page collects nothing: parsing and lookup are local. The optional
-// entries are the ones a reader turns on: error reports, connecting an account,
-// mining a sentence. Firefox only permits technicalAndInteraction as optional,
-// which is why the switch below has to exist.
 test("the data collection declaration matches what the code actually sends", () => {
   const builder = readFileSync("build.mjs", "utf8");
-  assert.match(builder, /required: \["none"\]/);
-  assert.match(builder, /optional: \["technicalAndInteraction", "authenticationInfo", "websiteContent"\]/);
+  assert.match(builder, /required: \["websiteContent"\]/);
+  assert.match(builder, /optional: \["technicalAndInteraction", "authenticationInfo"\]/);
 
   // Declared optional means switchable, not merely disclosed.
   assert.match(readFileSync("src/common/config.ts", "utf8"), /errorReports: boolean/);
@@ -41,7 +35,7 @@ test("the data collection declaration matches what the code actually sends", () 
   assert.match(readFileSync("src/background/telemetry.ts", "utf8"), /if \(!enabled \|\| !signals\.length\) return;/);
 
   const listing = readFileSync("STORE_LISTING.md", "utf8");
-  assert.match(listing, /No data is collected for ordinary use/);
+  assert.match(listing, /Stable page text may be sent to Shirabe for parsing/);
 });
 
 test("localhost access follows the API actually baked in, not merely --watch", () => {
@@ -79,18 +73,12 @@ test("all extension-owned surfaces preserve focus, reduced-motion, and forced-co
   }
 });
 
-test("optional host access is only ever requested from an explicit user action", () => {
+test("the popup changes site mode without requesting permission for that site", () => {
   const popup = readFileSync("src/action/popup.ts", "utf8");
 
-  // Store review turns on this: <all_urls> is optional, and the only thing that
-  // asks for it is the user clicking the per-site reader toggle. The separate
-  // siteMode select is gone: the toggle is the one control that grants access.
   assert.match(popup, /readerToggle\.addEventListener\("click"/);
-  assert.match(popup, /const siteAccess = await requestSiteAccess\(siteUrl\)/);
-  assert.match(popup, /return ext\.permissions\.request\(\{ origins: \[origin\] \}\)/);
-
-  // Denial is survivable: scanning still works in the open tab via activeTab.
-  assert.match(popup, /Site access was not granted/);
+  assert.doesNotMatch(popup, /requestSiteAccess|permissions\.request\(\{ origins/);
+  assert.match(popup, /await patch\(\{ disabledHosts \}\)/);
 });
 
 test("the popup replaces decorative branding with a real per-site reader toggle", () => {
@@ -160,11 +148,10 @@ test("the action popup navigates with a bottom bar and hands settings to its own
     assert.match(options, new RegExp(`id="${id}"`), `Advanced is missing #${id}`);
   }
 
-  // Definition language is deliberately available both beside the dictionary
-  // and on the full settings page; both controls write Config#languages.
-  assert.match(popup, /id="dictionaryLanguages"/);
-  assert.match(options, /id="languages"/);
-  assert.match(readFileSync("src/action/popup.ts", "utf8"), /await patch\(\{ languages \}\)/);
+  assert.match(popup, /id="dictionaryStackSummary"/);
+  assert.match(popup, /id="editDictionaryStack"/);
+  assert.match(options, /id="dictionarySources"/);
+  assert.doesNotMatch(options, /id="languages"/);
 
   // Furigana and scan-modifier are shared preferences, available mid-read in
   // Lookup and on the full settings page without a second stored value.
@@ -195,7 +182,7 @@ test("extension settings mirror Shirabe's sidebar and card layout without purple
 
   assert.match(options, /class="settings-nav"/);
   assert.match(options, /class="settings-content"/);
-  for (const id of ["reading", "keyboard", "advanced"]) assert.match(options, new RegExp(`href="#${id}"`));
+  for (const id of ["reading", "dictionary", "account", "advanced"]) assert.match(options, new RegExp(`href="#${id}"`));
   assert.match(css, /color-scheme:\s*light dark/);
   assert.match(css, /--surface-page:\s*light-dark\(#f8fafc/);
   assert.match(css, /--surface:\s*light-dark\(#ffffff/);
@@ -245,7 +232,7 @@ test("exported settings carry preferences and never a sign-in", () => {
   const secrets = logic.match(/const SECRET_KEYS = \[(.*?)\] as const/s)?.[1] ?? "";
   assert.ok(secrets, "options.ts must name the fields an export strips");
   for (const field of ["accessToken", "refreshToken", "accessTokenExpiresAt", "account", "scopes", "entitled",
-    "dictionaryStackFingerprint", "dictionaryNames", "availableDictionaries"]) {
+    "dictionaryStackFingerprint", "dictionaryStackDirty", "dictionaryNames", "availableDictionaries"]) {
     assert.match(config, new RegExp(`\\b${field}[?]?:`), `Config no longer has ${field}`);
     assert.match(secrets, new RegExp(`"${field}"`), `${field} would be written into an exported settings file`);
   }
@@ -338,16 +325,16 @@ test("anonymous dictionary use is the default and OAuth is an explicit account a
   const background = readFileSync("src/background/background.ts", "utf8");
 
   assert.doesNotMatch(popup, /Optional Pro features/);
-  assert.doesNotMatch(popup, /Search, parsing, and the offline dictionary need no account/);
-  assert.match(popup, /Not connected/);
-  assert.match(popup, /Connect account/);
-  assert.match(api, /const OAUTH_SCOPES = \["READ_ACCOUNT", "READ_DICTIONARY", "WRITE_ACCOUNT", "READ_SRS", "WRITE_SRS"\]/);
-  assert.match(api, /"\/api\/v1\/preferences"/);
-  assert.match(popupLogic, /send\(\{ type: "updateLanguages", languages \}\)/);
+  assert.match(popup, /Lookup and parsing stay free either way/);
+  assert.match(popup, /Connect to see what you know/);
+  assert.match(popup, /Connect/);
+  assert.match(api, /"user:preferences:read", "user:preferences:write"/);
+  assert.match(api, /client\.getDictionaryStack\(\)/);
+  assert.match(popupLogic, /editDictionaryStack/);
   // Connecting is an explicit click on the shared account card, never something
   // lookup or an install can trigger on the reader's behalf.
   assert.match(readFileSync("src/common/account-panel.ts", "utf8"), /\$<HTMLButtonElement>\("connect"\)\.addEventListener\("click"/);
-  assert.match(background, /launchWebAuthFlow\(\{ url, interactive: true \}\)/);
+  assert.match(background, /launchWebAuthFlow\(\{ url: flow\.url, interactive: true \}\)/);
   assert.doesNotMatch(background, /launchWebAuthFlow\([^)]*redirect_uri/);
 });
 
@@ -455,8 +442,8 @@ test("missing offline storage self-heals and the word popup has a stable scrolla
   // The wording belongs to whoever knows there is a pack: the card renders
   // whatever message the pending result carried.
   assert.match(readFileSync("src/content/card-host.ts", "utf8"), /Preparing the offline dictionary/);
-  assert.match(popup, /width: min\(480px, calc\(100vw - 24px\)\)/);
-  assert.match(popup, /max-height: min\(70vh, 620px\)/);
+  assert.match(popup, /width: var\(--sb-popup-width, min\(480px, calc\(100vw - 24px\)\)\)/);
+  assert.match(popup, /max-height: var\(--sb-popup-max-height, min\(70vh, 620px\)\)/);
   assert.doesNotMatch(popup, /\n  height: min\(460px/);
   assert.match(popup, /overflow-y: auto/);
 

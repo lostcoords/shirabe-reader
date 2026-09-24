@@ -1,7 +1,6 @@
 import { ext } from "./browser.js";
 import type { Definition, DeckMembership, IntervalPreviews, ParsedToken, StudyDetails, WordState } from "./types.js";
 import type { DictionaryStatus, PackManifest } from "./offline-dictionary.js";
-import type { GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import type { ClientReport } from "./telemetry.js";
 
 export type { DeckMembership, IntervalPreviews, StudyDetails };
@@ -60,7 +59,7 @@ export type PageMetrics = {
 export type Status = {
   connected: boolean;
   account: string;
-  canWrite: boolean; // WRITE_SRS + entitled → mining buttons are usable
+  canWrite: boolean; // user:study:write + entitled → mining buttons are usable
   entitled: boolean; // owner is SRS-entitled (Pro or a school member)
   connecting: boolean; // an auth window is open and the handshake is mid-flight
   apiBase: string;
@@ -73,6 +72,7 @@ export type Request =
   // `requestId` lets the content script cancel a batch whose blocks all scrolled
   // out of view before the online parse finished.
   | { type: "parseBatch"; texts: string[]; requestId?: number }
+  | { type: "parseBatchOnline"; texts: string[] }
   | { type: "cancelParse"; requestId: number }
   // Words and kanji are separate corpora, as on the web: a word search never
   // answers with a kanji. `kind: "kanji"` is the explicit kanji-breakdown path.
@@ -83,6 +83,9 @@ export type Request =
   // `surface` is the span they tapped, because sense restrictions are keyed on
   // the spelling in front of them.
   | { type: "lookupEntry"; entry: string; surface: string }
+  | { type: "lookupParsed"; surface: string; entry?: string; groups: string[][] }
+  | { type: "lookupSpan"; text: string; startOffset: number; endOffset: number;
+    lemma?: string; kind?: string; reading?: string; pos?: string; inflection?: string[]; entry?: string }
   | { type: "dictionaryStatus" }
   | { type: "installDictionary" }
   | { type: "removeDictionary" }
@@ -114,7 +117,6 @@ export type Request =
   | { type: "setState"; lemma: string; state: "retired" | "reviewing" }
   | { type: "connect" } // begin device login; resolves with the code to show
   | { type: "disconnect" }
-  | { type: "updateLanguages"; languages: GlossLanguage[] }
   | { type: "updateDictionaryStack"; dictionaries: string[]; dictionaryReveal: Record<string, "show" | "hover"> }
   // Fetch a pronunciation clip in the background (bypasses the page CSP that
   // blocks cross-origin media) and get it back as a playable data: URL.
@@ -129,9 +131,12 @@ export type Request =
 
 export type Response =
   | { ok: true; type: "parseBatch"; tokens: ParsedToken[][]; dictionaryInstalling?: boolean }
+  | { ok: true; type: "parseBatchOnline"; accepted: boolean; tokens: ParsedToken[][] }
   | { ok: true; type: "cancelParse" }
   | { ok: true; type: "lookup"; definition: Definition | null; dictionaryInstalling?: boolean }
   | { ok: true; type: "lookupEntry"; definition: Definition | null }
+  | { ok: true; type: "lookupParsed"; definition: Definition | null; alternatives: Definition[] }
+  | { ok: true; type: "lookupSpan"; definition: Definition | null; alternatives: Definition[]; groups: string[][] }
   | { ok: true; type: "dictionaryStatus"; dictionary: DictionaryStatus }
   // `manifest` is set when install finished immediately (already current).
   // Long installs return without it; the popup polls dictionaryStatus instead.
@@ -147,8 +152,7 @@ export type Response =
   | { ok: true; type: "setState"; state: WordState; details: StudyDetails }
   | { ok: true; type: "connect" }
   | { ok: true; type: "disconnect" }
-  | { ok: true; type: "updateLanguages"; languages: GlossLanguage[] }
-  | { ok: true; type: "updateDictionaryStack" }
+  | { ok: true; type: "updateDictionaryStack"; synced: boolean }
   | { ok: true; type: "audioClip"; dataUrl: string }
   | { ok: true; type: "captureTab"; imageDataUrl: string }
   | { ok: true; type: "telemetry" }

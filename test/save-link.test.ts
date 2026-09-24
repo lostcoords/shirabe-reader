@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Request } from "../src/common/messages.js";
+import type { Request as MessageRequest } from "../src/common/messages.js";
 
 test("the API client preserves the lookup review target and submits its revision without fetching a newer one", async () => {
   const original = globalThis.fetch;
   const requests: Array<{ path: string; body: unknown }> = [];
   const reviewCard = { id: 15, revision: "b".repeat(64) };
-  globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
-    const path = new URL(String(input)).pathname;
-    requests.push({ path, body: JSON.parse(String(init?.body)) });
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    const path = new URL(request.url).pathname;
+    requests.push({ path, body: await request.json() });
     return Response.json(path.endsWith("/lookup")
       ? { states: [{ lemma: "猫", state: "due", decks: [], cardId: 99, reviewCard }] }
       : { card: { id: 15, state: "reviewing" }, intervals: { again: "1m", hard: "1d", good: "4d", easy: "8d" } });
@@ -38,8 +39,9 @@ test("the API client preserves the lookup review target and submits its revision
 async function postedBody(options: { lemma: string; entry?: string }): Promise<Record<string, unknown>> {
   const original = globalThis.fetch;
   let body: Record<string, unknown> = {};
-  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
-    body = JSON.parse(String(init?.body));
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    body = await request.json() as Record<string, unknown>;
     return new Response(
       JSON.stringify({ card: { id: 1 }, created: true, word: { lemma: options.lemma, state: "new", decks: [] } }),
       { headers: { "Content-Type": "application/json" } },
@@ -75,7 +77,7 @@ test("a quick save links the card even when the word's popup never opened", asyn
   // path through a page, so it cannot be the one that lands orphans.
   const { Window } = await import("happy-dom");
   const window = new Window({ url: "https://reader.test/page" });
-  const sent: Request[] = [];
+  const sent: MessageRequest[] = [];
   Object.assign(globalThis, {
     window, document: window.document, HTMLElement: window.HTMLElement,
     // The content bundle schedules its render work on a frame; nothing here waits
@@ -85,7 +87,7 @@ test("a quick save links the card even when the word's popup never opened", asyn
     chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
   });
   const { ext } = await import("../src/common/browser.js");
-  ext.runtime.sendMessage = (async (message: Request) => {
+  ext.runtime.sendMessage = (async (message: MessageRequest) => {
     sent.push(message);
     if (message.type === "lookup") {
       return { ok: true, type: "lookup", definition: { headword: "変わる", entry: "jmdict:1207590", senses: [] } };
@@ -100,7 +102,7 @@ test("a quick save links the card even when the word's popup never opened", asyn
 
   await save(word);
 
-  const request = sent.find((message) => message.type === "save") as Extract<Request, { type: "save" }>;
+  const request = sent.find((message) => message.type === "save") as Extract<MessageRequest, { type: "save" }>;
   assert.equal(request.entry, "jmdict:1207590", "the save asks for the entry it wasn't given");
   assert.equal(word.dataset.entry, "jmdict:1207590", "and remembers it, so a re-save doesn't ask again");
 });

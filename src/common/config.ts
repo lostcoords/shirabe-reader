@@ -41,31 +41,32 @@ export type DefinitionSize = "small" | "medium" | "large";
 // User settings, persisted in extension-local storage. The OAuth tokens are the
 // only secrets; everything else is a preference. Read/written from the
 // background worker and the action popup (settings UI). The tokens come from
-// the redirect login (see api.ts): an access token that lives an hour and is
+// the redirect login (see api.ts): an access token that lives a month and is
 // sent on every request, and a refresh token that renews it and is itself
 // replaced on every renewal.
 export type Config = {
   apiBase: string; // build-time default below; no trailing slash (/api/v1 is on every host)
   accessToken: string;
   accessTokenExpiresAt: string; // ISO; renew before this, not after
+  accessTokenRefreshAt?: string; // ISO; proactive renewal while the token still works
   refreshToken: string;
   account: string; // display name of the connected account (for the popup header)
   accountCheckedAt: string; // last successful /api/v1/me refresh
   scopes: string[]; // scopes the connected key carries (gates mining buttons)
   entitled: boolean; // owner may write to the SRS (Pro or a school member)
   furiganaMode: FuriganaMode;
-  // Ordered, preferred first: the extension's copy of the account's
-  // Prefs#languages. Synced from GET /api/v1/me while connected; edited locally
-  // otherwise. Renders one meaning block per language, in this order.
+  // Ordered gloss languages used for examples and kanji; dictionary meanings
+  // use the language order in dictionaryStack for their own source.
   languages: GlossLanguage[];
   dictionaryStack: string[];
   dictionaryStackFingerprint: string;
+  dictionaryStackDirty: boolean;
+  localOnlyAnalysis: boolean;
   dictionaryReveal: Record<string, "show" | "hover">;
   dictionaryNames: Record<string, string>;
   availableDictionaries: Array<{ slug: string; name: string; languages: string[] }>;
   scanModifier: ScanModifier; // which key (if any) opens the hover popup
   keybinds: Record<KeybindAction, Keybind>; // rebindable shortcuts (parse + grade/save/known)
-  enabledHosts: string[]; // sites granted persistent reader access
   disabledHosts: string[]; // domains/patterns where the reader is turned off entirely
   preferredDeckId: number | null; // connected mining target; null uses the server default
   posColoring: PosColoring;
@@ -120,6 +121,7 @@ export const DEFAULTS: Config = {
   apiBase: __DEFAULT_API_BASE__,
   accessToken: "",
   accessTokenExpiresAt: "",
+  accessTokenRefreshAt: "",
   refreshToken: "",
   account: "",
   accountCheckedAt: "",
@@ -129,12 +131,13 @@ export const DEFAULTS: Config = {
   languages: ["eng"],
   dictionaryStack: [],
   dictionaryStackFingerprint: "",
+  dictionaryStackDirty: false,
+  localOnlyAnalysis: false,
   dictionaryReveal: {},
   dictionaryNames: {},
   availableDictionaries: [],
   scanModifier: "shift",
   keybinds: DEFAULT_KEYBINDS,
-  enabledHosts: [],
   disabledHosts: [],
   preferredDeckId: null,
   posColoring: "off",
@@ -194,19 +197,13 @@ export async function loadConfig(): Promise<Config> {
 export const pricingUrl = (apiBase: string, source: string): string =>
   `${apiBase.replace(/\/$/, "")}/pricing?source=${encodeURIComponent(source)}`;
 
-// Where every source behind the dictionary is credited in full. Off the API base
-// like the links above, so a dev build points at the local server, and with no
-// locale segment: the site redirects to the reader's own language.
-export const creditsUrl = (apiBase: string): string =>
-  `${apiBase.replace(/\/$/, "")}/credits`;
-
 // Signed in iff we hold a refresh token: the access token comes and goes by
-// the hour and is renewed from it. Mining (save/grade/known) needs WRITE_SRS
+// the hour and is renewed from it. Mining (save/grade/known) needs user:study:write
 // *and* SRS entitlement (Pro or school): matching require_srs_pro! on the API.
 // A free account still gets dictionary lookup and word coloring.
 export const isConnected = (config: Config): boolean => config.refreshToken.length > 0;
 export const canWriteSrs = (config: Config): boolean =>
-  config.scopes.includes("WRITE_SRS") && config.entitled;
+  config.scopes.includes("user:study:write") && config.entitled;
 
 
 export async function saveConfig(config: Config): Promise<void> {

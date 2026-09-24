@@ -22,6 +22,7 @@ export type Page = {
     ONE namespace for every suite, so a key two files both register is whichever
     file the bundle imported last: keep a suite's lemmas its own. */
 export const answers: Record<string, Definition | null> = {};
+export const spanAnswers: Record<string, Definition[]> = {};
 /** Every message the popup sent, so a test can assert on what was ASKED. */
 export const asked: Request[] = [];
 
@@ -51,6 +52,10 @@ async function buildPage(): Promise<Page> {
     asked.push(message);
     if (message.type === "lookup") return { ok: true, type: "lookup", definition: answers[`lookup:${message.query}`] ?? null };
     if (message.type === "lookupEntry") return { ok: true, type: "lookupEntry", definition: answers[`entry:${message.entry}`] ?? null };
+    if (message.type === "lookupSpan") {
+      const alternatives = spanAnswers[message.text.slice(message.startOffset, message.endOffset)] ?? [];
+      return { ok: true, type: "lookupSpan", definition: alternatives[0] ?? null, alternatives };
+    }
     if (message.type === "states") return { ok: true, type: "states", states: {}, details: {} };
     return { ok: true };
   }) as typeof ext.runtime.sendMessage;
@@ -70,12 +75,12 @@ async function buildPage(): Promise<Page> {
 }
 
 /** Render a token onto the page and open its card, as a hover would. */
-export async function hover(token: Partial<ParsedToken>): Promise<HTMLElement> {
+export async function hover(token: Partial<ParsedToken>, context?: { sentence: string; start: number }): Promise<HTMLElement> {
   const { window, word: words, popup } = await page();
   const node = words.renderToken({
     start: 0, length: 2, surface: "きみ", reading: null, lemma: "きみ",
     pos: "noun", content: true, state: "none", ...token,
-  } as ParsedToken, false);
+  } as ParsedToken, false, context);
   window.document.body.append(node as never);
 
   const word = node as unknown as HTMLElement;

@@ -1,4 +1,5 @@
 import { ext } from "./browser.js";
+import { createShirabeClient } from "@shirabe-org/api";
 
 // A per-site parsing rule: the trimmed-for-Shirabe version of JitenReader's
 // HostMeta. `host` patterns use "*" globs (Chrome match-pattern style). Built-in
@@ -15,8 +16,8 @@ export type HostRule = {
   custom?: "youtube" | "netflix" | "mokuro"; // dedicated dynamic surfaces
 };
 
-// How the current page should behave. `rule` is the matched auto-rule (its
-// selectors/flags drive the parser); absent for plain generic auto-parsing.
+// How the current page should behave. `rule` carries site-specific selectors
+// for an explicit parse, or a dynamic caption adapter.
 export type HostResolution = { mode: "auto" | "off"; rule?: HostRule };
 
 // Injected by build.mjs as a full host list so production bundles never contain
@@ -114,9 +115,8 @@ export function normalizePattern(raw: string): string {
 }
 
 
-// Resolve the page's mode. Connected readers parse online; disconnected readers
-// keep the cursor scanner without rewriting the page. User and built-in off rules
-// still win; matching rules contribute selectors/integration behavior.
+// Resolve the page's mode. User and built-in off rules win; matching rules
+// contribute selectors and integration behavior.
 export function resolveHostMode(
   url: string,
   opts: { disabledHosts: string[]; rules: HostRule[]; apiBase?: string },
@@ -173,9 +173,8 @@ export async function loadHostRules(): Promise<HostRule[]> {
 // live yet) or network error simply leaves the built-ins in charge.
 export async function refreshRemoteHostRules(apiBase: string): Promise<void> {
   try {
-    const res = await fetch(`${apiBase.replace(/\/$/, "")}/api/v1/reader/host-rules`, { headers: { Accept: "application/json" } });
-    if (!res.ok) return;
-    const data = (await res.json()) as { version?: number; rules?: HostRule[] };
+    const { data } = await createShirabeClient({ baseUrl: apiBase }).getReaderHostRules();
+    if (!data) return;
     if (Number.isInteger(data.version) && Array.isArray(data.rules)) {
       await ext.storage.local.set({ [REMOTE_KEY]: data.rules, [REMOTE_VERSION_KEY]: data.version });
     }

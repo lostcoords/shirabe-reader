@@ -6,11 +6,8 @@ import test from "node:test";
 // save with 402 PRO_REQUIRED, and that has to arrive as an offer: not as a
 // stack trace under the Save button, which is what a free user used to get.
 
-const problem = (status: number, code: string, detail: string) => ({
-  ok: false,
-  status,
-  json: async () => ({ code, title: "Pro required", detail }),
-});
+const problem = (status: number, code: string, detail: string) => Response.json(
+  { code, title: "Pro required", detail }, { status });
 
 test("a 402 keeps the server's code and sentence, so the UI can offer plans", async () => {
   const original = globalThis.fetch;
@@ -84,7 +81,7 @@ test("every upgrade entry point tags itself, so none of them lands as organic tr
 test("a signed-in free reader is told what's missing, and can act on it", async () => {
   const { Window } = await import("happy-dom");
   const window = new Window({ url: "https://reader.test/page" });
-  const config = { apiBase: "https://shirabe.test", accessToken: "shra_x", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), refreshToken: "shrr_x", scopes: ["READ_SRS"], entitled: false };
+  const config = { apiBase: "https://shirabe.test", accessToken: "shra_x", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), refreshToken: "shrr_x", scopes: ["user:study:read"], entitled: false };
   Object.assign(globalThis, {
     window, document: window.document, Node: window.Node, HTMLElement: window.HTMLElement,
     chrome: {

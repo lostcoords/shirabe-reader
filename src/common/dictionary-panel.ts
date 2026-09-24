@@ -24,6 +24,7 @@ export type DictionaryPanelHooks = {
   onBusy?: (busy: boolean) => void;
   /** Optional post-install refresh: the popup re-renders its page panel. */
   onInstalled?: () => void | Promise<void>;
+  onRemoved?: () => void | Promise<void>;
 };
 
 export function mountDictionaryPanel(hooks: DictionaryPanelHooks): DictionaryPanel {
@@ -176,6 +177,7 @@ export function mountDictionaryPanel(hooks: DictionaryPanelHooks): DictionaryPan
     const res = await sendDictionary({ type: "removeDictionary" });
     if (!res.ok) hooks.status(res.error);
     await refresh();
+    if (res.ok) await hooks.onRemoved?.();
   });
   $<HTMLButtonElement>("cancelDictionaryInstall").addEventListener("click", async () => {
     await sendDictionary({ type: "cancelDictionaryInstall" });

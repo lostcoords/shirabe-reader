@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
-import { cancelDictionaryInstall, checkDictionaryUpdate, deactivatePrivateDictionaries, dictionaryStatus, installDictionary, lookupEntryOffline, lookupKanjiOffline, lookupOffline, lookupVariants, parseOffline, removeDictionary, type DictionaryStackManifest, type PackManifest } from "../src/common/offline-dictionary.js";
+import { cancelDictionaryInstall, checkDictionaryUpdate, deactivatePrivateDictionaries, dictionaryStatus, installDictionary, lookupEntryOffline, lookupKanjiOffline, lookupOffline, lookupVariants, parseOffline, removeDictionary, resolveParsedSpan, type PackManifest } from "../src/common/offline-dictionary.js";
 
 const records = [
   { type: "header", schemaVersion: 7, languages: ["eng", "spa"], source: "Shirabe open-core" },
@@ -209,6 +209,30 @@ const records = [
     readings: [{ text: reading, kind: "kana" }],
     senses: [{ glosses: { eng: ["expression"] }, partsOfSpeech: ["exp"], fields: [], misc: [], dialects: [], restrictions: [] }],
   })),
+  {
+    type: "term", id: "jmdict:restricted-sense", dictionary: "jmdict", headword: "一語",
+    expressions: [{ text: "一語", script: "kanji", common: true, tags: [] },
+      { text: "いちご", script: "kana", common: false, tags: [] }],
+    readings: [{ text: "いちご", kind: "kana" }],
+    senses: [
+      { glosses: { eng: ["one word"] }, partsOfSpeech: ["n"], fields: [], misc: [], dialects: [], restrictions: [] },
+      { glosses: { eng: ["one phrase"] }, partsOfSpeech: ["n"], fields: [], misc: [], dialects: [], restrictions: ["いちご"] },
+    ],
+  },
+  {
+    type: "term", id: "jmdict:contraction", dictionary: "jmdict", headword: "なのだ",
+    expressions: [{ text: "なのだ", script: "kana", common: true, tags: [] },
+      { text: "なんだ", script: "kana", common: false, tags: [] }],
+    readings: [{ text: "なのだ", kind: "kana" }, { text: "なんだ", kind: "kana" }],
+    senses: [{ glosses: { eng: ["it is"] }, partsOfSpeech: ["exp"], fields: [], misc: [], dialects: [], restrictions: [] }],
+  },
+  {
+    type: "term", id: "jmdict:counted-three", dictionary: "jmdict", headword: "三つ",
+    expressions: [{ text: "三つ", script: "kanji", common: true, tags: [] },
+      { text: "３つ", script: "kanji", common: false, tags: [] }],
+    readings: [{ text: "みっつ", kind: "kana" }],
+    senses: [{ glosses: { eng: ["three things"] }, partsOfSpeech: ["n"], fields: [], misc: [], dialects: [], restrictions: [] }],
+  },
   { type: "kanji", id: "kanjidic:食", char: "食", readings: { on: ["ショク"], kun: ["た.べる"] }, meanings: { eng: ["eat"], spa: ["comer"] }, strokes: 9 },
   // KANJIDIC lists pinyin/korean/vietnam before the Japanese readings, and 猫 is
   // also a word: both of which the lookup has to see past.
@@ -284,7 +308,7 @@ test("an outdated stored pack is unavailable and updates without the daily delay
   await assert.rejects(parseOffline("食べる", ["eng"], "https://shirabe.test"), /Install the Shirabe dictionary/);
 
   let replacement = manifest("replacement");
-  globalThis.fetch = (async (input: string | URL | Request) => String(input).endsWith("/current")
+  globalThis.fetch = (async (input: string | URL | Request) => (input instanceof Request ? input.url : String(input)).endsWith("/current")
     ? new Response(JSON.stringify(replacement), { headers: { "Content-Type": "application/json" } })
     : new Response(new Uint8Array(compressed), { headers: { "Content-Type": "application/gzip" } })) as typeof fetch;
   await checkDictionaryUpdate("https://api.test");
@@ -338,7 +362,7 @@ test("an authenticated stack installs personal overlays and applies source chang
     dictionaries: [{ slug: "yomitan-test", version: "1" }], sources: [],
     downloadUrl: "https://api.test/api/v1/dictionary-packs/yomitan-test/personal-v1",
   } as unknown as PackManifest;
-  let stack: DictionaryStackManifest = {
+  let stack = {
     stackFingerprint: "a".repeat(16), dictionaries: ["yomitan-test:ja", "jmdict:en"],
     dictionaryReveal: { "yomitan-test": "hover", jmdict: "show" },
     dictionaryNames: { "yomitan-test": "私の国語辞典", jmdict: "Shirabe" },
@@ -347,14 +371,28 @@ test("an authenticated stack installs personal overlays and applies source chang
   let downloads = 0;
   let privateAvailable = true;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = String(input);
-    if (url.endsWith("/api/v1/dictionary-packs")) {
-      assert.equal((init?.headers as Record<string, string>)?.Authorization, "Bearer secret");
-      return new Response(JSON.stringify(stack), { headers: { "Content-Type": "application/json" } });
+    const url = input instanceof Request ? input.url : String(input);
+    const authorization = input instanceof Request
+      ? input.headers.get("Authorization")
+      : new Headers(init?.headers).get("Authorization");
+    if (url.endsWith("/dictionary-packs")) {
+      assert.equal(authorization, "Bearer secret");
+      const sources = stack.dictionaries.reduce<Array<{ dictionary: string; languages: string[]; reveal: "show" | "hover" }>>((all, reference) => {
+        const [dictionary, language] = reference.split(":");
+        const source = all.find((item) => item.dictionary === dictionary);
+        if (source) source.languages.push(language!);
+        else all.push({ dictionary: dictionary!, languages: [language!], reveal: stack.dictionaryReveal[dictionary as keyof typeof stack.dictionaryReveal] as "show" | "hover" });
+        return all;
+      }, []);
+      return new Response(JSON.stringify({
+        dictionaryStack: { fingerprint: stack.stackFingerprint, sources },
+        packs: [{ ...stack.publicPack, kind: "base" }, ...stack.personalPacks.map((pack) => ({ ...pack, kind: "overlay" }))],
+        pendingPacks: [],
+      }), { headers: { "Content-Type": "application/json" } });
     }
     downloads += 1;
     if (url.includes("yomitan-test")) {
-      assert.equal((init?.headers as Record<string, string>)?.Authorization, "Bearer secret");
+      assert.equal(authorization, "Bearer secret");
       if (!privateAvailable) return new Response(null, { status: 503 });
       return new Response(Uint8Array.from(personalArchive), { headers: { "Content-Type": "application/gzip" } });
     }
@@ -373,7 +411,15 @@ test("an authenticated stack installs personal overlays and applies source chang
   assert.equal((await dictionaryStatus()).stackFingerprint, "a".repeat(16));
   const definition = await lookupOffline("言葉", ["jpn"], "https://shirabe.test");
   assert.equal(definition?.entry, "yomitan-test:1");
-  assert.equal(definition?.senses[0]?.dictionary, "私の国語辞典");
+  const personalSpan = await resolveParsedSpan("言葉", {
+    start: 0, length: 2, surface: "言葉", lemma: "言葉", reading: "ことば", pos: "noun", kind: "word", content: true, state: "none",
+  });
+  assert.deepEqual(personalSpan.groups, [["yomitan-test:1"]]);
+  const sharedSpan = await resolveParsedSpan("食べる", {
+    start: 0, length: 3, surface: "食べる", lemma: "食べる", reading: "たべる", pos: "verb", kind: "word", content: true, state: "none",
+  });
+  assert.deepEqual(sharedSpan.groups, [["yomitan-test:2", "jmdict:1"]]);
+  assert.equal(definition?.senses[0]?.dictionary, "yomitan-test");
   assert.equal(definition?.senses[0]?.covered, true);
   assert.deepEqual(definition?.senses[0]?.glosses, [{ lang: "jpn", tag: "JA", text: "意味" }]);
   const japaneseFirst = await lookupOffline("食べる", ["jpn", "eng"], "https://shirabe.test");
@@ -425,7 +471,7 @@ test("an authenticated stack installs personal overlays and applies source chang
     "disabling a private source takes effect even when refreshing its stored bytes fails");
   await assert.rejects(lookupEntryOffline("yomitan-test:1", "言葉", ["jpn"], "https://shirabe.test"),
     /Not available in this dictionary/, "a stale page handle cannot reopen the disabled source after a failed refresh");
-  assert.equal((await dictionaryStatus()).stackFingerprint, "d".repeat(16));
+  assert.equal((await dictionaryStatus()).stackFingerprint, "c".repeat(16));
 
   privateAvailable = true;
   stack = { ...stack, stackFingerprint: "d".repeat(16), dictionaries: ["jmdict:en"],
@@ -463,7 +509,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   let current = manifest("v1");
   let archive: Uint8Array = compressed;
   globalThis.fetch = (async (input: string | URL | Request) => {
-    const url = String(input);
+    const url = input instanceof Request ? input.url : String(input);
     return url.endsWith("/current")
       ? new Response(JSON.stringify(current), { headers: { "Content-Type": "application/json" } })
       : new Response(new Uint8Array(archive), { headers: { "Content-Type": "application/gzip" } });
@@ -553,10 +599,20 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     // `entry` is the pack's stable slug:sourceId handle, and the reason a token
     // carries one: it means the same thing here, on the web, and in the API,
     // where the lemma beside it means whichever thing each tokenizer decided.
-    lemma: "一石二鳥", entry: "jmdict:12", pos: "exp", content: true, state: "none", frequency: 80_000,
+    lemma: "一石二鳥", inflection: [], kind: "expression", entry: "jmdict:12", pos: "exp", content: true, state: "none", frequency: 80_000,
   });
   const expressionLookup = await lookupOffline("一石二鳥", ["eng"], "https://shirabe.test");
   assert.deepEqual(expressionLookup?.senses[0]?.partsOfSpeech.map((chip) => chip.label), ["Expression"]);
+  const restrictedSense = await lookupEntryOffline("jmdict:restricted-sense", "一語", ["eng"], "https://shirabe.test");
+  assert.deepEqual(restrictedSense?.senses.map((sense) => sense.glosses.map((gloss) => gloss.text)),
+    [["one word"], ["one phrase"]]);
+  assert.equal((await lookupEntryOffline("jmdict:restricted-sense", "いちご", ["eng"], "https://shirabe.test"))?.headword,
+    "一語", "the card keeps its dictionary heading when the clicked form is kana");
+  const contraction = await lookupEntryOffline("jmdict:contraction", "なんだ", ["eng"], "https://shirabe.test");
+  assert.deepEqual([contraction?.headword, contraction?.reading, contraction?.sourceForm], ["なのだ", "なのだ", "なんだ"]);
+  const parsedContraction = (await parseOffline("なんだ。", ["eng"], "https://shirabe.test"))[0];
+  assert.deepEqual([parsedContraction?.lemma, parsedContraction?.reading], ["なんだ", "なんだ"]);
+  assert.equal((await lookupEntryOffline("jmdict:counted-three", "3つ", ["eng"], "https://shirabe.test"))?.headword, "三つ");
   assert.deepEqual(expressionLookup?.senses[0]?.tags, [{ label: "Yojijukugo", code: "yoji", category: "misc" }],
     "a qualifier keeps its family, which is what colours it apart from the part of speech");
   assert.equal((await lookupOffline("明日天気", ["eng"], "https://shirabe.test"))?.headword, "明日天気",
@@ -707,12 +763,12 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   const intlExact = expectedSurfaces.filter((surface) => intlWords.includes(surface)).length;
   context.diagnostic(`segmentation accuracy: dictionary-prefix ${expectedSurfaces.length}/${expectedSurfaces.length} exact inflected forms; Intl.Segmenter ${intlExact}/${expectedSurfaces.length}`);
   const benchmarkStartedAt = performance.now();
-  for (let iteration = 0; iteration < 50; iteration += 1) await parseOffline(corpus, ["eng"], "https://shirabe.test");
+  for (let iteration = 0; iteration < 5; iteration += 1) await parseOffline(corpus, ["eng"], "https://shirabe.test");
   const benchmarkMs = performance.now() - benchmarkStartedAt;
   // Diagnostic only. Wall-clock on unknown CI hardware can't be asserted without
   // either flaking or being so loose it passes a 20x regression: which is what
   // the old `< 10_000` bound did for a run that takes a few hundred ms.
-  context.diagnostic(`dictionary-prefix benchmark: 50 representative sentences in ${benchmarkMs.toFixed(1)} ms`);
+  context.diagnostic(`dictionary-prefix benchmark: 5 representative sentences in ${benchmarkMs.toFixed(1)} ms`);
 
   let routineRequests = 0;
   globalThis.fetch = (async () => {
@@ -725,7 +781,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
 
   current = manifest("v2", "0".repeat(64));
   globalThis.fetch = (async (input: string | URL | Request) => {
-    const url = String(input);
+    const url = input instanceof Request ? input.url : String(input);
     return url.endsWith("/current")
       ? new Response(JSON.stringify(current), { headers: { "Content-Type": "application/json" } })
       : new Response(new Uint8Array(archive), { headers: { "Content-Type": "application/gzip" } });
@@ -792,8 +848,10 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   await assert.rejects(installDictionary("https://api.test"), /9\.0\.0 or newer/i);
   assert.equal((await dictionaryStatus()).revision, "v1");
 
-  globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-    init?.signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true });
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    const signal = input instanceof Request ? input.signal : init?.signal;
+    if (signal?.aborted) return reject(new DOMException("cancelled", "AbortError"));
+    signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true });
   })) as typeof fetch;
   const pending = installDictionary("https://api.test");
   cancelDictionaryInstall();
@@ -804,7 +862,7 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal((await dictionaryStatus()).installed, false);
   current = manifest("v3");
   archive = compressed;
-  globalThis.fetch = (async (input: string | URL | Request) => String(input).endsWith("/current")
+  globalThis.fetch = (async (input: string | URL | Request) => (input instanceof Request ? input.url : String(input)).endsWith("/current")
     ? new Response(JSON.stringify(current), { headers: { "Content-Type": "application/json" } })
     : new Response(new Uint8Array(archive), { headers: { "Content-Type": "application/gzip" } })) as typeof fetch;
   await checkDictionaryUpdate("https://api.test");

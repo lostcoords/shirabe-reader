@@ -17,6 +17,7 @@ const manifestVersion = JSON.parse(readFileSync(new URL("../manifest.base.json",
 // another test's still-pending transactions. All of them share one process and
 // one installed pack, so the 58 MB pack is scanned once rather than per corpus.
 const suites = [
+  { name: "telemetry-permission.test.ts", entry: "test/telemetry-permission.test.ts", outfile: join(dir, "telemetry-permission.cjs") },
   { name: "background-parity.test.ts", entry: "test/background-parity.test.ts", outfile: join(dir, "background-parity.cjs") },
   { name: "background-private-startup.test.ts", entry: "test/background-private-startup.test.ts", outfile: join(dir, "background-private-startup.cjs") },
   { name: "all.test.ts", entry: "test/all.test.ts", outfile: join(dir, "tests.cjs") },

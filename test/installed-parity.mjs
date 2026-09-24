@@ -53,7 +53,10 @@ const manifest = {
   builtAt: new Date().toISOString(), artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
   bytes: payload.byteLength, sha256: createHash("sha256").update(payload).digest("hex"),
   counts: { terms: 3 + contextTerms.length, kanji: 0, sentences: 0 }, languages: ["eng", "spa"],
-  dictionaries: ["jmdict", "jmnedict"].map((slug) => ({ slug, version: "installed-parity" })), modifications: [], sources: [],
+  dictionaries: [
+    { slug: "jmdict", version: "installed-parity", languages: ["eng", "spa"] },
+    { slug: "jmnedict", version: "installed-parity", languages: ["eng"] },
+  ], modifications: [], sources: [],
   audio: { baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f",
     engineVersion: 1, salt: "test-salt", defaultVoice: "male", voices: { male: 1628969216, female: 345585728 } },
 };
@@ -66,15 +69,17 @@ const personalPayload = gzipSync([
 ].map((row) => JSON.stringify(row)).join("\n") + "\n");
 const stackFingerprint = "a".repeat(16);
 let privateDownloadAuthorized = false;
+let onlineParseRequests = 0;
+const onlineParseTexts = [];
+let parsePackRevision = manifest.contentRevision;
 const parsedWord = (surface, lemma, sourceId, position = 0, reading = lemma) => ({
-  position, length: surface.length, surface, lemma, reading, pos: "n", kind: "word",
-  entry: { dictionary: "jmdict", sourceId }, state: "none",
+  startOffset: position, endOffset: position + surface.length, surface, lemma, reading, partOfSpeech: "noun", kind: "word",
 });
 const parseFixture = (text) => {
   if (text === "ﾊﾞﾅﾅ。") return [parsedWord("ﾊﾞﾅﾅ", "バナナ", "banana"),
-    { position: 4, length: 1, surface: "。", lemma: "。", kind: "symbol" }];
+    { startOffset: 4, endOffset: 5, surface: "。", lemma: "。", kind: "symbol" }];
   if (text === "上手く。") return [parsedWord("上手く", "上手い", "well", 0, "うまく"),
-    { position: 3, length: 1, surface: "。", lemma: "。", kind: "symbol" }];
+    { startOffset: 3, endOffset: 4, surface: "。", lemma: "。", kind: "symbol" }];
   const sourceId = text.startsWith("学校") ? "1578850" : "1587040";
   return [parsedWord("いった", sourceId === "1578850" ? "いく" : "いう", sourceId, text.indexOf("いった"))];
 };
@@ -89,28 +94,33 @@ const server = createServer(async (request, response) => {
   } else if (request.url === "/api/v1/me") {
     assert.equal(request.headers.authorization, "Bearer installed-token");
     response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify({ user: { displayName: "Reader" }, entitlement: { srs: true }, preferences: {
-      languages: ["ja", "en"], dictionaries: ["my-kokugo:ja", "jmdict:en"], stackFingerprint,
-      dictionaryReveal: { "my-kokugo": "hover", jmdict: "show" },
-      dictionaryNames: { "my-kokugo": "私の国語辞典", jmdict: "Shirabe" },
-      availableDictionaries: [
-        { slug: "my-kokugo", name: "私の国語辞典", languages: ["ja"] },
-        { slug: "jmdict", name: "Shirabe", languages: ["en", "es"] },
-      ],
-    } }));
+    response.end(JSON.stringify({ user: { displayName: "Reader" }, entitlement: { srs: true } }));
+  } else if (request.url === "/api/v1/dictionary-stack") {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ dictionaryStack: { fingerprint: stackFingerprint, sources: [
+      { dictionary: "my-kokugo", languages: ["ja"], reveal: "hover" },
+      { dictionary: "jmdict", languages: ["en"], reveal: "show" },
+    ] } }));
+  } else if (request.url === "/api/v1/dictionaries") {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ dictionaries: [
+      { slug: "my-kokugo", name: "私の国語辞典", kind: "definition", languages: ["ja"] },
+      { slug: "jmdict", name: "Shirabe", kind: "definition", languages: ["en", "es"] },
+    ] }));
   } else if (request.url === "/api/v1/dictionary-packs") {
     assert.equal(request.headers.authorization, "Bearer installed-token");
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({
-      stackFingerprint, dictionaries: ["my-kokugo:ja", "jmdict:en"],
-      dictionaryReveal: { "my-kokugo": "hover", jmdict: "show" },
-      dictionaryNames: { "my-kokugo": "私の国語辞典", jmdict: "Shirabe" },
-      publicPack: { ...manifest, downloadUrl: `${origin}/dictionary.gz` },
-      personalPacks: [{ ...manifest, contentRevision: "private-installed", artifact: "personal.ndjson.gz",
+      dictionaryStack: { fingerprint: stackFingerprint, sources: [
+        { dictionary: "my-kokugo", languages: ["ja"], reveal: "hover" },
+        { dictionary: "jmdict", languages: ["en"], reveal: "show" },
+      ] },
+      packs: [{ ...manifest, kind: "base", downloadUrl: `${origin}/dictionary.gz` },
+        { ...manifest, kind: "overlay", contentRevision: "private-installed", artifact: "personal.ndjson.gz",
         bytes: personalPayload.byteLength, sha256: createHash("sha256").update(personalPayload).digest("hex"),
         counts: { terms: 1, kanji: 0, sentences: 0 }, languages: ["jpn"],
         dictionaries: [{ slug: "my-kokugo", version: "1" }], sources: [],
-        downloadUrl: `${origin}/private.gz` }],
+        downloadUrl: `${origin}/private.gz` }], pendingPacks: [],
     }));
   } else if (request.url === "/private.gz") {
     assert.equal(request.headers.authorization, "Bearer installed-token");
@@ -118,15 +128,24 @@ const server = createServer(async (request, response) => {
     response.setHeader("Content-Type", "application/gzip");
     response.end(personalPayload);
   } else if (request.url === "/api/v1/parse") {
-    assert.equal(request.headers.authorization, "Bearer installed-token");
+    onlineParseRequests += 1;
+    if (request.headers.authorization) assert.equal(request.headers.authorization, "Bearer installed-token");
     let body = "";
     for await (const chunk of request) body += chunk;
-    const { texts } = JSON.parse(body);
+    const { texts, sources: requestedSources } = JSON.parse(body);
+    onlineParseTexts.push(texts);
     response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify({ tokens: texts.map(parseFixture) }));
+    const sources = request.headers.authorization
+      ? ["my-kokugo:ja", "jmdict:en"]
+      : requestedSources;
+    if (!request.headers.authorization) assert.deepEqual(sources, ["jmdict:en", "jmdict:es", "jmnedict:en"]);
+    response.end(JSON.stringify({ stackFingerprint: request.headers.authorization ? stackFingerprint : manifest.contentRevision,
+      packRevision: parsePackRevision, sources, results: texts.map((text) => ({ text, tokens: parseFixture(text) })) }));
   } else {
     response.setHeader("Content-Type", "text/html; charset=utf-8");
-    response.end(`<!doctype html><title>Installed parity</title><p>${request.url === "/adverb" ? "上手く。" : "ﾊﾞﾅﾅ。"}</p>`);
+    response.end(request.url === "/subtitle"
+      ? '<!doctype html><title>Installed parity</title><div class="asbplayer-offscreen"><div>バナナ。</div></div>'
+      : `<!doctype html><title>Installed parity</title><p>${request.url === "/adverb" ? "上手く。" : "ﾊﾞﾅﾅ。"}</p>`);
   }
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -150,8 +169,7 @@ try {
   await page.evaluate(async (apiBase) => {
     const { config = {} } = await chrome.storage.local.get("config");
     await chrome.storage.local.set({ config: { ...config, apiBase, errorReports: false, scanModifier: "none",
-      accessToken: "installed-token", refreshToken: "installed-refresh",
-      accessTokenExpiresAt: new Date(Date.now() + 3600000).toISOString(), scopes: ["READ_DICTIONARY"] } });
+    } });
   }, origin);
   const installed = await page.evaluate(() => chrome.runtime.sendMessage({ type: "installDictionary" }));
   assert.equal(installed.ok, true, JSON.stringify(installed));
@@ -164,6 +182,9 @@ try {
   assert.equal(parsed.tokens[0][0].entry, "jmdict:banana");
   assert.equal(parsed.tokens[0][0].surface, "ﾊﾞﾅﾅ");
   assert.equal(parsed.tokens[0][1].start, 4);
+  const enhanced = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatchOnline", texts: ["ﾊﾞﾅﾅ。"] }));
+  assert.equal(enhanced.accepted, true, JSON.stringify(enhanced));
+  assert.equal(enhanced.tokens[0][0].entry, "jmdict:banana");
   const contextual = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatch",
     texts: ["学校にいった。", "先生にいった。", "「行く」と学校にいった。"] }));
   assert.equal(contextual.ok, true, JSON.stringify(contextual));
@@ -187,6 +208,8 @@ try {
   await article.waitForLoadState();
   article.on("console", (message) => console.log(`Content: ${message.text()}`));
   await article.waitForFunction(() => document.documentElement.hasAttribute("data-sb-marked"));
+  await article.waitForTimeout(750);
+  assert.equal(await article.locator("p .sb-word").count(), 0, "opening a page leaves its text untouched until explicitly parsed");
   await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "parsePage" }), tab.id);
   try {
     await article.locator(".sb-word[data-entry='jmdict:banana']").waitFor({ timeout: 15000 });
@@ -208,11 +231,26 @@ try {
   await article.locator(".sb-host .sb-visible").waitFor({ timeout: 15000 });
   assert.equal(await word.getAttribute("data-entry"), "jmdict:banana");
   assert.equal(await word.getAttribute("data-lemma"), "バナナ");
+  parsePackRevision = "stale-pack";
+  const stale = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatchOnline", texts: ["ﾊﾞﾅﾅ。"] }));
+  assert.equal(stale.accepted, false);
+  assert.equal(await word.getAttribute("data-entry"), "jmdict:banana");
+  parsePackRevision = manifest.contentRevision;
   const pickedWord = await word.evaluate((element) => ({
     lemma: element.dataset.lemma, surface: element.dataset.surface, reading: element.dataset.reading, entry: element.dataset.entry,
   }));
+  assert.deepEqual(await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "togglePagePause" }), tab.id), { paused: true });
+  assert.equal(await article.locator("html").evaluate((element) => element.classList.contains("sb-reader-off")), true);
+  assert.deepEqual(await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "togglePagePause" }), tab.id), { paused: false });
+  assert.equal(await article.locator("html").evaluate((element) => element.classList.contains("sb-reader-off")), false);
   await article.goto(`${origin.replace("127.0.0.1", "localhost")}/adverb`);
   await article.waitForFunction(() => document.documentElement.hasAttribute("data-sb-marked"));
+  const rawWord = await article.locator("p").boundingBox();
+  assert.ok(rawWord);
+  await article.mouse.move(rawWord.x + 2, rawWord.y + rawWord.height / 2);
+  await article.locator(".sb-host .sb-visible").waitFor({ timeout: 15000 });
+  assert.equal(await article.locator(".sb-word").count(), 0, "hover lookup leaves the rest of the page untouched");
+  await article.keyboard.press("Escape");
   await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "parsePage" }), tab.id);
   const adverbWord = article.locator(".sb-word[data-entry='jmdict:well']");
   await adverbWord.waitFor({ timeout: 15000 });
@@ -220,13 +258,20 @@ try {
   assert.equal(await adverbWord.getAttribute("data-surface"), "上手く");
   await adverbWord.hover();
   await article.locator(".sb-host .sb-visible").waitFor({ timeout: 15000 });
-  assert.equal(await article.locator(".sb-host .sb-gloss-row").innerText(), "well");
+  assert.equal(await article.locator(".sb-host .sb-gloss-row:visible").innerText(), "well");
+
+  const beforeSubtitle = onlineParseRequests;
+  await article.goto(`${origin.replace("127.0.0.1", "localhost")}/subtitle`);
+  await article.locator(".asbplayer-offscreen .sb-word[data-entry='jmdict:banana']").waitFor({ timeout: 15000 });
+  await article.locator(".asbplayer-offscreen > div").evaluate((element) => { element.textContent = "上手く。"; });
+  await article.locator(".asbplayer-offscreen .sb-word[data-entry='jmdict:well']").waitFor({ timeout: 15000 });
+  assert.equal(onlineParseRequests, beforeSubtitle, `live subtitle cues stay local: ${JSON.stringify(onlineParseTexts)}`);
 
   await page.evaluate(async ({ accessToken, stackFingerprint }) => {
     const { config = {} } = await chrome.storage.local.get("config");
     await chrome.storage.local.set({ config: { ...config, accessToken, refreshToken: "installed-refresh",
       accessTokenExpiresAt: new Date(Date.now() + 3600000).toISOString(), accountCheckedAt: "",
-      scopes: ["READ_ACCOUNT", "READ_DICTIONARY", "WRITE_ACCOUNT"], dictionaryStackFingerprint: stackFingerprint } });
+      scopes: ["user:profile:read", "user:dictionary:read", "user:preferences:read"], dictionaryStackFingerprint: stackFingerprint } });
   }, { accessToken: "installed-token", stackFingerprint });
   assert.equal((await page.evaluate(() => chrome.runtime.sendMessage({ type: "status" }))).status.connected, true);
   const personalInstall = await page.evaluate(() => chrome.runtime.sendMessage({ type: "installDictionary" }));

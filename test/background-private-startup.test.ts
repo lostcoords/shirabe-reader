@@ -29,7 +29,7 @@ test("an anonymous background start purges an orphaned private dictionary before
   });
 
   const { packPayload, testPackManifest } = await import("./support/pack.js");
-  const { installDictionary } = await import("../src/common/offline-dictionary.js");
+  const { installDictionary, setActiveDictionaryStack } = await import("../src/common/offline-dictionary.js");
   const { DEFAULTS } = await import("../src/common/config.js");
   const term = (id: string, writing: string, dictionary: string) => JSON.stringify({
     type: "term", id, dictionary, headword: writing,
@@ -53,12 +53,14 @@ test("an anonymous background start purges an orphaned private dictionary before
     downloadUrl: "https://packs.test/private.gz",
   });
   const stack = {
-    stackFingerprint: "b".repeat(16), dictionaries: ["yomitan-test:eng", "jmdict:eng"],
-    dictionaryReveal: {}, dictionaryNames: { "yomitan-test": "Private startup test" },
-    publicPack: publicManifest, personalPacks: [privateManifest],
+    dictionaryStack: { fingerprint: "b".repeat(16), sources: [
+      { dictionary: "yomitan-test", languages: ["en"], reveal: "show" },
+      { dictionary: "jmdict", languages: ["en"], reveal: "show" },
+    ] },
+    packs: [{ ...publicManifest, kind: "base" }, { ...privateManifest, kind: "overlay" }], pendingPacks: [],
   };
   globalThis.fetch = (async (input: unknown) => {
-    const url = String(input);
+    const url = input instanceof Request ? input.url : String(input);
     if (url.endsWith("/api/v1/dictionary-packs")) {
       return new Response(JSON.stringify(stack), { headers: { "Content-Type": "application/json" } });
     }
@@ -69,6 +71,7 @@ test("an anonymous background start purges an orphaned private dictionary before
     })), 100));
   }) as typeof fetch;
   await installDictionary("https://api.test", "Bearer access-token");
+  await setActiveDictionaryStack(["yomitan-test:en"], {}, {}, "b".repeat(16));
   Object.assign(storage, { config: { ...DEFAULTS, apiBase: "https://api.test", errorReports: false } });
 
   await import("../src/background/background.js");

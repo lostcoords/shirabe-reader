@@ -27,11 +27,13 @@ try {
   });
   const outfile = join(dir, "parity.cjs");
   const browserBundle = join(dir, "browser.js");
-  await build({
-    entryPoints: ["test/search-parity-browser.ts"], bundle: true, platform: "browser", format: "iife",
-    outfile: browserBundle, logLevel: "silent", define: { __EXTENSION_VERSION__: JSON.stringify(manifest.version) },
-    plugins: snapshot,
-  });
+  if (process.env.PARITY_NO_BROWSER !== "1") {
+    await build({
+      entryPoints: ["test/search-parity-browser.ts"], bundle: true, platform: "browser", format: "iife",
+      outfile: browserBundle, logLevel: "silent", define: { __EXTENSION_VERSION__: JSON.stringify(manifest.version) },
+      plugins: snapshot,
+    });
+  }
   await build({
     entryPoints: ["test/search-parity-runner.ts"], bundle: true, platform: "node",
     format: "cjs", outfile, logLevel: "silent",
@@ -41,7 +43,9 @@ try {
       __SHIRABE_OFF_HOSTS__: JSON.stringify([]),
     },
   });
-  execFileSync(process.execPath, [outfile, webOutput], { stdio: "inherit", env: { ...process.env, PARITY_BROWSER_BUNDLE: browserBundle } });
+  execFileSync(process.execPath, [outfile, webOutput], { stdio: "inherit", env: {
+    ...process.env, PARITY_BROWSER_BUNDLE: process.env.PARITY_NO_BROWSER === "1" ? "" : browserBundle,
+  } });
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

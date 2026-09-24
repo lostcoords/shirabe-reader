@@ -18,11 +18,11 @@
     "identity"
   ],
   "host_permissions": [
+    "<all_urls>",
     "https://shirabe.org/*",
     "https://cdn.shirabe.org/*",
     "https://t.shirabe.org/*"
   ],
-  "optional_host_permissions": ["<all_urls>"],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

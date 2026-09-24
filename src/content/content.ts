@@ -25,8 +25,7 @@ import { ensureFurigana } from "./word.js";
 import { installClientReporter } from "../common/client-reporter.js";
 
 // One frame can run this content script twice: the manifest injects it on
-// <all_urls> and the background *also* registers/executes it for user-enabled
-// hosts (and `web-ext` re-injects it on a dev reload). Each copy is its own
+// <all_urls>, and the toolbar or `web-ext` can re-inject it. Each copy is its own
 // module instance that builds its own popup/toast host and its own
 // document listeners, so a second one stacks an orphaned popup the first can
 // never collapse: the "popup won't collapse" bug. Content scripts from the
@@ -70,6 +69,7 @@ function boot(): void {
   let mode: "auto" | "off" = "auto";
   let rule: HostRule | undefined;
   let parsed = false; // has this page been parsed? (don't re-offer the button after)
+  let pausedForPage = false;
   let localDictionaryReady = false;
   const isTopFrame = window === window.top;
 
@@ -106,11 +106,20 @@ function boot(): void {
       rules,
       apiBase: config.apiBase,
     });
-    mode = resolution.mode;
+    mode = pausedForPage ? "off" : resolution.mode;
     rule = resolution.rule;
     document.documentElement.classList.toggle("sb-reader-off", mode === "off");
     const plainHere = config.plainHosts.some((pattern) => matchUrl(normalizePattern(pattern), location.href));
     document.documentElement.classList.toggle("sb-cues-off", !config.highlighting || plainHere);
+
+    if (pausedForPage) {
+      hovered = null;
+      pendingPointer = null;
+      dismissPopup();
+      setParsingPaused(true);
+      stopMetrics();
+      return;
+    }
 
     if (mode === "off") {
       hovered = null;
@@ -128,7 +137,7 @@ function boot(): void {
     // asbplayer injects subtitle text into arbitrary video hosts (and iframes).
     // Always watch when connected: no-op until `.asbplayer-offscreen` appears.
     // Not exclusive: page scanning and custom adapters still run in the top frame.
-    if (isConnected(config) && mode !== "off") startAsbplayer(showFurigana);
+    if (mode !== "off") startAsbplayer(showFurigana);
 
     // Subframes only run the asbplayer watcher (above). Host-rule page parsing
     // stays top-frame so nested ads/widgets don't get UI.
@@ -136,14 +145,7 @@ function boot(): void {
       return;
     }
 
-    // Connected reader pages parse on load. Offline mode stays cursor-only;
-    // the hotkey and context menu re-parse online text. A rule may name a
-    // dedicated custom parser (YouTube captions,
-    // Netflix, Mokuro, …) in place of the generic page parser.
-    if (mode === "auto" && isConnected(config) && !parsed) {
-      if (rule?.custom) startCustomParser(rule.custom);
-      else parsePage();
-    }
+    if (mode === "auto" && !parsed && rule?.custom) startCustomParser(rule.custom);
   }
 
   function startCustomParser(custom: NonNullable<HostRule["custom"]>): void {
@@ -368,19 +370,16 @@ function boot(): void {
     return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
   }
 
-  // ── Online parsing: on-demand from the menu/popup/hotkey, plus dynamic content
+  // ── Parsing: on-demand from the menu/popup/hotkey, plus dynamic content
   // Parse the selection when there is one, otherwise the whole page.
   function initParse(): void {
-    if (!isConnected(current ?? DEFAULTS)) {
-      toast("Connect to Shirabe to parse page text.", false);
-      return;
-    }
     const selection = window.getSelection()?.toString();
     if (selection && selection.trim()) parseSelection();
     else parsePage();
   }
 
   function parsePage(): void {
+    if (mode === "off") return;
     setParsingPaused(false);
     parsed = true;
     const root = rule?.parse ? (document.querySelector(rule.parse) ?? document.body) : document.body;
@@ -394,10 +393,7 @@ function boot(): void {
   }
 
   function parseSelection(): void {
-    if (!isConnected(current ?? DEFAULTS)) {
-      toast("Connect to Shirabe to parse selected text.", false);
-      return;
-    }
+    if (mode === "off") return;
     // The command is broadcast to every frame in the tab, and `getRangeAt(0)`
     // throws where there is no selection: which is all of them but one.
     const selection = window.getSelection();
@@ -408,7 +404,17 @@ function boot(): void {
     if (root) parse(root, showFurigana, ruleOptions()); // eager: a selection is parsed now
   }
 
-  ext.runtime.onMessage.addListener((message: { command?: string }) => {
+  ext.runtime.onMessage.addListener((message: { command?: string }, _sender, respond) => {
+    if (message.command === "pagePauseState") {
+      respond({ paused: pausedForPage });
+      return;
+    }
+    if (message.command === "togglePagePause") {
+      pausedForPage = !pausedForPage;
+      apply(current ?? DEFAULTS);
+      respond({ paused: pausedForPage });
+      return;
+    }
     // Broadcast reaches every frame; page parsing stays top-frame so nested ads
     // and widgets don't get decorated, matching the `apply()` guard.
     if (message.command === "parsePage") { if (isTopFrame) parsePage(); }

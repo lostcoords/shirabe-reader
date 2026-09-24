@@ -27,6 +27,7 @@
         </span>
         <span class="reader-switch" aria-hidden="true"><span></span></span>
       </button>
+      <button id="pagePause" class="ghost" type="button" hidden>Pause on this page</button>
 
       <!-- ── Lookup: this page, and what you can read of it ─────────────── -->
       <section id="panel-lookup" class="panel" role="tabpanel" aria-labelledby="tab-lookup">
@@ -66,43 +67,33 @@
           <p id="iPlusOne" class="i-plus-one" hidden><span class="i-plus-one-badge">i+1</span><span id="iPlusOneLabel"></span></p>
         </section>
 
-        <section class="card language-card" aria-labelledby="lookupScanModifierLabel">
-          <div>
-            <p id="lookupScanModifierLabel" class="account-line">Open popup</p>
-            <p class="muted">When the dictionary popup appears over a word.</p>
+        <section class="settings-list" aria-label="Page settings">
+          <div class="setting-row">
+            <label class="setting-label" for="lookupScanModifier">Open popup</label>
+            <select id="lookupScanModifier">
+              <option value="none">Always on hover</option>
+              <option value="alt">Hold Alt / Option</option>
+              <option value="ctrl">Hold Ctrl</option>
+              <option value="shift">Hold Shift</option>
+              <option value="meta">Hold ⌘ Cmd</option>
+            </select>
           </div>
-          <label class="sr-only" for="lookupScanModifier">Open popup</label>
-          <select id="lookupScanModifier">
-            <option value="none">Always on hover</option>
-            <option value="alt">Hold Alt / Option</option>
-            <option value="ctrl">Hold Ctrl</option>
-            <option value="shift">Hold Shift</option>
-            <option value="meta">Hold ⌘ Cmd</option>
-          </select>
-        </section>
-        <section class="card language-card" aria-labelledby="lookupHighlightingLabel">
-          <div>
-            <p id="lookupHighlightingLabel" class="account-line">Highlighting</p>
-            <p class="muted">Colour words by how well you know them. Off leaves the page as it was, and lookup still works.</p>
+          <div class="setting-row">
+            <label class="setting-label" for="lookupHighlighting">Highlighting</label>
+            <select id="lookupHighlighting">
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </select>
           </div>
-          <label class="sr-only" for="lookupHighlighting">Highlighting</label>
-          <select id="lookupHighlighting">
-            <option value="on">On</option>
-            <option value="off">Off</option>
-          </select>
-        </section>
-        <section class="card language-card" aria-labelledby="lookupFuriganaLabel">
-          <div>
-            <p id="lookupFuriganaLabel" class="account-line">Furigana</p>
-            <p class="muted">Choose when readings appear above words.</p>
+          <div class="setting-row">
+            <label class="setting-label" for="lookupFuriganaMode">Furigana</label>
+            <select id="lookupFuriganaMode">
+              <option value="all">All words</option>
+              <option value="unknown">Unknown words</option>
+              <option value="hover">On hover</option>
+              <option value="off">Off</option>
+            </select>
           </div>
-          <label class="sr-only" for="lookupFuriganaMode">Furigana</label>
-          <select id="lookupFuriganaMode">
-            <option value="all">All words</option>
-            <option value="unknown">Unknown words</option>
-            <option value="hover">On hover</option>
-            <option value="off">Off</option>
-          </select>
         </section>
       </section>
 
@@ -111,7 +102,7 @@
         <section id="dictionary" class="card status-card" aria-label="Offline dictionary">
           <div data-dictionary-state="missing" hidden>
             <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-book" /></svg></span><p class="account-line">Offline dictionary</p></div>
-            <p class="muted">Install Shirabe's public pack for private, offline lookup under the cursor. Connected accounts can also parse pages online.</p>
+            <p class="muted">Install Shirabe's public pack for local lookup and parsing. Stable page text can also use Shirabe's free online parser without an account.</p>
             <button id="installDictionary" class="primary"><svg><use href="#icon-document" /></svg>Install dictionary</button>
           </div>
           <div data-dictionary-state="installing" hidden>
@@ -135,18 +126,12 @@
             <button id="retryDictionary" class="primary">Try again</button>
           </div>
         </section>
-        <section class="card language-card" aria-labelledby="definitionLanguageLabel">
-          <div>
-            <p id="definitionLanguageLabel" class="account-line">Definition language</p>
-            <p class="muted">Choose which definitions appear first in offline lookup.</p>
+        <section class="settings-list" aria-label="Dictionary settings">
+          <div class="setting-row">
+            <span class="setting-label">Definition stack</span>
+            <span id="dictionaryStackSummary" class="muted"></span>
           </div>
-          <label class="sr-only" for="dictionaryLanguages">Definition language</label>
-          <select id="dictionaryLanguages">
-            <option value="eng">English</option>
-            <option value="spa">Español</option>
-            <option value="spa,eng">Español, then English</option>
-            <option value="eng,spa">English, then Español</option>
-          </select>
+          <button id="editDictionaryStack" class="ghost" type="button">Edit dictionaries and languages</button>
         </section>
       </section>
 
@@ -169,8 +154,7 @@
             <button class="disconnect ghost">Disconnect</button>
           </div>
           <div data-state="disconnected" hidden>
-            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-user" /></svg></span><p class="account-line">Not connected</p></div>
-            <button id="connect" class="primary">Connect account <svg><use href="#icon-arrow" /></svg></button>
+            <div class="account-connect"><img src="../icons/logo_32.png" alt="" /><button id="connect" class="primary">Connect an account <svg><use href="#icon-arrow" /></svg></button></div>
           </div>
         </section>
       </section>

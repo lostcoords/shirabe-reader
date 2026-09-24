@@ -1,9 +1,10 @@
 import { ApiError, ShirabeApi, type Tokens } from "../common/api.js";
 import { ext, usesPromiseMessageResponses } from "../common/browser.js";
 import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config } from "../common/config.js";
+import { glossLanguagesFrom } from "@shirabe-org/card/word-card/languages";
 import { isR2AudioUrl } from "@shirabe-org/card/word-card/audio";
-import { normalizePattern, refreshRemoteHostRules } from "../common/host-rules.js";
-import { cancelDictionaryInstall, checkDictionaryUpdate, deactivatePrivateDictionaries, disablePrivateDictionaryLookups, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupEntryOffline, lookupKanjiOffline, lookupOffline, OfflineLookupUnavailableError, removeDictionary, resumeInterruptedDictionaryInstall } from "../common/offline-dictionary.js";
+import { refreshRemoteHostRules } from "../common/host-rules.js";
+import { cancelDictionaryInstall, checkDictionaryUpdate, clearLocalDictionaryStack, deactivatePrivateDictionaries, disablePrivateDictionaryLookups, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupEntryOffline, lookupGroupOffline, lookupKanjiOffline, lookupOffline, OfflineLookupUnavailableError, parseOffline, removeDictionary, resolveParsedSpan, resumeInterruptedDictionaryInstall, setActiveDictionaryStack } from "../common/offline-dictionary.js";
 import type { Deck, Failure, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
 import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers, setTelemetryEnabled } from "./telemetry.js";
@@ -65,13 +66,19 @@ async function initializeBackground(): Promise<void> {
   });
   if (!isConnected(config)) {
     await traceBackgroundTask("remove private dictionaries for signed-out reader", deactivatePrivateDictionaries);
+    await clearLocalDictionaryStack();
   }
+  if (config.dictionaryStack.length) {
+    await traceBackgroundTask("apply local dictionary stack", () => setActiveDictionaryStack(
+      config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint));
+  }
+  if (isConnected(config)) await refreshAccount(true);
   // Best-effort refresh of the server-maintained reader site list, so we can
   // add supported sites without shipping an extension update. No-ops if offline
   // or the endpoint isn't live yet (the bundled built-ins stay in charge).
   void traceBackgroundTask("refresh remote host rules", () => refreshRemoteHostRules(config.apiBase));
   void traceBackgroundTask("check dictionary update", checkAndNotifyDictionary);
-  void traceBackgroundTask("sync registered content scripts", () => syncRegisteredContentScript(config));
+  void ext.scripting.unregisterContentScripts({ ids: ["shirabe-auto-sites"] }).catch(() => undefined);
   // Popup close can kill an MV3 worker mid-import; pick up the persisted job.
   void dictionaryAuthorization().then((authorization) => resumeInterruptedDictionaryInstall(config.apiBase, authorization));
 }
@@ -102,34 +109,7 @@ onConfigChanged((c) => {
   config = c;
   api?.update(c);
   setTelemetryEnabled(c.errorReports);
-  void syncRegisteredContentScript(c);
 });
-
-const CONTENT_SCRIPT_ID = "shirabe-auto-sites";
-
-async function syncRegisteredContentScript(current: Config): Promise<void> {
-  await ext.scripting.unregisterContentScripts({ ids: [CONTENT_SCRIPT_ID] }).catch(() => undefined);
-  const matches: string[] = [];
-  for (const raw of current.enabledHosts) {
-    const pattern = normalizePattern(raw);
-    const candidates = pattern.startsWith("*://")
-      ? [`https://${pattern.slice(4)}`, `http://${pattern.slice(4)}`]
-      : [pattern];
-    for (const candidate of candidates) {
-      if (candidate && await ext.permissions.contains({ origins: [candidate] })) matches.push(candidate);
-    }
-  }
-  if (!matches.length) return;
-  await ext.scripting.registerContentScripts([{
-    id: CONTENT_SCRIPT_ID,
-    matches: [...new Set(matches)],
-    js: ["content.js"],
-    css: ["content.css"],
-    allFrames: true,
-    persistAcrossSessions: true,
-    runAt: "document_idle",
-  }]);
-}
 
 async function sendToTab(tabId: number, message: unknown): Promise<void> {
   try {
@@ -149,13 +129,15 @@ async function notifyDictionaryChanged(): Promise<void> {
 let dictionaryRepair: Promise<void> | null = null;
 
 async function dictionaryAuthorization(): Promise<string | undefined> {
-  return isConnected(config) && config.scopes.includes("READ_ACCOUNT") ? api.authorization() : undefined;
+  return isConnected(config) && config.scopes.includes("user:dictionary:read") ? api.authorization() : undefined;
 }
 
 function repairDictionaryInstallation(): Promise<void> {
   if (dictionaryRepair) return dictionaryRepair;
   dictionaryRepair = dictionaryAuthorization().then((authorization) => installDictionary(config.apiBase, authorization))
     .then(async () => {
+      if (config.dictionaryStack.length) await setActiveDictionaryStack(
+        config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
       lookupCache.clear();
       await notifyDictionaryChanged();
     })
@@ -176,6 +158,8 @@ async function checkAndNotifyDictionary(): Promise<void> {
   } else {
     await checkDictionaryUpdate(config.apiBase, authorization, () => connectionEpoch === dictionaryConnectionEpoch);
   }
+  if (config.dictionaryStack.length) await setActiveDictionaryStack(
+    config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
   if (connectionEpoch !== dictionaryConnectionEpoch) return;
   const after = await dictionaryStatus();
   if (before.revision !== after.revision || before.stackFingerprint !== after.stackFingerprint || before.installed !== after.installed) {
@@ -199,7 +183,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       const control = { cancelled: false };
       if (request.requestId != null) activeParses.set(request.requestId, control);
       try {
-        const tokens = await parseBatchOnline(request.texts, control);
+        const tokens = await parseBatchLocal(request.texts, control);
         return { ok: true, type: "parseBatch", tokens };
       } catch (error) {
         captureMeasurement("parse_failed", 1);
@@ -207,6 +191,10 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       } finally {
         if (request.requestId != null) activeParses.delete(request.requestId);
       }
+    }
+    case "parseBatchOnline": {
+      const tokens = await parseBatchOnline(request.texts);
+      return { ok: true, type: "parseBatchOnline", accepted: tokens !== null, tokens: tokens ?? [] };
     }
     case "lookup": {
       try {
@@ -243,6 +231,26 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
         return { ok: true, type: "lookupEntry", definition: null };
       }
     }
+    case "lookupParsed": {
+      const alternatives = await hydrateGroups(request.groups, request.surface);
+      const definition = alternatives.find((candidate) => candidate.entry === request.entry) ?? alternatives[0] ?? null;
+      return { ok: true, type: "lookupParsed", definition, alternatives };
+    }
+    case "lookupSpan": {
+      const surface = request.text.slice(request.startOffset, request.endOffset);
+      const resolved = await resolveParsedSpan(request.text, {
+        start: request.startOffset, length: request.endOffset - request.startOffset, surface,
+        lemma: request.lemma ?? surface, kind: request.kind,
+        reading: request.reading ?? null, pos: request.pos ?? "", inflection: request.inflection,
+        content: true, state: "none",
+      });
+      const alternatives = await hydrateGroups(resolved.groups, surface);
+      if (alternatives[0] && request.inflection?.length && request.entry && request.entry !== alternatives[0].entry) {
+        alternatives[0] = { ...alternatives[0], inflection: request.inflection,
+          inflectionBase: request.lemma ?? alternatives[0].inflectionBase ?? alternatives[0].headword };
+      }
+      return { ok: true, type: "lookupSpan", definition: alternatives[0] ?? null, alternatives, groups: resolved.groups };
+    }
     case "dictionaryStatus":
       return { ok: true, type: "dictionaryStatus", dictionary: await dictionaryStatus() };
     case "installDictionary": {
@@ -260,6 +268,8 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       // a multi-megabyte download almost always fails later than 150ms: so the
       // install reports its own outcome from here on, or the counter is dead.
       void pending.then(async () => {
+        if (config.dictionaryStack.length) await setActiveDictionaryStack(
+          config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
         lookupCache.clear();
         await notifyDictionaryChanged();
       }, (error) => {
@@ -346,31 +356,18 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
     case "telemetry":
       ingestClientReport(request.report);
       return { ok: true, type: "telemetry" };
-    case "updateLanguages": {
-      if (!isConnected(config)) throw new ApiError("Connect your Shirabe account to sync profile languages.", 401);
-      const languages = await api.updateLanguages(request.languages);
-      const next: Config = { ...config, languages };
-      await saveConfig(next);
-      config = next;
-      api.update(next);
-      await refreshAccount(true);
-      await installDictionary(config.apiBase, await dictionaryAuthorization());
-      lookupCache.clear();
-      await notifyDictionaryChanged();
-      return { ok: true, type: "updateLanguages", languages };
-    }
     case "updateDictionaryStack": {
-      if (!isConnected(config)) throw new ApiError("Connect your Shirabe account to sync dictionaries.", 401);
-      await api.updateDictionaryStack(request.dictionaries, request.dictionaryReveal);
-      const next: Config = { ...config, dictionaryStack: request.dictionaries, dictionaryReveal: request.dictionaryReveal };
+      const next: Config = { ...config, dictionaryStack: request.dictionaries,
+        dictionaryReveal: request.dictionaryReveal, dictionaryStackDirty: isConnected(config),
+        languages: glossLanguagesFrom(request.dictionaries.map((source) => source.split(":")[1]!)) };
       await saveConfig(next);
       config = next;
       api.update(next);
-      await refreshAccount(true);
-      await installDictionary(config.apiBase, await dictionaryAuthorization());
+      await setActiveDictionaryStack(next.dictionaryStack, next.dictionaryReveal, next.dictionaryNames, next.dictionaryStackFingerprint);
       lookupCache.clear();
       await notifyDictionaryChanged();
-      return { ok: true, type: "updateDictionaryStack" };
+      if (next.dictionaryStackDirty) void traceBackgroundTask("sync dictionary stack", () => refreshAccount(true));
+      return { ok: true, type: "updateDictionaryStack", synced: !next.dictionaryStackDirty };
     }
     case "status":
       return { ok: true, type: "status", status: await status() };
@@ -388,19 +385,57 @@ export function cancelLocalParse(requestId: number): void {
   if (control) control.cancelled = true;
 }
 
-async function parseBatchOnline(texts: string[], control?: { cancelled: boolean }): Promise<ParsedToken[][]> {
-  if (!isConnected(config) || !config.scopes.includes("READ_DICTIONARY")) {
-    throw new ApiError("Connect to Shirabe to parse page text.", 401);
-  }
-  if (control?.cancelled) return texts.map(() => []);
+async function parseBatchOnline(texts: string[]): Promise<ParsedToken[][] | null> {
+  if (config.localOnlyAnalysis || !texts.length || texts.join("\n").length > 2_000) return null;
   const startedAt = performance.now();
-  const lists = await api.parse(texts);
+  let parsed: Awaited<ReturnType<ShirabeApi["parseWithProvenance"]>>;
+  try {
+    const installed = await dictionaryStatus();
+    parsed = await api.parseWithProvenance(texts, installed.activeSources);
+  } catch {
+    return null;
+  }
+  const installed = await dictionaryStatus();
+  if (!matchingOnlineParse(parsed, installed)) return null;
+  const lists = await Promise.all(parsed.tokens.map(async (tokens, index) => Promise.all(tokens.map(async (token, tokenIndex) => {
+    const resolved = await resolveParsedSpan(texts[index]!, token, tokens[tokenIndex - 1]);
+    return { ...token, entry: resolved.entry, groups: resolved.groups,
+      ...(resolved.candidates.length > 1 ? { candidates: resolved.candidates } : {}) };
+  }))));
+  if (!matchingOnlineParse(parsed, await dictionaryStatus())) return null;
   recordBackgroundPerformance("online-parse", startedAt, {
     texts: texts.length,
     chars: texts.reduce((sum, text) => sum + text.length, 0),
     tokens: lists.reduce((sum, list) => sum + list.length, 0),
   });
-  return control?.cancelled ? texts.map(() => []) : lists;
+  return lists;
+}
+
+function matchingOnlineParse(parsed: { packRevision: string; sources: string[]; stackFingerprint: string },
+  installed: Awaited<ReturnType<typeof dictionaryStatus>>): boolean {
+  return parsed.packRevision === installed.publicRevision &&
+    JSON.stringify(parsed.sources) === JSON.stringify(installed.activeSources) &&
+    (!isConnected(config) || parsed.stackFingerprint === installed.stackFingerprint);
+}
+
+async function parseBatchLocal(texts: string[], control?: { cancelled: boolean }): Promise<ParsedToken[][]> {
+  const startedAt = performance.now();
+  const lists: ParsedToken[][] = [];
+  for (const text of texts) {
+    lists.push(control?.cancelled ? [] : await parseOffline(text, config.languages, config.apiBase));
+  }
+  recordBackgroundPerformance("local-parse", startedAt, {
+    texts: texts.length,
+    chars: texts.reduce((sum, text) => sum + text.length, 0),
+    tokens: lists.reduce((sum, list) => sum + list.length, 0),
+  });
+  return lists;
+}
+
+async function hydrateGroups(groups: readonly string[][], surface: string): Promise<Definition[]> {
+  const definitions = await Promise.all(groups.map((group) =>
+    lookupGroupOffline(group, surface, config.languages, config.apiBase, config.audioVoice)));
+  return definitions.filter((definition): definition is Definition => definition !== null);
 }
 
 const backgroundPerformanceTotals = new Map<string, { runs: number; totalMs: number; maxMs: number }>();
@@ -432,7 +467,7 @@ const STATE_REQUEST_MAX_LEMMAS = 1_000;
 const DECK_CACHE_KEY = "profileDeckSnapshot";
 async function stateSnapshotFor(lemmas: string[]): Promise<{ states: Record<string, WordState>; details: Record<string, StudyDetails> }> {
   const cached = await cachedStateSnapshot();
-  if (!isConnected(config) || !config.scopes.includes("READ_SRS")) {
+  if (!isConnected(config) || !config.scopes.includes("user:study:read")) {
     return { states: pickStates(cached.states, lemmas), details: pickDetails(cached.details, lemmas) };
   }
   const freshAfter = Date.now() - STATE_CACHE_MAX_AGE_MS;
@@ -558,11 +593,6 @@ function pickDetails(details: Record<string, StudyDetails>, lemmas: string[]): R
   );
 }
 
-// ── Redirect login (OAuth 2.0 authorization code + PKCE) ─────────────────────
-// A browser extension can receive a redirect, so instead of a user code + poll
-// we open the consent page in an auth window and let the browser hand a one-time
-// code straight back to us. We exchange it (with the PKCE verifier we kept) for a
-// scoped key: no visible code, no polling.
 // The popup is a page that dies when it loses focus, and clicking the auth
 // window is exactly how it loses focus. The worker outlives it, so the worker
 // is what remembers a handshake is open: otherwise reopening the popup shows
@@ -579,51 +609,26 @@ async function connect(): Promise<void> {
 }
 
 async function runConnect(): Promise<void> {
-  const { verifier, challenge } = await pkce();
-  const state = randomToken(16);
-  const redirectUri = ext.identity.getRedirectURL();
-  const url = api.authorizeUrl({ redirectUri, state, challenge });
-
-  const redirect = await ext.identity.launchWebAuthFlow({ url, interactive: true });
-  const params = new URL(redirect).searchParams;
-  const error = params.get("error");
-  if (error) throw new ApiError(error === "access_denied" ? "You denied the request." : `Sign-in failed (${error}).`, 400);
-  if (params.get("state") !== state) throw new ApiError("Sign-in was interrupted: please try again.", 400);
-  const code = params.get("code");
-  if (!code) throw new ApiError("No authorization code was returned.", 400);
-
-  await adopt(await api.exchangeCode({ code, verifier, redirectUri }));
-}
-
-// PKCE (S256): a random verifier the client keeps + the SHA-256 challenge the
-// server stores; at token exchange the verifier proves we started the flow.
-async function pkce(): Promise<{ verifier: string; challenge: string }> {
-  const verifier = randomToken(32);
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-  return { verifier, challenge: base64url(new Uint8Array(digest)) };
-}
-
-function randomToken(bytes: number): string {
-  return base64url(crypto.getRandomValues(new Uint8Array(bytes)));
-}
-
-function base64url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const flow = await api.begin(ext.identity.getRedirectURL());
+  const redirect = await ext.identity.launchWebAuthFlow({ url: flow.url, interactive: true });
+  await adopt(await api.complete(redirect, flow));
 }
 
 // Persist a freshly-minted token pair, then look up whose account it belongs to.
 async function adopt(tokens: Tokens): Promise<void> {
   dictionaryConnectionEpoch += 1;
   await deactivatePrivateDictionaries();
-  const next: Config = { ...config, ...tokens, account: "", accountCheckedAt: "", entitled: false };
+  await clearLocalDictionaryStack();
+  const next: Config = { ...config, ...tokens, account: "", accountCheckedAt: "", entitled: false,
+    dictionaryStack: [], dictionaryStackFingerprint: "", dictionaryStackDirty: false,
+    dictionaryReveal: {}, dictionaryNames: {}, availableDictionaries: [] };
   await saveConfig(next);
   await clearProfileCaches();
   config = next;
   api.update(next);
   await refreshAccount(true);
   await installDictionary(config.apiBase, await dictionaryAuthorization());
+  await setActiveDictionaryStack(config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
   lookupCache.clear();
   await notifyDictionaryChanged();
 }
@@ -634,26 +639,51 @@ async function adopt(tokens: Tokens): Promise<void> {
 // authoritative: the key still mines fine if /api/v1/me merely blips.
 const ACCOUNT_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
 
-async function refreshAccount(force = false): Promise<void> {
+let accountRefresh: Promise<void> | null = null;
+
+function refreshAccount(force = false): Promise<void> {
+  if (accountRefresh) return force ? accountRefresh.then(() => refreshAccount(true)) : accountRefresh;
+  const pending = refreshAccountNow(force).finally(() => { accountRefresh = null; });
+  accountRefresh = pending;
+  return pending;
+}
+
+async function refreshAccountNow(force: boolean): Promise<void> {
   if (!isConnected(config)) return;
+  const connectionEpoch = dictionaryConnectionEpoch;
   // While not entitled, re-check often so an upgrade shows mining controls
   // without waiting out the full cache window (or re-connecting).
   const maxAge = config.entitled ? ACCOUNT_CACHE_MAX_AGE_MS : 30_000;
-  if (!force && Date.parse(config.accountCheckedAt) >= Date.now() - maxAge) return;
+  if (!force && !config.dictionaryStackDirty && Date.parse(config.accountCheckedAt) >= Date.now() - maxAge) return;
   try {
+    if (config.dictionaryStackDirty) {
+      const stack = config.dictionaryStack;
+      const reveal = config.dictionaryReveal;
+      const fingerprint = await api.updateDictionaryStack(stack, reveal);
+      if (connectionEpoch !== dictionaryConnectionEpoch || config.dictionaryStack !== stack || config.dictionaryReveal !== reveal) return;
+      const synced: Config = { ...config, dictionaryStackDirty: false, dictionaryStackFingerprint: fingerprint };
+      await saveConfig(synced);
+      config = synced;
+      api.update(synced);
+    }
     const { name, entitled, languages, dictionaries, stackFingerprint, dictionaryReveal, dictionaryNames, availableDictionaries } = await api.me();
+    if (connectionEpoch !== dictionaryConnectionEpoch) return;
     // The account's language order wins while connected, so the offline pack
     // renders meanings in the same order the website does for this reader. A
     // stack with nothing this pack ships (a French reader) leaves it untouched.
     const synced = languages.length ? languages : config.languages;
     const next: Config = {
       ...config, account: name, accountCheckedAt: new Date().toISOString(), entitled, languages: synced,
-      dictionaryStack: dictionaries, dictionaryStackFingerprint: stackFingerprint,
-      dictionaryReveal, dictionaryNames, availableDictionaries,
+      dictionaryStack: config.dictionaryStackDirty ? config.dictionaryStack : dictionaries,
+      dictionaryStackFingerprint: stackFingerprint,
+      dictionaryStackDirty: config.dictionaryStackDirty,
+      dictionaryReveal: config.dictionaryStackDirty ? config.dictionaryReveal : dictionaryReveal,
+      dictionaryNames, availableDictionaries,
     };
     await saveConfig(next);
     config = next;
     api.update(next);
+    await setActiveDictionaryStack(next.dictionaryStack, next.dictionaryReveal, next.dictionaryNames, next.dictionaryStackFingerprint);
   } catch {
     // Offline or transient: keep the last-known account/entitlement.
   }
@@ -668,10 +698,12 @@ async function disconnect(): Promise<void> {
 
 async function forgetConnection(): Promise<void> {
   dictionaryConnectionEpoch += 1;
+  await clearLocalDictionaryStack();
   const next: Config = {
-    ...config, accessToken: "", accessTokenExpiresAt: "", refreshToken: "",
+    ...config, accessToken: "", accessTokenExpiresAt: "", accessTokenRefreshAt: "", refreshToken: "",
     account: "", accountCheckedAt: "", scopes: [], entitled: false,
-    dictionaryStack: [], dictionaryStackFingerprint: "", dictionaryReveal: {}, dictionaryNames: {}, availableDictionaries: [],
+    dictionaryStack: [], dictionaryStackFingerprint: "", dictionaryStackDirty: false,
+    dictionaryReveal: {}, dictionaryNames: {}, availableDictionaries: [],
   };
   config = next;
   api.update(next);
@@ -679,6 +711,7 @@ async function forgetConnection(): Promise<void> {
   disablePrivateDictionaryLookups();
   await saveConfig(next);
   await deactivatePrivateDictionaries();
+  await clearLocalDictionaryStack();
   await notifyDictionaryChanged();
   await clearProfileCaches();
   void installDictionary(next.apiBase).then(notifyDictionaryChanged).catch(() => undefined);

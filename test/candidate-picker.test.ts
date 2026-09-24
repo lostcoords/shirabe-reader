@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Definition } from "../src/common/types.js";
-import { answers, asked, drawn, hover, settle } from "./support/popup-page.js";
+import { answers, asked, drawn, hover, page, settle, spanAnswers } from "./support/popup-page.js";
 
 // The picker, and the reason it exists: きみ is 君, 黄身 or 黍, and only the
 // reader knows which they meant. Every rung the parser could climb has been
@@ -18,7 +18,9 @@ import { answers, asked, drawn, hover, settle } from "./support/popup-page.js";
 function definition(entry: string, headword: string, reading: string, gloss: string): Definition {
   return {
     headword, reading, url: `https://shirabe.org/word/${headword}`, entry,
-    senses: [ { position: 0, source: "English · JMdict", partsOfSpeech: [ "Noun" ], tags: [], glosses: [ gloss ] } ],
+    senses: [ { position: 0, sourceEntry: entry, dictionary: "JMdict",
+      partsOfSpeech: [{ label: "Noun", code: "n", category: "pos", scope: "sense" }],
+      tags: [], glosses: [{ lang: "eng", tag: "EN", text: gloss }] } ],
     pitch: [], examples: [],
   } as unknown as Definition;
 }
@@ -38,6 +40,36 @@ Object.assign(answers, {
 });
 
 const chips = (): Promise<HTMLElement[]> => drawn(".sb-candidate");
+
+test("a parsed span opens the exact local result before its parser hint", async () => {
+  spanAnswers["きみ"] = [
+    definition("jmdict:1247250", "君", "きみ", "you"),
+    definition("jmdict:1226580", "きみ", "きみ", "millet"),
+  ];
+  const word = await hover({ entry: "jmdict:1226580", lemma: "きみ", surface: "きみ" },
+    { sentence: "きみ", start: 0 });
+  assert.equal(word.dataset.entry, "jmdict:1247250");
+  assert.ok(asked.some((message) => message.type === "lookupSpan" && message.text === "きみ"
+    && message.startOffset === 0 && message.endOffset === 2 && message.lemma === "きみ"));
+  assert.ok((await drawn(".sb-headword"))[0]?.textContent?.startsWith("君"));
+});
+
+test("the parsed card sends its inflection clue to local span resolution", async () => {
+  spanAnswers["されている"] = [definition("jmdict:2269820", "される", "される", "be done")];
+  const word = await hover({ entry: "jmdict:1157170", lemma: "する", surface: "されている", length: 5,
+    inflection: ["progressive", "te-form", "passive"], kind: "inflected" },
+  { sentence: "されている", start: 0 });
+  assert.ok(asked.some((message) => message.type === "lookupSpan" && message.text === "されている"
+    && JSON.stringify(message.inflection) === JSON.stringify(["progressive", "te-form", "passive"])));
+  assert.equal(word.dataset.entry, "jmdict:2269820");
+  const { popup } = await page();
+  popup.dismissPopup();
+  popup.showNow(word);
+  await settle();
+  const requests = asked.filter((message) => message.type === "lookupSpan" && message.text === "されている");
+  assert.equal(requests.length, 2);
+  assert.ok(requests.every((request) => request.type === "lookupSpan" && request.entry === "jmdict:1157170"));
+});
 
 test("a span several words claim offers them all, the parser's answer marked", async () => {
   await hover({ entry: "jmdict:1226580", candidates: [ candidate("jmdict:1226580", "きみ", "きみ"), candidate("jmdict:1247250", "君", "きみ") ] });

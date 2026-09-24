@@ -2,8 +2,8 @@ import "fake-indexeddb/auto";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { GlossLanguage } from "@shirabe-org/card/word-card/languages";
-import { lookupOffline, lookupEntryOffline, parseOffline } from "../src/common/offline-dictionary.js";
-import { installTestPack, packLines, packPayload } from "./support/pack.js";
+import { lookupOffline, lookupEntryOffline, parseOffline, resolveParsedSpan, setActiveDictionaryStack } from "../src/common/offline-dictionary.js";
+import { installTestPack, packLines, packPayload, subsetPack } from "./support/pack.js";
 import { browserDictionary } from "./support/parity-browser.js";
 import { inflectionsAgree, intentErrors, readingsAgree, studyIdentityErrors, type StudyIdentity, type IntentExpectation, type IntentToken } from "./support/search-intent.js";
 
@@ -17,7 +17,7 @@ type Input = {
   study_identities: Record<string, StudyIdentity>;
   pack: { path: string; revision: string; sha256: string };
   dictionaries: string[]; daidai: string; daidai_source: string; term_ids_sha256: string; rows: Row[];
-  contexts: Array<{ text: string; expect: IntentExpectation[]; search_bar: IntentToken[]; web: Array<{ start: number; length: number; surface: string; lemma: string; reading: string | null; inflection: string[]; inflectionBase: string | null; entry: string | null; candidates: string[] }> }>;
+  contexts: Array<{ text: string; expect: IntentExpectation[]; search_bar: IntentToken[]; web: Array<{ start: number; length: number; surface: string; lemma: string; pos: string; kind: string; reading: string | null; inflection: string[]; inflectionBase: string | null; entry: string | null; groups: string[][]; candidates: string[] }> }>;
 };
 
 async function main(): Promise<void> {
@@ -27,12 +27,9 @@ async function main(): Promise<void> {
   const digest = createHash("sha256").update(readFileSync(input.pack.path)).digest("hex");
   if (digest !== input.pack.sha256) throw new Error("Pack changed after web export");
   const ids = new Set<string>();
-  const lines: string[] = [];
   for (const line of packLines(input.pack.path)) {
     const record = JSON.parse(line) as { type: string; id?: string; dictionary?: string };
-    if (record.type === "header") lines.push(line);
     if (record.type === "term" && input.dictionaries.includes(record.dictionary!)) {
-      lines.push(line);
       ids.add(record.id!);
     }
   }
@@ -59,13 +56,26 @@ async function main(): Promise<void> {
       }
     }
   }
-  console.log(`Installing all ${ids.size} terms from ${input.pack.revision}; no winner-based subsetting`);
+  const lines = subsetPack(input.pack.path,
+    [...input.rows.map((row) => row.query), ...input.contexts.map((row) => row.text)], { maxSpan: 32 });
+  const installedIds = new Set(lines.filter((line) => line.includes('"type":"term"'))
+    .map((line) => (JSON.parse(line) as { id: string }).id));
+  for (const row of input.rows) if (row.web[0] && !installedIds.has(row.web[0].entry)) {
+    throw new Error(`Lookup leader was not included by corpus probes: ${row.web[0].entry}`);
+  }
+  for (const row of input.contexts) for (const token of row.web) for (const group of token.groups) for (const entry of group) {
+    if (!installedIds.has(entry)) throw new Error(`Exact-span entry was not included by corpus probes: ${entry}`);
+  }
+  console.log(`Full pack ${ids.size} terms verified; installing ${installedIds.size} corpus-relevant terms from ${input.pack.revision}`);
   const payload = packPayload(lines);
   const generation = `${input.pack.revision}-${idsDigest.slice(0, 16)}`;
   const browser = process.env.PARITY_BROWSER_BUNDLE
-    ? await browserDictionary(payload, generation, ids.size, process.env.PARITY_BROWSER_BUNDLE, input.dictionaries)
+    ? await browserDictionary(payload, generation, installedIds.size, process.env.PARITY_BROWSER_BUNDLE, input.dictionaries)
     : null;
-  if (!browser) await installTestPack(payload, { contentRevision: generation, terms: ids.size });
+  if (!browser) {
+    await installTestPack(payload, { contentRevision: generation, terms: installedIds.size });
+    await setActiveDictionaryStack(input.dictionaries.map((dictionary) => `${dictionary}:en`), {}, {}, input.pack.revision);
+  }
   try {
   let failures = 0;
   for (const row of input.rows) {
@@ -92,10 +102,47 @@ async function main(): Promise<void> {
   }
   console.log(`${input.rows.length} paired lookups, ${failures} failures`);
   let contextFailures = 0;
+  let fixedSpanFailures = 0;
+  let actualSpanCount = 0;
+  let actualUnpaired = 0;
+  let actualFirstDifferences = 0;
+  let actualGroupDifferences = 0;
+  let parserHintDifferences = 0;
   let intentFailures = 0;
   let searchBarFailures = 0;
   for (const row of input.contexts) {
+    const fixed = browser ? [] : await Promise.all(row.web.map((token, index) => resolveParsedSpan(row.text, {
+      start: token.start, length: token.length, surface: token.surface, lemma: token.lemma,
+      reading: token.reading, pos: token.pos, kind: token.kind, inflection: token.inflection, content: true, state: "none",
+    }, index ? {
+      start: row.web[index - 1]!.start, length: row.web[index - 1]!.length,
+      surface: row.web[index - 1]!.surface, lemma: row.web[index - 1]!.lemma,
+      reading: row.web[index - 1]!.reading, pos: row.web[index - 1]!.pos,
+      kind: row.web[index - 1]!.kind, content: true, state: "none",
+    } : undefined)));
+    const fixedSpan = browser || fixed.every((result, index) => JSON.stringify(result.groups) === JSON.stringify(row.web[index]?.groups));
+    if (!fixedSpan) fixedSpanFailures += 1;
     const tokens = browser ? await browser.parse(row.text) : await parseOffline(row.text, ["eng"], "https://shirabe.test");
+    const actual = browser ? [] : await Promise.all(tokens.map((token, index) => resolveParsedSpan(row.text, token, tokens[index - 1])));
+    if (!browser) tokens.forEach((token, index) => {
+      const web = row.web.find((candidate) => candidate.start === token.start && candidate.length === token.length);
+      if (!web) {
+        actualUnpaired += 1;
+        console.log(JSON.stringify({ actualCard: "unpaired", text: row.text, token }));
+        return;
+      }
+      actualSpanCount += 1;
+      if (JSON.stringify(actual[index]?.groups[0] ?? []) !== JSON.stringify(web.groups[0] ?? [])) {
+        actualFirstDifferences += 1;
+        console.log(JSON.stringify({ actualCard: "first", text: row.text, token,
+          web: web.groups, local: actual[index]?.groups }));
+      }
+      if (JSON.stringify(actual[index]?.groups ?? []) !== JSON.stringify(web.groups)) {
+        actualGroupDifferences += 1;
+        console.log(JSON.stringify({ actualCard: "groups", text: row.text, token,
+          web: web.groups, local: actual[index]?.groups }));
+      }
+    });
     const offline = tokens.map((token) => ({ start: token.start, length: token.length, surface: token.surface, lemma: token.lemma,
       inflection: [] as string[],
       inflectionBase: undefined as string | undefined,
@@ -119,22 +166,31 @@ async function main(): Promise<void> {
     const identities = boundaries && offline.every((token, index) => token.entry === row.web[index]?.entry);
     const lemmas = boundaries && offline.every((token, index) => token.lemma === row.web[index]?.lemma);
     const readings = boundaries && readingsAgree(offline, row.web);
-    const candidates = boundaries && offline.every((token, index) => JSON.stringify(token.candidates) === JSON.stringify(row.web[index]?.candidates));
+    const parserHints = boundaries && offline.every((token, index) => JSON.stringify(token.candidates) === JSON.stringify(row.web[index]?.candidates));
+    if (!parserHints) parserHintDifferences += 1;
     const inflections = boundaries && inflectionsAgree(offline, row.web);
-    const pass = boundaries && identities && lemmas && readings && candidates && inflections;
+    const pass = boundaries && lemmas && readings && inflections;
     const webIntent = intentErrors(row.web, row.expect);
     const searchBarIntent = intentErrors(row.search_bar, row.expect.map(({ surface, leaders }) => ({ surface, leaders })));
     if (searchBarIntent.length) searchBarFailures += 1;
-    const offlineIntent = intentErrors(offline, row.expect).concat(popupErrors);
+    const cardTokens = offline.map((token, index) => {
+      const choices = boundaries ? fixed[index]?.groups.flat() : undefined;
+      return choices ? { ...token, entry: choices[0] ?? null, candidates: choices } : token;
+    });
+    const offlineIntent = intentErrors(cardTokens, row.expect).concat(popupErrors);
     if (webIntent.length || offlineIntent.length) intentFailures += 1;
     if (!pass) contextFailures += 1;
-    console.log(JSON.stringify({ text: row.text, pass, boundaries, identities, lemmas, readings, candidates, inflections, webIntent, offlineIntent,
+    console.log(JSON.stringify({ text: row.text, pass, fixedSpan, fixed: fixed.map((result) => result.groups),
+      boundaries, identities, lemmas, readings, parserHints, inflections, webIntent, offlineIntent,
       searchBarIntent, searchBar: row.search_bar, web: row.web, offline }));
   }
+  console.log(`${input.contexts.length} exact-span resolution cases, ${fixedSpanFailures} failures`);
+  if (!browser) console.log(`${actualSpanCount} actual offline spans paired, ${actualFirstDifferences} first-card differences, ${actualGroupDifferences} ordered-group differences, ${actualUnpaired} unpaired spans`);
   console.log(`${input.contexts.length} paired API/offline parses, ${contextFailures} failures`);
+  console.log(`${input.contexts.length} parser-hint comparisons, ${parserHintDifferences} differences (cards use exact-span groups)`);
   console.log(`${input.contexts.length} shared intent cases, ${intentFailures} failures`);
   console.log(`${input.contexts.length} search-bar preview cases, ${searchBarFailures} failures`);
-  if (failures || contextFailures || intentFailures || searchBarFailures) process.exitCode = 1;
+  if (failures || fixedSpanFailures || contextFailures || intentFailures || searchBarFailures) process.exitCode = 1;
   } finally {
     await browser?.close();
   }

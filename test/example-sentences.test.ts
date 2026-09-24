@@ -29,7 +29,9 @@ const LINE = [
 function eater(examples: Definition["examples"]): Definition {
   return {
     headword: "食べる", reading: "たべる", url: "https://shirabe.org/word/食べる", entry: "jmdict:1358280",
-    senses: [ { position: 0, source: "English · JMdict", partsOfSpeech: [ "Ichidan verb" ], tags: [], glosses: [ "to eat" ] } ],
+    senses: [ { position: 0, sourceEntry: "jmdict:1358280", dictionary: "JMdict",
+      partsOfSpeech: [{ label: "Ichidan verb", code: "v1", category: "pos", scope: "sense" }],
+      tags: [], glosses: [{ lang: "eng", tag: "EN", text: "to eat" }] } ],
     pitch: [], examples,
   } as unknown as Definition;
 }

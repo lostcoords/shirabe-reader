@@ -39,7 +39,8 @@ Shirabe Reader
 >
 > **Works offline.** Install the dictionary pack once and lookup keeps working
 > with no network and no account. Nothing about ordinary reading requires signing
-> in.
+> in. Stable page text can also use Shirabe's online parser; a setting keeps it
+> on your device.
 >
 > **See what you already know.** Connect a Shirabe account and words are coloured
 > by your own knowledge state: new, learning, or known: so you can see at a
@@ -61,28 +62,30 @@ Shirabe Reader
 
 Reviewers reject vague answers here. Be specific and tie each one to a user-visible feature.
 
-| Permission                                                       | Justification                                                                                                                                                                                                                                            |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `storage`, `unlimitedStorage`                                    | Stores the downloaded Japanese dictionary pack in IndexedDB, plus the user's own settings. The pack is large (hundreds of thousands of entries), which is why unlimited storage is needed. Nothing here leaves the device.                               |
-| `activeTab`                                                      | Lets the user parse the page they're looking at from the toolbar button or context menu, as a one-off, without granting any standing site access.                                                                                                        |
-| `scripting`                                                      | Injects the content script that finds Japanese text and renders the lookup popup, only on pages where the user has turned the reader on.                                                                                                                 |
-| `contextMenus`                                                   | Adds a right-click "look up with Shirabe" entry for a selected phrase.                                                                                                                                                                                   |
-| `identity`                                                       | Used only for the optional sign-in flow (OAuth redirect back to the extension) when a user chooses to connect a Shirabe account. Not used for ordinary reading.                                                                                          |
-| Host access to `shirabe.org`, `cdn.shirabe.org`, `t.shirabe.org` | The API the extension talks to: dictionary pack downloads (`cdn.shirabe.org`), saving cards and syncing knowledge state (`shirabe.org`), and error reporting through the first-party PostHog proxy (`t.shirabe.org`). No other remote host is contacted. |
-| **Optional** `<all_urls>`                                        | **Never requested at install.** Only requested when the user explicitly turns the reader on for a specific site, so scanning survives a page reload. Declining is fully supported: lookup still works in the open tab via `activeTab`.                   |
+| Permission                                                       | Justification                                                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `storage`, `unlimitedStorage`                                    | Stores the downloaded Japanese dictionary pack in IndexedDB, plus the user's own settings. The pack is large (hundreds of thousands of entries), which is why unlimited storage is needed. Nothing here leaves the device.                                                           |
+| `activeTab`                                                      | Lets the toolbar inject the scanner into an already-open page without requiring a reload.                                                                                                                                                                                            |
+| `scripting`                                                      | Injects the scanner into an already-open page when the toolbar is opened; the manifest loads it on subsequent pages.                                                                                                                                                                 |
+| `contextMenus`                                                   | Adds a right-click "look up with Shirabe" entry for a selected phrase.                                                                                                                                                                                                               |
+| `identity`                                                       | Used only for the optional sign-in flow (OAuth redirect back to the extension) when a user chooses to connect a Shirabe account. Not used for ordinary reading.                                                                                                                      |
+| Host access to `shirabe.org`, `cdn.shirabe.org`, `t.shirabe.org` | The API the extension talks to: dictionary pack downloads (`cdn.shirabe.org`), optional page-text parsing, saving cards and syncing knowledge state (`shirabe.org`), and error reporting through the first-party PostHog proxy (`t.shirabe.org`). No other remote host is contacted. |
+| `<all_urls>`                                                     | One browser permission for reading on ordinary web pages. Hover lookup reads text under the pointer locally; parsing a whole page requires an explicit command. The popup can pause one tab or turn the reader off for a site.                                                       |
 
 ## Data / privacy disclosure
 
-- **No data is collected for ordinary use.** Dictionary lookups are resolved from
-  the locally installed pack; page text is never uploaded.
-- **Signed-out:** no personal data is transmitted at all.
+- **Stable page text may be sent to Shirabe for parsing** when the user runs
+  Parse page or Parse selection, including while signed out. Local parsing and
+  dictionary lookup work without an account or network. Turning on **Keep page
+  text on this device for parsing** stops these requests. Changing subtitle
+  cues and hovered word lookups stay local.
 - **Signed-in (optional):** words the user chooses to save, and their review
   grades, are sent to their own Shirabe account. This is the feature the user
   asked for, not analytics.
-- **Error reports** contain no page content or personal data: the error class,
-  our own stack frames, the extension version and the browser, and nothing that
-  says which page you were on. This is the one thing sent without being asked
-  for, and it is what the Firefox listing declares as technical data.
+- **Error reports** include the error class and message, Reader stack frames,
+  the extension version, the browser, and a random session identifier. We do not
+  attach the page URL or looked-up text as report fields. They can be turned off
+  in settings; Firefox also requires its optional technical-data permission.
 - No advertising, no selling of data, no tracking across sites.
 - Privacy policy: https://shirabe.org/en/privacy
 
@@ -112,11 +115,13 @@ Take at a fixed 1280×800 on a light background, same page across both stores:
 > The extension works fully offline for its core feature. On first run the user
 > installs a Japanese dictionary pack from cdn.shirabe.org, after which lookup
 > needs no network and no account.
+> Stable page text can be sent to Shirabe after the user explicitly parses a
+> page or selection. The local-only setting stops that request; live subtitle
+> cues stay local.
 >
-> `<all_urls>` is declared **optional** and is never requested at install time. It
-> is requested only when the user clicks the per-site reader toggle in the popup
-> for a specific site. If the user declines, the extension still works on the
-> current tab through `activeTab`.
+> `<all_urls>` is requested once when the extension is installed, so hovering a
+> word works on ordinary pages without a permission prompt for each site. The
+> toolbar can pause the current page or turn the reader off for a site.
 >
 > No remote code is executed. Dictionary packs and host rules are validated data.
 >

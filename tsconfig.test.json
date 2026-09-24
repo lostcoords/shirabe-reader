@@ -13,9 +13,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": ["node"],
-    // Intl.Segmenter is ES2022; the base targets ES2021 because the extension
-    // ships to browsers, but a test may reach for it to cross-check segmentation.
-    "lib": ["ES2021", "ES2022.Intl", "DOM", "DOM.Iterable"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src", "test"],
   "exclude": ["test/dom.test.ts", "test/all.test.ts"]

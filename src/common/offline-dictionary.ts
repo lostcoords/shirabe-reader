@@ -4,10 +4,11 @@ import { searchReadings } from "./romaji.js";
 import { chooseContextHint, contextCounts } from "./context-hints.js";
 import listingCategoryData from "../../../db/reference/listing_categories.json";
 import { posChips, tagChips } from "./jmdict-tags.js";
-import { GLOSS_TAGS, withEnglishFallback, type GlossLanguage } from "@shirabe-org/card/word-card/languages";
+import { GLOSS_TAGS, glossLanguagesFrom, uiLanguagesFrom, withEnglishFallback, type GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import type { Definition, GlossRow, ParsedToken, Sense, SenseChip, SenseScope, SenseXref, SourceHeadword, SourceTag, TokenCandidate } from "./types.js";
 import { sha256 as createSha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
+import { createShirabeClient } from "@shirabe-org/api";
 
 declare const __EXTENSION_VERSION__: string;
 
@@ -40,7 +41,7 @@ export type PackManifest = {
   sha256: string;
   counts: { terms: number; kanji: number; sentences: number };
   languages: string[];
-  dictionaries: Array<{ slug: string; version?: string | null }>;
+  dictionaries: Array<{ slug: string; version?: string | null; languages?: string[] }>;
   modifications: string[];
   sources: Array<{ name: string; url: string; license: string; licenseUrl?: string }>;
   downloadUrl: string;
@@ -63,19 +64,23 @@ export type PackManifest = {
 };
 
 export type DictionaryStackManifest = {
-  stackFingerprint: string;
-  dictionaries: string[];
-  dictionaryReveal: Record<string, "show" | "hover">;
-  dictionaryNames: Record<string, string>;
-  publicPack: PackManifest;
-  personalPacks: PackManifest[];
+  dictionaryStack: {
+    fingerprint: string;
+    sources: Array<{ dictionary: string; languages: string[]; reveal: "show" | "hover" }>;
+  };
+  packs: Array<PackManifest & { kind: "base" | "overlay" }>;
+  pendingPacks: string[];
 };
 
-type ActiveStack = Pick<DictionaryStackManifest, "stackFingerprint" | "dictionaries" | "dictionaryReveal" | "dictionaryNames">;
+type ActiveStack = { stackFingerprint: string; dictionaries: string[];
+  dictionaryReveal: Record<string, "show" | "hover">; dictionaryNames: Record<string, string>;
+  selected?: boolean };
 
 export type DictionaryStatus = {
   installed: boolean;
   revision: string | null;
+  publicRevision: string | null;
+  activeSources: string[];
   stackFingerprint: string | null;
   builtAt: string | null;
   bytes: number;
@@ -87,6 +92,7 @@ export type DictionaryStatus = {
   error: string | null;
   storageBytes: number | null;
   sources: PackManifest["sources"];
+  availableDictionaries: Array<{ slug: string; name: string; languages: string[] }>;
   lastCheckedAt: string | null;
 };
 
@@ -248,6 +254,8 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
   } catch (error) {
     throw tracedError(`IndexedDB metadata read failed; stores=${Array.from(db.objectStoreNames).join(",")}`, error);
   }
+  const publicRevision = manifest?.contentRevision ?? null;
+  stack ??= manifest ? publicStack(manifest) : undefined;
   const privateManifest = await activePrivateManifest();
   if (manifest && privateManifest) {
     manifest = combinedManifest([manifest, privateManifest], `${manifest.contentRevision}.${privateManifest.contentRevision}`, "dictionary-stack.ndjson.gz");
@@ -261,6 +269,8 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
   return {
     installed: !!active && !!manifest,
     revision: manifest?.contentRevision ?? null,
+    publicRevision,
+    activeSources: stack?.dictionaries ?? [],
     stackFingerprint: stack?.stackFingerprint ?? null,
     builtAt: manifest?.builtAt ?? null,
     bytes: manifest?.bytes ?? 0,
@@ -272,6 +282,10 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
     error: installPromise ? installError : (snapshot?.error ?? installError),
     storageBytes: estimate?.usage ?? null,
     sources: manifest?.sources ?? [],
+    availableDictionaries: (manifest?.dictionaries ?? []).filter(({ slug }) => slug !== "kanjidic").map(({ slug }) => ({
+      slug, name: activeStackCache?.dictionaryNames[slug] ?? ({ jmdict: "JMdict", jmnedict: "JMnedict" } as Record<string, string>)[slug] ?? slug,
+      languages: manifest?.languages ?? [],
+    })),
     lastCheckedAt: lastCheckedAt ?? null,
   };
 }
@@ -462,7 +476,26 @@ export async function deactivatePrivateDictionaries(): Promise<void> {
   await deleteDictionaryDatabase("private");
   const db = await openPublicDatabase();
   const manifest = await meta<PackManifest>(db, "manifest");
-  activeStackCache = manifest ? publicStack(manifest) : null;
+  activeStackCache = await meta<ActiveStack>(db, "localStack") ?? (manifest ? publicStack(manifest) : null);
+  lookupProbeCache.clear();
+  candidateCache.clear();
+}
+
+export async function setActiveDictionaryStack(dictionaries: string[], dictionaryReveal: Record<string, "show" | "hover">,
+  dictionaryNames: Record<string, string>, stackFingerprint: string): Promise<void> {
+  const db = await openPublicDatabase();
+  if (!await meta<PackManifest>(db, "manifest")) return;
+  const next: ActiveStack = { stackFingerprint, dictionaries, dictionaryReveal, dictionaryNames, selected: true };
+  await setMeta(db, "localStack", next);
+  activeStackCache = next;
+  lookupProbeCache.clear();
+  candidateCache.clear();
+}
+
+export async function clearLocalDictionaryStack(): Promise<void> {
+  const db = await openPublicDatabase();
+  await deleteMeta(db, "localStack");
+  activeStackCache = await storedActiveStack() ?? null;
   lookupProbeCache.clear();
   candidateCache.clear();
 }
@@ -501,13 +534,24 @@ export async function lookupOffline(query: string, languages: readonly GlossLang
 export async function lookupEntryOffline(
   entry: string, surface: string, languages: readonly GlossLanguage[], apiBase: string, voice?: string,
 ): Promise<Definition | null> {
+  return lookupGroupOffline([entry], surface, languages, apiBase, voice);
+}
+
+export async function lookupGroupOffline(
+  entries: readonly string[], surface: string, languages: readonly GlossLanguage[], apiBase: string, voice?: string,
+): Promise<Definition | null> {
   const db = await openPublicDatabase();
   const generation = await activePublicGeneration(db);
   if (!generation) throw new DictionaryNotInstalledError("look up words");
+  const terms = await Promise.all(entries.map((entry) => getTermByPk(db, generation, entry)));
+  if (!terms.length || terms.some((term) => !term || !dictionaryEnabled(term.dictionary))) {
+    throw new OfflineLookupUnavailableError("entry");
+  }
+  const hits = terms.map((term) => entryHit(term!, surface));
+  return forPopup(db, generation, stackedTermDefinition(hits[0]!, hits, languages, apiBase), languages, voice);
+}
 
-  const term = await getTermByPk(db, generation, entry);
-  if (!term || !dictionaryEnabled(term.dictionary)) throw new OfflineLookupUnavailableError("entry");
-
+function entryHit(term: Stored<OfflineTerm>, surface: string): LookupHit {
   const matched = normalize(surface) || term.headword;
   const spellings = new Set([...term.expressions, ...term.readings].map((item) => normalize(item.text)));
   const variants = [matched, ...searchReadings(matched)].flatMap(lookupVariants);
@@ -519,13 +563,12 @@ export async function lookupEntryOffline(
     })),
   ]).filter((candidate) => spellings.has(normalize(candidate.text)) && posSatisfiesInflection(term, candidate));
   candidates.sort((a, b) => (a.processingCost ?? 0) - (b.processingCost ?? 0) || a.reasons.length - b.reasons.length);
-  const hit: LookupHit = {
+  return {
     term,
     candidate: candidates[0] ?? { text: matched, reasons: [] },
     prefixLength: [...matched].length,
     surface: matched,
   };
-  return forPopup(db, generation, termDefinition(hit, languages, apiBase), languages, voice);
 }
 
 function curatedExpressionContext(definition: PendingDefinition, text: string, start: number, previous?: ParsedToken): boolean {
@@ -713,6 +756,9 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
     tokens.push({
       start: position, length: surface.length, surface, reading: surfaceReading,
       lemma: copulaBase ?? definition.baseForm,
+      inflection: displayInflections(definition.inflection ?? []),
+      kind: ["exp", "conj"].includes(firstPartOfSpeech(definition)) ? "expression"
+        : definition.inflection?.length ? "inflected" : "word",
       // The entry, not just the form it reduces to. Already in hand here, and the
       // only thing about this token that means the same on the server: two
       // tokenizers disagree about lemmas by design, and a save keyed on one of
@@ -722,7 +768,7 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
       // carries no `candidates` key at all rather than an undefined one.
       ...alternatives ? { candidates: alternatives } : {},
       pos: firstPartOfSpeech(definition),
-      content: true, state: "none", frequency: identity.frequency,
+      content: true, state: "none", frequency: identity.rankFrequency,
     });
     position += surface.length;
     afterContent = true;
@@ -736,7 +782,235 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
   for (const token of tokens) {
     if (NUMERAL_ONLY.test(token.surface)) token.lemma = normalize(token.surface);
   }
-  return mergeAdverbialAdjectives(await mergeExpressions(db, generation, tokens, languages, apiBase));
+  const parsed = mergeAdverbialAdjectives(await mergeExpressions(db, generation, tokens, languages, apiBase));
+  return parsed;
+}
+
+export type ParsedSpanResolution = { groups: string[][]; entry?: string; candidates: TokenCandidate[] };
+
+export async function resolveParsedSpan(text: string, token: ParsedToken, previous?: ParsedToken): Promise<ParsedSpanResolution> {
+  if (text.slice(token.start, token.start + token.length) !== token.surface || !token.content) {
+    return { groups: [], candidates: [] };
+  }
+  const db = await openPublicDatabase();
+  const generation = await activePublicGeneration(db);
+  if (!generation) throw new DictionaryNotInstalledError("look up words");
+  const source = text.slice(token.start, token.start + Math.max(MAX_SCAN_CHARS, token.length));
+  const { all } = await contextualCandidates(db, generation, source);
+  const broaderForms: Array<{ prefix: string; candidate: Candidate }> = (token.kind === "inflected" ? lookupVariants(token.surface) : []).flatMap((variant) => {
+    const contextual = new Set(deinflect(variant.text, { contextual: true }).map((form) =>
+      `${form.term}\0${form.inflections.join(",")}`));
+    return deinflect(variant.text).filter((form) => !contextual.has(`${form.term}\0${form.inflections.join(",")}`))
+      .map((form) => ({ prefix: token.surface, candidate: {
+        text: form.term, reasons: form.inflections.map(inflectionLabel), processingCost: variant.processingCost,
+        emphasisRepair: variant.emphasisRepair, deinflection: form,
+      } }));
+  });
+  if (["adj", "adv"].includes(token.pos) && token.surface === `${token.lemma}に`) {
+    broaderForms.push({ prefix: token.surface, candidate: {
+      text: token.lemma, reasons: [], processingCost: 0, emphasisRepair: false,
+    } });
+  }
+  const broadHits = await hitsForCandidates(db, generation, broaderForms, false);
+  const rawPos = token.pos ?? "";
+  const pos = rawPos === "cop" || rawPos.startsWith("aux") ? "aux"
+    : rawPos.startsWith("v") ? "verb" : rawPos.startsWith("adj") ? "adj"
+      : rawPos === "pn" ? "pron" : rawPos === "n" || rawPos.startsWith("n-") ? "noun" : rawPos;
+  const auxiliaryForm = pos === "exp" && token.lemma !== token.surface
+    ? deinflect(token.surface).find((form) => form.term === token.lemma && matchesPos(form, ["cop", "aux-v"]))
+    : undefined;
+  const clue = auxiliaryForm
+    ? { ...token, pos: "aux", kind: "function", inflection: displayInflections(auxiliaryForm.inflections.map(inflectionLabel)) }
+    : { ...token, pos };
+  const reading = token.reading ? katakanaToHiragana(token.reading) : null;
+  const atEnd = text.slice(token.start + token.length).trim().length === 0;
+  const contextual = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u
+    .test(text.slice(0, token.start) + text.slice(token.start + token.length));
+  const suruBases = token.surface !== "する" ? [] : previous
+    ? (previous.pos === "noun" || previous.pos === "n") && previous.start + previous.length === token.start
+      ? [previous.lemma] : []
+    : (() => {
+      const run = text.slice(0, token.start).match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+$/u)?.[0] ?? "";
+      return Array.from({ length: Math.min(run.length, 8) }, (_, index) => run.slice(-index - 1));
+    })();
+  const suruNoun = (await Promise.all(suruBases.map(async (base) => {
+    const terms = await termsForProbe(db, generation, base);
+    return terms.some((term) => term.expressions.some((expression) => expression.text === base) &&
+      term.senses.some((sense) => sense.partsOfSpeech.includes("vs")));
+  }))).some(Boolean);
+  const followedByJapanese = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u
+    .test(text.slice(token.start + token.length));
+  const hits = [...all, ...broadHits].filter((hit) =>
+    hit.surface === token.surface && parsedCandidateAllowed(hit, clue, atEnd, followedByJapanese, contextual, suruNoun)).sort((a, b) => {
+    const aReading = reading !== null && katakanaToHiragana(readingFor(a.term, a.candidate.text) ?? "") === reading;
+    const bReading = reading !== null && katakanaToHiragana(readingFor(b.term, b.candidate.text) ?? "") === reading;
+    return dictionaryRung(a, b) || Number(bReading) - Number(aReading) || byLadder(a, b);
+  });
+  const byEntry = new Map<string, LookupHit>();
+  for (const hit of hits) if (!byEntry.has(hit.term.id)) byEntry.set(hit.term.id, hit);
+  const unique = rankParsedHits([...byEntry.values()], clue);
+  const grouped = new Map<string, LookupHit[]>();
+  for (const hit of unique) {
+    const key = canonicalGroupKey(hit.term);
+    const group = grouped.get(key);
+    if (group) group.push(hit);
+    else grouped.set(key, [hit]);
+  }
+  const groups = [...grouped.values()].flatMap((group) => {
+    const definitions = group.filter((hit) => hit.term.dictionary !== "jmnedict");
+    if (definitions.length <= 1) return [group.map((hit) => hit.term.id)];
+    const ordered = definitions.sort((a, b) => dictionaryRung(a, b)
+      || Number(isCommonWord(b)) - Number(isCommonWord(a)) || a.term.id.localeCompare(b.term.id));
+    const seen = new Set<string>();
+    const riders = ordered.filter((hit) => {
+      if (seen.has(hit.term.dictionary)) return false;
+      seen.add(hit.term.dictionary);
+      return true;
+    });
+    const extras = ordered.filter((hit) => !riders.includes(hit));
+    return [[...riders, ...group.filter((hit) => hit.term.dictionary === "jmnedict")].map((hit) => hit.term.id),
+      ...extras.map((hit) => [hit.term.id])];
+  }).slice(0, 40);
+  const visible = new Set(groups.flat());
+  const candidates = unique.filter((hit) => visible.has(hit.term.id)).map((hit) => ({
+    entry: hit.term.id,
+    headword: hit.term.headword,
+    reading: readingFor(hit.term, hit.candidate.text),
+    common: commonAlternativeReading(hit),
+  }));
+  return { groups, entry: groups[0]?.[0], candidates };
+}
+
+function parsedCandidateAllowed(hit: LookupHit, token: ParsedToken, atEnd: boolean, followedByJapanese: boolean,
+  contextual: boolean, suruNoun: boolean): boolean {
+  const surface = token.surface.normalize("NFKC");
+  const codes = hit.term.senses.flatMap((sense) => sense.partsOfSpeech);
+  if (suruNoun && hit.candidate.text === "する" && !codes.includes("vs-i")) return false;
+  if (contextual && token.pos === "aux") {
+    if (codes.includes("int") && !codes.includes("aux")) return false;
+    if (surface === "だ" && token.lemma === "だ" && codes.includes("aux-v") && !codes.includes("cop")) return false;
+  }
+  if (contextual && token.lemma === token.surface && ["noun", "pron", "adv", "adj"].includes(token.pos) &&
+    hit.candidate.deinflection && hit.candidate.text !== token.lemma && codes.some((code) => code.startsWith("v"))) return false;
+  if (contextual && token.pos === "verb" && surface.endsWith("ます") && hit.candidate.deinflection &&
+    hit.candidate.text !== token.lemma) return false;
+  if (!hit.candidate.deinflection && hit.candidate.text !== surface && hit.candidate.text === token.lemma &&
+    surface === `${token.lemma}に` && !codes.some((code) => code === "adj-pn" || code === "adj-na")) return false;
+  if (token.pos === "adj" && surface === `${token.lemma}に` && hit.candidate.text === token.lemma && codes.includes("adj-pn")) return true;
+  if (surface === "で" && token.lemma === "だ" && token.pos === "aux" && followedByJapanese) {
+    return hit.candidate.text === "だ" && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("cop"));
+  }
+  if (hit.term.dictionary === "jmnedict" && /\p{Script=Katakana}/u.test(surface) &&
+    !hit.term.expressions.some((expression) => expression.text === surface)) return false;
+  if ((token.pos === "prt" || token.pos === "conj") && token.lemma === token.surface) {
+    const closingCopula = atEnd && token.surface === "で" && hit.candidate.text === "だ";
+    const conditionalSuru = token.pos === "conj" && Boolean(hit.candidate.deinflection?.inflections.includes("-たら")) && codes.includes("vs-i");
+    return (!hit.candidate.deinflection || closingCopula || conditionalSuru) &&
+      (token.pos !== "conj" || token.kind !== "expression" ||
+        hit.term.expressions.some((expression) => expression.text === token.surface) || conditionalSuru);
+  }
+  if ((token.pos === "aux" || token.pos.startsWith("aux-")) && token.lemma !== token.surface && hit.candidate.deinflection) {
+    return normalize(hit.candidate.text) === normalize(token.lemma) ||
+      (surface === "でした" && hit.candidate.text === "だ" && codes.includes("cop")) || !contextual && atEnd;
+  }
+  if ((token.pos === "verb" || token.pos.startsWith("v")) && /った$/u.test(token.surface) &&
+      !token.surface.endsWith("なかった") && token.lemma !== token.surface) {
+    return hit.candidate.deinflection ? firstSensePos(hit).startsWith("v5")
+      : hit.term.expressions.some((expression) => expression.text === surface);
+  }
+  return true;
+}
+
+function rankParsedHits(hits: LookupHit[], token: ParsedToken): LookupHit[] {
+  const passiveSuru = token.lemma === "する" && token.inflection?.includes("passive") && token.surface.startsWith("され");
+  const query = passiveSuru ? "される" : token.lemma !== token.surface &&
+    (token.kind === "inflected" || token.kind === "expression" || token.pos === "verb" || token.pos === "aux" || token.pos.startsWith("v"))
+    ? token.lemma : token.surface;
+  const pairRanks = new Map<string, number>();
+  for (const hit of hits) for (const row of hit.term.frequencies ?? []) {
+    const key = `${row.text}\0${row.reading ?? ""}`;
+    pairRanks.set(key, Math.min(pairRanks.get(key) ?? Infinity, row.rank));
+  }
+  const commonKanaClaims = new Map<string, Set<string>>();
+  for (const hit of hits) {
+    const term = hit.term;
+    if (/\p{Script=Han}/u.test(term.headword) || !term.expressions.some((expression) => expression.common)) continue;
+    const claims = commonKanaClaims.get(term.headword) ?? new Set<string>();
+    claims.add(term.id);
+    commonKanaClaims.set(term.headword, claims);
+  }
+  const scoreFor = (hit: LookupHit): number[] => {
+    const term = hit.term;
+    const writings = term.expressions;
+    const matched = writings.filter((writing) => writing.text === query);
+    const reading = term.readings.find((item) => item.kind === "kana")?.text ?? "";
+    const claimed = commonKanaClaims.get(term.headword);
+    const kanjiIdentity = term.senses[0]?.misc.includes("uk") && !writings.some((writing) => writing.common)
+      ? writings.find((writing) => writing.script === "kanji" &&
+        !writing.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag) || RARE_KANJI_TAGS.has(tag)))?.text
+      : undefined;
+    const headword = kanjiIdentity ?? term.headword;
+    const canonicalReading = /\p{Script=Han}/u.test(headword) ? reading : headword;
+    const canonical = pairRanks.get(`${headword}\0${canonicalReading}`);
+    const literal = Math.min(...matched.filter((writing) => writing.script !== "kana" || writing.common || term.headword === writing.text)
+      .map((writing) => pairRanks.get(`${writing.text}\0${writing.script === "kana" ? writing.text : reading}`) ?? Infinity));
+    const ownKanji = Math.min(...writings.filter((writing) => writing.script === "kanji" &&
+      !writing.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag)))
+      .map((writing) => pairRanks.get(`${writing.text}\0${reading}`) ?? Infinity));
+    const grammatical = token.pos === "prt" || token.pos === "conj";
+    const frequency = claimed && !claimed.has(term.id) ? (grammatical ? Infinity : ownKanji) : canonical ?? literal;
+    return [
+      matched.length && matched.every((writing) => writing.tags.some((tag) => tag === "ok" || tag === "oK")) ? 1 : 0,
+      matched.length && matched.every((writing) => writing.tags.some((tag) => tag === "rK" || tag === "rk")) ? 1 : 0,
+      frequency ?? Infinity,
+      Number.isFinite(frequency) ? ownKanji : Infinity,
+      headword === query ? 0 : 1,
+      matched.length ? 0 : 1,
+      headword === query ? 0 : 1,
+      writings.some((writing) => writing.common) ? 0 : 1,
+      term.jlpt ? 5 - term.jlpt : 9,
+      term.dictionary === "wikipedia" ? 1 : 0,
+      writings.length,
+      Number(term.id.split(":").at(-1)) || Infinity,
+    ];
+  };
+  const ranks = new Map(hits.map((hit) => [hit.term.id, scoreFor(hit)]));
+  hits.sort((a, b) => {
+    const left = ranks.get(a.term.id)!;
+    const right = ranks.get(b.term.id)!;
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) return left[index]! < right[index]! ? -1 : 1;
+    }
+    return a.term.id.localeCompare(b.term.id);
+  });
+  if (hits.some((hit) => hit.term.dictionary !== "jmnedict")) {
+    hits = [...hits.filter((hit) => hit.term.dictionary !== "jmnedict"),
+      ...hits.filter((hit) => hit.term.dictionary === "jmnedict")];
+  }
+  const forms = token.lemma !== token.surface && token.pos === "aux"
+    ? hits.filter((hit) => hit.term.expressions.some((expression) => expression.text === token.surface) &&
+      hit.term.headword === token.surface &&
+      (firstSensePos(hit).startsWith("aux") || (firstSensePos(hit) === "exp" && token.surface.endsWith("た")))) : [];
+  const selected = hits.filter((hit) => !forms.includes(hit) &&
+    hit.term.expressions.some((expression) => expression.text === query));
+  const ordered = [...forms, ...selected, ...hits.filter((hit) => !forms.includes(hit) && !selected.includes(hit))];
+  if (token.pos === "adv") ordered.sort((a, b) => Number(b.term.senses.some((sense) => sense.partsOfSpeech.includes("adv"))) -
+    Number(a.term.senses.some((sense) => sense.partsOfSpeech.includes("adv"))));
+  if (token.pos === "aux" && token.lemma === token.surface) ordered.sort((a, b) => Number(b.term.senses.some((sense) =>
+    sense.partsOfSpeech.some((pos) => pos.startsWith("aux") || pos === "cop"))) -
+    Number(a.term.senses.some((sense) => sense.partsOfSpeech.some((pos) => pos.startsWith("aux") || pos === "cop"))));
+  return ordered;
+}
+
+function canonicalGroupKey(term: OfflineTerm): string {
+  const kanji = term.expressions.filter((expression) => expression.script === "kanji" &&
+    !expression.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag)));
+  const preferredKanji = kanji.find((expression) => !/[0-9０-９]/u.test(expression.text)) ?? kanji[0];
+  if (term.dictionary === "jmnedict" && preferredKanji) return JSON.stringify([preferredKanji.text, "name"]);
+  const kana = term.expressions.filter((expression) => expression.script === "kana");
+  const preferredKana = kana.find((expression) => expression.common) ?? kana[0];
+  return JSON.stringify([preferredKanji?.text ?? null, preferredKana?.text ?? null,
+    term.dictionary === "jmnedict" ? "name" : "word"]);
 }
 
 function mergeAdverbialAdjectives(tokens: ParsedToken[]): ParsedToken[] {
@@ -750,6 +1024,7 @@ function mergeAdverbialAdjectives(tokens: ParsedToken[]): ParsedToken[] {
       surface: adjective.surface + particle.surface,
       length: adjective.length + particle.length,
       reading: adjective.reading ? adjective.reading + "に" : null,
+      inflection: ["adverbial (〜に)"],
     });
   }
   return tokens;
@@ -818,8 +1093,9 @@ async function mergeExpressions(db: IDBDatabase, generation: string, tokens: Par
         start: run[0]!.start, length: run.reduce((total, token) => total + token.length, 0),
         surface, reading: expression.reading,
         lemma: copulaBase ?? expression.baseForm, entry: expression.entry, pos: firstPartOfSpeech(expression),
+        inflection: displayInflections(expression.inflection ?? []), kind: "expression",
         ...(alternatives ? { candidates: alternatives } : {}),
-        content: true, state: "none", frequency: expression.frequency,
+        content: true, state: "none", frequency: expression.rankFrequency,
       });
     } else {
       merged.push(tokens[at]!);
@@ -905,7 +1181,9 @@ function takesSuru(definition: Definition): boolean {
 
 function inflectedSurfaceReading(definition: PendingDefinition): string | null {
   const { sourceForm: surface, baseForm: base, reading } = definition;
-  if (!reading || !surface || !definition.inflection?.length || surface === base) return reading;
+  if (!reading || !surface) return reading;
+  if (!definition.inflection?.length) return definition.occurrenceReading ?? reading;
+  if (surface === base) return reading;
   if (/^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(surface)) return katakanaToHiragana(surface.normalize("NFKC"));
   const ending = base.match(/[\p{Script=Hiragana}\p{Script=Katakana}ー]*$/u)?.[0] ?? "";
   const stem = base.slice(0, base.length - ending.length);
@@ -968,13 +1246,13 @@ async function copulaBaseHit(db: IDBDatabase, generation: string, definition: De
   }
 }
 
-async function copulaHead(db: IDBDatabase, generation: string, definition: Definition): Promise<string | null> {
+async function copulaHead(db: IDBDatabase, generation: string, definition: PendingDefinition): Promise<string | null> {
   const copula = await copulaBaseHit(db, generation, definition);
   if (copula) return copula.term.headword;
   return adjectiveHead(db, generation, definition);
 }
 
-async function adjectiveHead(db: IDBDatabase, generation: string, definition: Definition): Promise<string | null> {
+async function adjectiveHead(db: IDBDatabase, generation: string, definition: PendingDefinition): Promise<string | null> {
   const headword = definition.headword;
   if (headword.length < 3 || !/[にな]$/.test(headword)) return null;
   const stem = headword.slice(0, -1);
@@ -985,7 +1263,7 @@ async function adjectiveHead(db: IDBDatabase, generation: string, definition: De
   if (!head) return null;
   if (isCommonWord(head) && !definition.common) return stem;
   const headRank = frequencyForHit(head);
-  return headRank !== null && headRank < (definition.frequency ?? UNRANKED) ? stem : null;
+  return headRank !== null && headRank < (definition.rankFrequency ?? UNRANKED) ? stem : null;
 }
 
 async function lexicalAdverbBase(db: IDBDatabase, generation: string, definition: Definition): Promise<LookupHit | undefined> {
@@ -1179,7 +1457,7 @@ async function adverbBeforeVerb(
 }
 
 async function dictionaryNounCompound(
-  db: IDBDatabase, generation: string, source: string, best: Definition, candidates: LookupHit[],
+  db: IDBDatabase, generation: string, source: string, best: PendingDefinition, candidates: LookupHit[],
 ): Promise<LookupHit | undefined> {
   if (!firstPartOfSpeech(best).match(/^n(?:-|$)/)) return;
   const length = best.sourceForm!.length;
@@ -1195,7 +1473,7 @@ async function dictionaryNounCompound(
     const hits = await hitsForCandidates(db, generation, [{ prefix: overlap, candidate: { text: overlap, reasons: [] } }], false);
     const nouns = hits.filter((hit) => matchingExpression(hit) && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("n")));
     if (!nouns.length) continue;
-    const splitCost = cost(best.sourceForm!, best.frequency) + Math.min(...nouns.map((hit) => cost(overlap, frequencyForHit(hit))));
+    const splitCost = cost(best.sourceForm!, best.rankFrequency) + Math.min(...nouns.map((hit) => cost(overlap, frequencyForHit(hit))));
     if (cost(compound.surface, frequencyForHit(compound)) < splitCost) return compound;
   }
 }
@@ -1206,7 +1484,7 @@ async function dictionaryNounCompound(
 const BOUND_PARTICLES = new Set([ "は", "が", "を", "に", "へ", "も", "と", "で" ]);
 
 async function swallowedParticle(
-  db: IDBDatabase, generation: string, definition: Definition | null, afterContent: boolean, rest: string,
+  db: IDBDatabase, generation: string, definition: PendingDefinition | null, afterContent: boolean, rest: string,
 ): Promise<boolean> {
   if (!afterContent || !definition?.sourceForm) return false;
 
@@ -1236,7 +1514,7 @@ async function swallowedParticle(
   const tailRank = Math.min(...hits.map((hit) => frequencyForHit(hit) ?? UNRANKED));
   if (!Number.isFinite(tailRank)) return false;
 
-  return Math.log2((definition.frequency ?? UNRANKED) + 1) - Math.log2(tailRank + 1) >= MUCH_COMMONER;
+  return Math.log2((definition.rankFrequency ?? UNRANKED) + 1) - Math.log2(tailRank + 1) >= MUCH_COMMONER;
 }
 
 // Every reading of this position the contextual gate trusts, best first: the
@@ -1275,9 +1553,6 @@ async function contextualCandidates(db: IDBDatabase, generation: string, source:
   return candidates;
 }
 
-// Every OTHER word this exact span could be, best first, with the chosen one at
-// the head. The offline half of `POST /api/v1/words/identify`.
-//
 // The list is not new work: `contextualCandidates` already gathered it to pick
 // the winner and its answer is still in the cache, so this reads what greed threw
 // away rather than asking again. `rest` is sliced to the same window the parser
@@ -1941,14 +2216,13 @@ function readingFor(term: Stored<OfflineTerm>, matched: string | undefined): str
   return (applicable ?? kana[0] ?? term.readings[0])?.text ?? null;
 }
 
-// The form to LEAD the card with: mirrors WordCard#headword / #canonical_headword.
-// A specific written form the surface matched leads (look up 狗 → 狗, not 犬); a
-// usually-kana word otherwise leads with its kana (いつ, not 何時), matching the
-// site so the offline popup and the page read the word the same way.
+// WordCard leads with a matched kanji form or the entry's dictionary heading.
+// A clicked kana form remains on sourceForm without replacing that heading.
 function displayHeadword(hit: LookupHit, reading: string | null): string {
   const matched = matchingExpression(hit);
-  if (matched) return matched.text;
-  if (reading && isUsuallyKana(hit.term)) return reading;
+  if (matched && (matched.text === hit.surface || hit.candidate.deinflection) &&
+    (matched.script === "kanji" || matched.script === "mixed" && /\p{Script=Han}/u.test(matched.text))) return matched.text;
+  if (reading && isUsuallyKana(hit.term) && /\p{Script=Han}/u.test(hit.term.headword)) return reading;
   return hit.term.headword;
 }
 
@@ -2128,6 +2402,24 @@ function frequencyForHit(hit: LookupHit): number | null {
   return Math.min(...pool.map((item) => item.rank));
 }
 
+function cardSidecarHeadword(term: Stored<OfflineTerm>): string | undefined {
+  const spelled = term.expressions.filter((expression) => expression.script === "kanji" &&
+    !expression.tags.some((tag) => SEARCH_ONLY_TAGS.has(tag)));
+  const kana = term.expressions.find((expression) => expression.script === "kana" && expression.common)
+    ?? term.expressions.find((expression) => expression.script === "kana");
+  const kanji = spelled[0];
+  if (!isUsuallyKana(term)) return kanji?.text ?? kana?.text;
+  const kanaIsIdentity = !kanji || term.expressions.some((expression) => expression.common) ||
+    spelled.every((expression) => expression.tags.some((tag) => tag === "rK" || tag === "oK"));
+  return kanaIsIdentity ? kana?.text ?? kanji?.text : kanji.text;
+}
+
+function cardFrequency(term: Stored<OfflineTerm>, reading: string | null): number | null {
+  const headword = cardSidecarHeadword(term);
+  const rows = (term.frequencies ?? []).filter((item) => item.text === headword && item.reading === reading);
+  return rows.length ? Math.min(...rows.map((item) => item.rank)) : null;
+}
+
 async function termsForProbe(db: IDBDatabase, generation: string, probe: string): Promise<Array<Stored<OfflineTerm>>> {
   const privateDb = await privateDatabaseIfPresent();
   const privateGeneration = privateDb ? await activeGeneration(privateDb) : undefined;
@@ -2148,25 +2440,28 @@ async function termsForProbe(db: IDBDatabase, generation: string, probe: string)
 }
 
 async function performInstall(apiBase: string, signal: AbortSignal, authorization: string | undefined, activationEpoch: number): Promise<PackManifest> {
-  const base = apiBase.replace(/\/$/, "");
   reportInstallProgress(0, "Fetching the dictionary manifest");
-  const manifestResponse = await fetch(`${base}/api/v1/dictionary-packs${authorization ? "" : "/current"}`, {
-    cache: "no-store", signal, ...(authorization ? { headers: { Authorization: authorization } } : {}),
-  });
-  if (!manifestResponse.ok) throw new Error(await responseFailure("Dictionary manifest", manifestResponse));
-  const payload = await manifestResponse.json() as PackManifest | DictionaryStackManifest;
+  const client = createShirabeClient({ baseUrl: apiBase, accessToken: authorization?.replace(/^Bearer /, "") });
+  const manifest = authorization
+    ? await client.listDictionaryPacks({ cache: "no-store", signal })
+    : await client.getCurrentDictionaryPack({ cache: "no-store", signal });
+  if (signal.aborted) throw new DOMException("Dictionary installation cancelled.", "AbortError");
+  if (!manifest.data) {
+    const detail = manifest.error as { detail?: string; title?: string } | undefined;
+    throw new Error(`Dictionary manifest: ${detail?.detail ?? detail?.title ?? `HTTP ${manifest.response?.status ?? 0}`}`);
+  }
+  const payload = manifest.data as PackManifest | DictionaryStackManifest;
   const stack = authorization ? validateStackManifest(payload as DictionaryStackManifest) : null;
-  const packs = stack ? [stack.publicPack, ...stack.personalPacks] : [payload as PackManifest];
+  const packs = stack ? stack.packs : [payload as PackManifest];
   packs.forEach(validateManifest);
   if (stack) {
     if (activationEpoch !== privateActivationEpoch) throw new DOMException("Private dictionary activation was superseded.", "AbortError");
-    const privateDb = await openPrivateDatabase();
+    await openPrivateDatabase();
     if (activationEpoch !== privateActivationEpoch) throw new DOMException("Private dictionary activation was superseded.", "AbortError");
     const installedStack = activeStack(stack);
     activeStackCache = installedStack;
     lookupProbeCache.clear();
     candidateCache.clear();
-    await setMeta(privateDb, "stack", installedStack);
   }
   reportInstallProgress(installProgress, "Checking offline dictionary storage");
   const publicPack = packs[0]!;
@@ -2175,18 +2470,22 @@ async function performInstall(apiBase: string, signal: AbortSignal, authorizatio
 
   if (!stack) {
     await deleteDictionaryDatabase("private");
-    activeStackCache = publicStack(publicPack);
+    activeStackCache = await meta<ActiveStack>(publicDb, "localStack") ?? publicStack(publicPack);
     reportInstallProgress(1, null);
     return publicPack;
   }
 
   const privateDb = await openPrivateDatabase();
-  const privateRevision = privateGeneration(stack.personalPacks);
+  const personalPacks = stack.packs.filter((pack) => pack.kind === "overlay");
+  const privateRevision = privateGeneration(personalPacks);
   if (privateRevision) {
-    await installPacks(privateDb, privateRevision, stack.personalPacks, signal, authorization);
+    await installPacks(privateDb, privateRevision, personalPacks, signal, authorization);
   } else {
     await clearAllDictionaryRecords(privateDb);
   }
+  const installedStack = activeStack(stack);
+  if (stack.pendingPacks.length) installedStack.stackFingerprint = "";
+  await setMeta(privateDb, "stack", installedStack);
   reportInstallProgress(1, null);
   return combinedManifest(packs, packs.map((pack) => pack.contentRevision).join("."), "dictionary-stack.ndjson.gz");
 }
@@ -2239,12 +2538,18 @@ async function importPack(
 }
 
 function activeStack(stack: DictionaryStackManifest): ActiveStack {
-  return { stackFingerprint: stack.stackFingerprint, dictionaries: stack.dictionaries,
-    dictionaryReveal: stack.dictionaryReveal, dictionaryNames: stack.dictionaryNames };
+  const sources = stack.dictionaryStack.sources;
+  return {
+    stackFingerprint: stack.dictionaryStack.fingerprint,
+    dictionaries: sources.flatMap((source) => source.languages.map((language) => `${source.dictionary}:${language}`)),
+    dictionaryReveal: Object.fromEntries(sources.map((source) => [source.dictionary, source.reveal])),
+    dictionaryNames: {}, selected: true,
+  };
 }
 
 function publicStack(pack: PackManifest): ActiveStack {
-  const dictionaries = pack.dictionaries.flatMap((dictionary) => pack.languages.map((language) => `${dictionary.slug}:${language}`));
+  const dictionaries = pack.dictionaries.flatMap((dictionary) =>
+    uiLanguagesFrom((dictionary.languages ?? pack.languages) as GlossLanguage[]).map((language) => `${dictionary.slug}:${language}`));
   return {
     stackFingerprint: pack.contentRevision,
     dictionaries, dictionaryReveal: {}, dictionaryNames: {},
@@ -2278,11 +2583,15 @@ function privateGeneration(packs: PackManifest[]): string | null {
 }
 
 function validateStackManifest(stack: DictionaryStackManifest): DictionaryStackManifest {
-  if (!stack || typeof stack !== "object" || !/^[a-f0-9]{16}$/.test(stack.stackFingerprint) ||
-      !stringArray(stack.dictionaries) || !stack.dictionaries.every((source) => source.includes(":")) ||
-      !stack.dictionaryReveal || Object.values(stack.dictionaryReveal).some((mode) => mode !== "show" && mode !== "hover") ||
-      !stack.dictionaryNames || Object.values(stack.dictionaryNames).some((name) => !plainString(name)) ||
-      !stack.publicPack || !Array.isArray(stack.personalPacks)) throw new Error("Dictionary stack manifest is invalid.");
+  if (!stack || typeof stack !== "object" || !stack.dictionaryStack ||
+      !/^[a-f0-9]{16}$/.test(stack.dictionaryStack.fingerprint) ||
+      !Array.isArray(stack.dictionaryStack.sources) ||
+      stack.dictionaryStack.sources.some((source) => !plainString(source.dictionary) ||
+        !stringArray(source.languages) || !source.languages.length ||
+        (source.reveal !== "show" && source.reveal !== "hover")) ||
+      !Array.isArray(stack.packs) || stack.packs[0]?.kind !== "base" ||
+      stack.packs.slice(1).some((pack) => pack.kind !== "overlay") ||
+      !stringArray(stack.pendingPacks)) throw new Error("Dictionary stack manifest is invalid.");
   return stack;
 }
 
@@ -2571,16 +2880,25 @@ async function activeGeneration(db: IDBDatabase): Promise<string | undefined> {
 async function activePublicGeneration(db: IDBDatabase): Promise<string | undefined> {
   const generation = await activeGeneration(db);
   if (!generation) return;
-  const stored = await storedActiveStack();
-  if (stored) activeStackCache = stored;
-  else if (!activeStackCache) {
-    const manifest = await meta<PackManifest>(db, "manifest");
-    if (manifest) activeStackCache = publicStack(manifest);
+  if (!activeStackCache) {
+    const stored = await storedActiveStack();
+    if (stored) activeStackCache = stored;
+    else {
+      const manifest = await meta<PackManifest>(db, "manifest");
+      if (manifest) activeStackCache = publicStack(manifest);
+    }
   }
   return generation;
 }
 
 async function storedActiveStack(): Promise<ActiveStack | undefined> {
+  const publicDb = await openPublicDatabase();
+  const local = await meta<ActiveStack>(publicDb, "localStack");
+  if (local) return local;
+  return installedActiveStack();
+}
+
+async function installedActiveStack(): Promise<ActiveStack | undefined> {
   const db = await privateDatabaseIfPresent();
   return db ? meta<ActiveStack>(db, "stack") : undefined;
 }
@@ -2646,7 +2964,7 @@ async function forPopup(
   const adverbial = !definition.inflection?.length && literalForm && adjective
     ? deinflect(source).find((form) => form.term === adjective && form.inflections.includes("adverbial"))
     : undefined;
-  const { exampleIds: _ids, inflectionClass: _class, studyHeadword, ...rest } = definition;
+  const { exampleIds: _ids, inflectionClass: _class, occurrenceReading: _occurrenceReading, rankFrequency: _rankFrequency, studyHeadword, ...rest } = definition;
   const lexicalBase = lexicalAdverb ?? imperative;
   const inflections = copula?.candidate.reasons ?? lexicalBase?.candidate.reasons
     ?? adverbial?.inflections.map(inflectionLabel) ?? definition.inflection ?? [];
@@ -2692,6 +3010,12 @@ async function examplesFor(
 async function setMeta(db: IDBDatabase, key: string, value: unknown): Promise<void> {
   const transaction = db.transaction("meta", "readwrite");
   transaction.objectStore("meta").put({ key, value });
+  await transactionDone(transaction);
+}
+
+async function deleteMeta(db: IDBDatabase, key: string): Promise<void> {
+  const transaction = db.transaction("meta", "readwrite");
+  transaction.objectStore("meta").delete(key);
   await transactionDone(transaction);
 }
 
@@ -2805,7 +3129,10 @@ function validateManifest(manifest: PackManifest): void {
       !/^[A-Za-z0-9._-]+\.ndjson\.gz$/.test(manifest.artifact) ||
       !Number.isSafeInteger(manifest.bytes) || manifest.bytes <= 0 || !validCounts(manifest.counts) ||
       !Array.isArray(manifest.languages) || !manifest.languages.length || manifest.languages.some((language) => !(language in GLOSS_TAGS)) ||
-      !Array.isArray(manifest.dictionaries) || manifest.dictionaries.some((item) => !plainString(item.slug) || (item.version != null && !plainString(item.version))) ||
+      !Array.isArray(manifest.dictionaries) || manifest.dictionaries.some((item) => !plainString(item.slug) ||
+        (item.version != null && !plainString(item.version)) ||
+        (item.languages != null && (!stringArray(item.languages) || !item.languages.length ||
+          item.languages.some((language) => !(language in GLOSS_TAGS))))) ||
       !stringArray(manifest.modifications) || !Array.isArray(manifest.sources) ||
       manifest.sources.some((source) => !plainString(source.name) || !plainString(source.license) || !httpUrl(source.url) || (source.licenseUrl != null && !httpUrl(source.licenseUrl))) ||
       !validAudioRecipe(manifest.audio)) {
@@ -3053,7 +3380,7 @@ function score(hit: LookupHit, source: string): number {
 //
 // `exampleIds` never leaves this module: `forPopup` trades it for the sentences
 // themselves, and everything downstream sees a plain Definition.
-type PendingDefinition = Definition & { exampleIds?: string[]; baseForm: string; studyHeadword: string; inflectionClass?: string };
+type PendingDefinition = Definition & { exampleIds?: string[]; baseForm: string; studyHeadword: string; inflectionClass?: string; occurrenceReading?: string | null; rankFrequency: number | null };
 
 function scopedChips(sense: OfflineSense, scope: SenseScope): SenseChip[] {
   const annotations = sense.scopedTags?.filter((tag) => tag.scope === scope) ?? [];
@@ -3081,10 +3408,13 @@ function uniqueSenseChips(chips: SenseChip[]): SenseChip[] {
 
 function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], apiBase: string): PendingDefinition {
   const term = hit.term;
-  const blocks = languages.length ? languages : ["eng" as const];
-  const applicable = term.senses.filter((sense) => !sense.restrictions.length || sense.restrictions.includes(hit.surface) || sense.restrictions.includes(term.headword));
-  const entryTags = uniqueSenseChips(applicable.flatMap((sense) => senseChipsFor(sense, "entry")));
-  const senses: Sense[] = applicable.flatMap((sense) => {
+  const sourceLanguages = activeStackCache?.selected ? activeStackCache.dictionaries.filter((source) => source.startsWith(`${term.dictionary}:`))
+    .map((source) => source.split(":")[1]!) : undefined;
+  const selected = sourceLanguages?.flatMap((language) => language in GLOSS_TAGS
+    ? [language as GlossLanguage] : glossLanguagesFrom([language]));
+  const blocks = selected?.length ? selected : (languages.length ? languages : ["eng" as const]);
+  const entryTags = uniqueSenseChips(term.senses.flatMap((sense) => senseChipsFor(sense, "entry")));
+  const senses: Sense[] = term.senses.flatMap((sense) => {
     const glosses = glossRows(sense, blocks);
     const usages = usageRows(sense, blocks);
     const notes = noteRows(sense, blocks);
@@ -3095,7 +3425,7 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
       // gated on a connected Pro account, so the picker never appears here).
       position: term.senses.indexOf(sense),
       sourceEntry: term.id,
-      ...(term.dictionary === "jmdict" ? {} : { dictionary: dictionaryName(term.dictionary) }),
+      dictionary: dictionaryName(term.dictionary),
       ...(activeStackCache?.dictionaryReveal[term.dictionary] === "hover" ? { covered: true } : {}),
       ...(sense.label ? { label: sense.label } : {}),
       ...(sense.depth !== undefined ? { depth: sense.depth } : {}),
@@ -3197,8 +3527,11 @@ function crossReferences(xrefs: NonNullable<OfflineSense["xrefs"]>): SenseXref[]
 }
 
 function termCard(hit: LookupHit, term: Stored<OfflineTerm>, senses: Sense[], apiBase: string, entryTagsByEntry: Record<string, SenseChip[]> = {}): PendingDefinition {
-  const reading = readingFor(term, matchingExpression(hit)?.text);
-  const headword = displayHeadword(hit, reading);
+  const matched = matchingExpression(hit);
+  const occurrenceReading = readingFor(term, matched?.text);
+  const parserHeadword = matched?.text ?? (occurrenceReading && isUsuallyKana(term) ? occurrenceReading : term.headword);
+  const headword = displayHeadword(hit, occurrenceReading);
+  const reading = readingFor(term, headword);
   // A pattern is a property of the READING: its clip is literally
   // Audio::Clip.word(reading, accent): so a row filed under a sibling writing of
   // the same reading describes this form too. The row for the exact spelling wins
@@ -3228,14 +3561,17 @@ function termCard(hit: LookupHit, term: Stored<OfflineTerm>, senses: Sense[], ap
     studyHeadword: term.headword,
     inflectionClass: matchingExpression(hit)?.inflectionClass,
     baseForm: !term.senses.some((sense) => sense.partsOfSpeech.includes("num"))
-      && (matchingExpression(hit)?.script === "kana" || isUsuallyKana(term)) ? headword : term.headword,
+      && (matched?.script === "kana" || isUsuallyKana(term)) ? parserHeadword : term.headword,
     reading,
+    occurrenceReading,
+    ...(hit.candidate.reasons.length && parserHeadword !== headword ? { inflectionBase: parserHeadword } : {}),
     ...(forms.length ? { forms } : {}),
     entry: term.id,
     url: `${apiBase.replace(/\/$/, "")}/word/${encodeURIComponent(headword)}`,
     common: term.expressions.some((item) => item.common),
     jlpt: term.jlpt ? `N${term.jlpt}` : null,
-    frequency: frequencyForHit(hit),
+    frequency: cardFrequency(term, reading),
+    rankFrequency: frequencyForHit(hit),
     // `audioUrl` and `examples` are filled in by `forPopup`: the pack stores a
     // pattern rather than a link to its clip, and cites its sentences by id.
     pitch: displayedPitch.map((item) => ({ downstep: item.downstep, audioUrl: null })),

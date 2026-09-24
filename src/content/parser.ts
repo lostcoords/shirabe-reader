@@ -14,12 +14,13 @@ const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "
 // of positioned spans instead of `ruby` (jisho.org) are excluded by their host
 // rule's `filter`, since no element tells us it is an annotation there.
 const ANNOTATION_SELECTOR = "ruby";
+const CAPTION_SELECTOR = ".asbplayer-offscreen, .asbplayer-subtitles, .asb-subtitles";
 const PARSED_FLAG = "sbParsed"; // dataset key on the wrapper we insert
 let paused = false;
 
 // One background message covers many text nodes at once. The background returns
 // one token list per input, preserving offsets and keeping message overhead bounded.
-const BATCH_CHARS = 8000;
+const BATCH_CHARS = 1900;
 const DISCOVERY_SLICE_NODES = 300;
 
 // Per-site options carried by a matched host rule.
@@ -43,12 +44,13 @@ function collectTextNodes(root: Node, filter?: string): Text[] {
   return nodes;
 }
 
-function parseableTextNode(node: Node, filter?: string): number {
+function parseableTextNode(node: Node, filter?: string, caption = false): number {
   const text = node.nodeValue;
   if (!text || !JAPANESE.test(text)) return NodeFilter.FILTER_REJECT;
   const parent = node.parentElement;
   if (!parent || SKIP_TAGS.has(parent.tagName) || parent.isContentEditable) return NodeFilter.FILTER_REJECT;
   if (parent.closest(`${ANNOTATION_SELECTOR}, [data-sb-parsed], .sb-word, .sb-popup`)) return NodeFilter.FILTER_REJECT;
+  if (!caption && parent.closest(CAPTION_SELECTOR)) return NodeFilter.FILTER_REJECT;
   if (filter && parent.closest(filter)) return NodeFilter.FILTER_REJECT;
   return NodeFilter.FILTER_ACCEPT;
 }
@@ -75,16 +77,61 @@ function batchNodes(nodes: Text[]): Text[][] {
 // Parse a batch of nodes in one local-worker request. Results stay index-aligned,
 // so each original text node can be replaced with its own detached wrapper.
 async function parseBatch(nodes: Text[], showFurigana: boolean): Promise<void> {
-  const res = await send({ type: "parseBatch", texts: nodes.map((node) => node.nodeValue ?? "") });
+  const texts = nodes.map((node) => node.nodeValue ?? "");
+  const res = await send({ type: "parseBatch", texts });
   if (!res.ok) throw new Error(res.error);
   if (res.dictionaryInstalling) throw new Error("The offline dictionary is still installing.");
+  if (paused) return;
 
+  const rendered: Array<HTMLElement | null> = [];
   res.tokens.forEach((tokens, i) => {
     const node = nodes[i];
-    if (!node?.parentNode) return; // removed while we waited
-    node.parentNode.replaceChild(buildWrapper(node.nodeValue ?? "", tokens, showFurigana), node);
+    if (!node?.parentNode || node.nodeValue !== texts[i]) {
+      rendered[i] = null;
+      return;
+    }
+    const wrapper = buildWrapper(texts[i]!, tokens, showFurigana);
+    node.parentNode.replaceChild(wrapper, node);
+    rendered[i] = wrapper;
   });
   queueStateRefresh(res.tokens.flat());
+  const generation = renderGeneration;
+  void requestOnlineParse(texts).then((online) => {
+    if (!online || generation !== renderGeneration || paused) return;
+    online.forEach((tokens, index) => {
+      const wrapper = rendered[index];
+      if (!wrapper || !canReplaceOnline(wrapper, texts[index]!) || sameTokens(tokens, res.tokens[index] ?? [])) return;
+      wrapper.replaceWith(buildWrapper(texts[index]!, tokens, showFurigana));
+      queueStateRefresh(tokens);
+    });
+  });
+}
+
+async function requestOnlineParse(texts: string[]): Promise<ParsedToken[][] | null> {
+  if (!texts.length || texts.join("\n").length > 2_000) return null;
+  try {
+    const result = await send({ type: "parseBatchOnline", texts });
+    return result.ok && result.accepted ? result.tokens : null;
+  } catch {
+    return null;
+  }
+}
+
+function canReplaceOnline(wrapper: HTMLElement, source: string): boolean {
+  if (!wrapper.isConnected || sourceText(wrapper) !== source) return false;
+  if (wrapper.querySelector(".sb-word:hover, .sb-word:focus")) return false;
+  return !document.querySelector<HTMLElement>(".sb-host")?.shadowRoot?.querySelector(".sb-popup.sb-visible");
+}
+
+function sameTokens(a: ParsedToken[], b: ParsedToken[]): boolean {
+  return a.length === b.length && a.every((token, index) => {
+    const local = b[index];
+    return local && token.start === local.start && token.length === local.length && token.entry === local.entry &&
+      token.lemma === local.lemma && token.reading === local.reading && token.pos === local.pos &&
+      token.kind === local.kind && JSON.stringify(token.inflection ?? []) === JSON.stringify(local.inflection ?? []) &&
+      token.inflectionBase === local.inflectionBase &&
+      JSON.stringify(token.groups ?? []) === JSON.stringify(local.groups ?? []);
+  });
 }
 
 
@@ -138,13 +185,11 @@ export function buildWrapper(text: string, tokens: ParsedToken[], showFurigana: 
   let cursor = 0;
   for (const token of tokens) {
     if (token.start > cursor) wrapper.append(text.slice(cursor, token.start));
-    const rendered = renderToken(token, showFurigana);
+    const sentence = sentenceAt(text, token.start);
+    const targetStart = token.start - sentence.start;
+    const rendered = renderToken(token, showFurigana, { sentence: sentence.text, start: targetStart });
     if (rendered instanceof HTMLElement) {
-      const sentence = sentenceAt(text, token.start);
-      rendered.dataset.sentence = sentence.text;
-      rendered.dataset.targetStart = String(token.start - sentence.start);
-      rendered.dataset.targetEnd = String(token.start - sentence.start + token.length);
-      recordShownCut(rendered, cuts.get(sentence.start), token.surface, token.start - sentence.start);
+      recordShownCut(rendered, cuts.get(sentence.start), token.surface, targetStart);
     }
     wrapper.append(rendered);
     cursor = token.start + token.length;
@@ -229,7 +274,7 @@ export function mediaTimestamp(): string | null {
 /** True when `root` still has Japanese text outside our wraps. */
 function hasUnparsedJapanese(root: Node, filter?: string): boolean {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: (node) => parseableTextNode(node, filter),
+    acceptNode: (node) => parseableTextNode(node, filter, true),
   });
   return walker.nextNode() != null;
 }
@@ -259,7 +304,7 @@ export async function parseCaptionElement(root: HTMLElement, showFurigana: boole
     if (!res.ok) throw new Error(res.error);
     if (res.dictionaryInstalling) throw new Error("The offline dictionary is still installing.");
     // Cue moved on while we looked words up: drop the stale result.
-    if (!root.isConnected || sourceText(root) !== snapshot) return 0;
+    if (paused || !root.isConnected || sourceText(root) !== snapshot) return 0;
     const tokens = res.tokens[0] ?? [];
     reconcileCaption(root, buildWrapper(snapshot, tokens, showFurigana));
     queueStateRefresh(tokens);
@@ -368,7 +413,8 @@ function observeViewportBlocks(root: Node, filter?: string): void {
     for (const x of xs) {
       for (const element of document.elementsFromPoint(x, y)) {
         const block = element.closest<HTMLElement>(BLOCK_SELECTOR);
-        if (!block || !root.contains(block) || block.dataset[LAZY_BLOCK_FLAG] || (filter && block.closest(filter))) continue;
+        if (!block || !root.contains(block) || block.dataset[LAZY_BLOCK_FLAG] || block.closest(CAPTION_SELECTOR) ||
+          (filter && block.closest(filter))) continue;
         if (JAPANESE.test(block.textContent ?? "")) io?.observe(block);
         break;
       }
@@ -456,6 +502,7 @@ function exitBlock(block: HTMLElement): void {
 }
 
 export function setParsingPaused(value: boolean): void {
+  if (paused !== value) renderGeneration += 1;
   paused = value;
   if (!value) {
     for (const block of visibleBlocks) enterBlock(block);
@@ -543,6 +590,7 @@ async function parseBlockBatch(blocks: PreparedBlock[]): Promise<void> {
     }
     // Reverted (full page revert) or fully cancelled (whole batch scrolled off).
     if (generation !== renderGeneration || cancelledRequests.has(requestId)) return;
+    const rendered = new Map<PreparedBlock, HTMLElement[]>();
     blocks.forEach((item, blockIndex) => {
       // A block that scrolled out of view mid-flight is left observed (not flagged
       // parsed) so it re-parses if the reader scrolls back: no wasted render now.
@@ -553,9 +601,23 @@ async function parseBlockBatch(blocks: PreparedBlock[]): Promise<void> {
       item.nodes.forEach((node, index) => {
         if (node.parentNode) node.parentNode.replaceChild(replacements[index], node);
       });
+      rendered.set(item, replacements);
       item.block.dataset[LAZY_BLOCK_FLAG] = "1";
       io?.unobserve(item.block);
       queueStateRefresh(tokens);
+    });
+    void requestOnlineParse(blocks.map((item) => item.text)).then((online) => {
+      if (!online || generation !== renderGeneration || paused) return;
+      blocks.forEach((item, blockIndex) => {
+        const wrappers = rendered.get(item);
+        const tokens = online[blockIndex] ?? [];
+        if (!wrappers || !item.block.isConnected || !visibleBlocks.has(item.block) ||
+            sameTokens(tokens, response.tokens[blockIndex] ?? [])) return;
+        if (!wrappers.every((wrapper, index) => canReplaceOnline(wrapper, item.nodes[index]?.nodeValue ?? ""))) return;
+        wrappers.forEach((wrapper, index) => wrapper.replaceWith(mappedWrapper(
+          item.nodes[index]?.nodeValue ?? "", item.starts[index]!, item.text, tokens, lazyShowFurigana)));
+        queueStateRefresh(tokens);
+      });
     });
     recordPerformance("parse-render", startedAt, {
       blocks: blocks.length, chars: blocks.reduce((sum, item) => sum + item.text.length, 0),
@@ -651,23 +713,22 @@ export function mappedWrapper(nodeText: string, nodeStart: number, context: stri
     // across them, so rendering it on a fragment stamps the full にほんご over
     // 日本 *and* again over 語. Drop the furigana rather than show it twice.
     const clipped = surface.length !== token.length;
+    const sentence = sentenceAt(context, token.start);
+    const targetStart = token.start - sentence.start;
     const rendered = renderToken(
       { ...token, start: localStart, length: surface.length, surface, reading: clipped ? null : token.reading },
       showFurigana,
+      { sentence: sentence.text, start: targetStart, end: targetStart + token.length },
     );
     if (rendered instanceof HTMLElement) {
       // Fragments after the first are the same word continuing across inline
       // markup. They stay real words for lookup and state, but the page metrics
       // must not count one word as two occurrences.
       if (token.start < nodeStart) rendered.dataset.continuation = "1";
-      const sentence = sentenceAt(context, token.start);
-      rendered.dataset.sentence = sentence.text;
-      rendered.dataset.targetStart = String(token.start - sentence.start);
-      rendered.dataset.targetEnd = String(token.start - sentence.start + token.length);
       // The WHOLE token's surface, not this fragment's: a word split across
       // inline markup is one chip of the line, and the cut has to read as the
       // line does.
-      recordShownCut(rendered, cuts.get(sentence.start), token.surface, token.start - sentence.start);
+      recordShownCut(rendered, cuts.get(sentence.start), token.surface, targetStart);
     }
     wrapper.append(rendered);
     cursor = end - nodeStart;

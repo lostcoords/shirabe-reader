@@ -1,5 +1,6 @@
 import { ext } from "../common/browser.js";
-import { DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type GlossLanguage, type ScanModifier } from "../common/config.js";
+import { DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config, type FuriganaMode, type ScanModifier } from "../common/config.js";
+import { GLOSS_LABELS, glossLanguagesFrom } from "@shirabe-org/card/word-card/languages";
 import { mountAccountPanel } from "../common/account-panel.js";
 import { mountDictionaryPanel } from "../common/dictionary-panel.js";
 import { sendDictionary } from "../common/dictionary-port.js";
@@ -19,7 +20,7 @@ Promise.all([loadConfig(), loadHostRules(), activeTabUrl()]).then(([c, r, url]) 
   config = c;
   rules = r;
   siteUrl = url;
-  $<HTMLSelectElement>("dictionaryLanguages").value = c.languages.join(",");
+  renderDictionaryStack(c);
   $<HTMLSelectElement>("lookupScanModifier").value = c.scanModifier;
   $<HTMLSelectElement>("lookupFuriganaMode").value = c.furiganaMode;
   $<HTMLSelectElement>("lookupHighlighting").value = c.highlighting ? "on" : "off";
@@ -28,12 +29,12 @@ Promise.all([loadConfig(), loadHostRules(), activeTabUrl()]).then(([c, r, url]) 
   // Opening the action is the user's activation gesture. Use its activeTab
   // grant to install the lightweight scanner on this page immediately; parsing
   // remains a separate opt-in action and is not required for hover lookup.
-  void activateScannerOnActiveTab();
+  void activateScannerOnActiveTab().then(renderPagePause);
 });
 
 onConfigChanged((next) => {
   config = next;
-  $<HTMLSelectElement>("dictionaryLanguages").value = next.languages.join(",");
+  renderDictionaryStack(next);
   $<HTMLSelectElement>("lookupScanModifier").value = next.scanModifier;
   $<HTMLSelectElement>("lookupFuriganaMode").value = next.furiganaMode;
   $<HTMLSelectElement>("lookupHighlighting").value = next.highlighting ? "on" : "off";
@@ -95,20 +96,30 @@ async function patch(change: Partial<Config>): Promise<void> {
   await saveConfig(config);
 }
 
-$<HTMLSelectElement>("dictionaryLanguages").addEventListener("change", async (event) => {
-  const select = event.currentTarget as HTMLSelectElement;
-  const languages = select.value.split(",") as GlossLanguage[];
-  if (isConnected(config)) {
-    const response = await send({ type: "updateLanguages", languages });
-    if (!response.ok) {
-      select.value = config.languages.join(",");
-      status(response.error);
-      return;
-    }
-  } else {
-    await patch({ languages });
+async function renderDictionaryStack(current: Config): Promise<void> {
+  const response = await sendDictionary({ type: "dictionaryStatus" });
+  if (response.ok && !response.dictionary.installed) {
+    $<HTMLElement>("dictionaryStackSummary").textContent = "Install the dictionary to choose sources";
+    return;
   }
-  status(isConnected(config) ? "Language synced with your profile" : "Definition language saved");
+  let stack = current.dictionaryStack;
+  if (!stack.length && response.ok) stack = response.dictionary.activeSources;
+  const groups = [...new Set(stack.map((source) => source.split(":", 1)[0]))];
+  $<HTMLElement>("dictionaryStackSummary").textContent = groups.length
+    ? groups.map((slug) => {
+      const languages = stack.filter((source) => source.startsWith(`${slug}:`)).map((source) => source.split(":")[1]!);
+      const labels = languages.map((language) => {
+        const code = language in GLOSS_LABELS ? language as keyof typeof GLOSS_LABELS : glossLanguagesFrom([language])[0];
+        return code ? GLOSS_LABELS[code] : language;
+      });
+      return `${current.dictionaryNames[slug] ?? slug}: ${labels.join(" → ")}`;
+    }).join(" · ")
+    : "Install the dictionary to choose sources";
+}
+
+$<HTMLButtonElement>("editDictionaryStack").addEventListener("click", async () => {
+  await ext.tabs.create({ url: ext.runtime.getURL("options/options.html#dictionary") });
+  window.close();
 });
 
 $<HTMLSelectElement>("lookupScanModifier").addEventListener("change", async (event) => {
@@ -130,11 +141,32 @@ $<HTMLSelectElement>("lookupFuriganaMode").addEventListener("change", async (eve
 });
 
 // ── Per-site reader on/off ───────────────────────────────────────────────────
-// Reader-on means Yomitan-style scanning (and dedicated adapters) on this host.
-// Full-page parse stays opt-in via hotkey / context menu: there is no separate
-// "parse automatically" control. Turning the reader on requests optional host
-// access so the scanner survives reloads without reopening the popup.
 const readerToggle = $<HTMLButtonElement>("readerToggle");
+const pagePause = $<HTMLButtonElement>("pagePause");
+
+async function renderPagePause(): Promise<void> {
+  if (!/^https?:/.test(siteUrl)) return;
+  const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id == null) return;
+  try {
+    const state = await ext.tabs.sendMessage(tab.id, { command: "pagePauseState" }) as { paused?: boolean };
+    pagePause.hidden = false;
+    pagePause.textContent = state?.paused ? "Resume this page" : "Pause on this page";
+  } catch {
+    pagePause.hidden = true;
+  }
+}
+
+pagePause.addEventListener("click", async () => {
+  const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id == null) return;
+  try {
+    const state = await ext.tabs.sendMessage(tab.id, { command: "togglePagePause" }) as { paused?: boolean };
+    pagePause.textContent = state?.paused ? "Resume this page" : "Pause on this page";
+  } catch {
+    pagePause.hidden = true;
+  }
+});
 
 async function renderHostControls(): Promise<void> {
   const scope = siteScopeFor(siteUrl);
@@ -163,30 +195,14 @@ readerToggle.addEventListener("click", async () => {
   const disabledHosts = config.disabledHosts.filter((pattern) => !matchUrl(normalizePattern(pattern), siteUrl));
 
   if (readerOn) {
-    // Turning off: suspend scanning on this site. Optional host permission stays
-    // granted so re-enabling does not re-prompt the browser.
     disabledHosts.push(scope);
     await patch({ disabledHosts });
   } else {
-    const enabledHosts = config.enabledHosts.filter((pattern) => !matchUrl(normalizePattern(pattern), siteUrl));
-    const siteAccess = await requestSiteAccess(siteUrl);
-    if (!siteAccess) {
-      status("Site access was not granted; scanning still works in this tab while open");
-    } else {
-      enabledHosts.push(scope);
-    }
-    await patch({ disabledHosts, enabledHosts });
+    await patch({ disabledHosts });
   }
   await renderHostControls();
   void activateScannerOnActiveTab();
 });
-
-async function requestSiteAccess(url: string): Promise<boolean> {
-  if (!/^https?:/.test(url)) return false;
-  const origin = `${new URL(url).origin}/*`;
-  if (await ext.permissions.contains({ origins: [origin] })) return true;
-  return ext.permissions.request({ origins: [origin] });
-}
 
 // ── Connection card ──────────────────────────────────────────────────────────
 // Shared with the options page (common/account-panel.ts).
@@ -210,7 +226,8 @@ const dictionaryPanel = mountDictionaryPanel({
     const dot = document.getElementById("dictionaryDot");
     if (dot) dot.hidden = !busy;
   },
-  onInstalled: () => renderPageState(),
+  onInstalled: () => { void renderDictionaryStack(config); return renderPageState(); },
+  onRemoved: () => { void renderDictionaryStack(config); return renderPageState(); },
 });
 const refreshDictionary = dictionaryPanel.refresh;
 void refreshDictionary();

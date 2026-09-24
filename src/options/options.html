@@ -7,172 +7,201 @@
     <title>Shirabe Reader settings</title>
   </head>
   <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-user" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></symbol>
+      <symbol id="icon-book" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></symbol>
+      <symbol id="icon-reading" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" /></symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></symbol>
+      <symbol id="icon-adjustments" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" /></symbol>
+      <symbol id="icon-sparkles" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" /></symbol>
+      <symbol id="icon-keyboard" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m6.75 7.5 3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0 0 21 18V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v12a2.25 2.25 0 0 0 2.25 2.25Z" /></symbol>
+      <symbol id="icon-volume" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" /></symbol>
+      <symbol id="icon-swatch" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.098 19.902a3.75 3.75 0 0 0 5.304 0l6.401-6.402M6.75 21A3.75 3.75 0 0 1 3 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 0 0 3.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l2.88-2.88c.438-.439 1.15-.439 1.59 0l3.712 3.713c.44.44.44 1.152 0 1.59l-2.879 2.88M6.75 17.25h.008v.008H6.75v-.008Z" /></symbol>
+      <symbol id="icon-eye" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.644C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.43 0 .644C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></symbol>
+      <symbol id="icon-eye-hover" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 8.322C3.423 12.49 7.36 15.5 12 15.5c4.638 0 8.573-3.007 9.963-7.178" /></symbol>
+    </svg>
     <header class="page-header">
-      <h1>Reader settings</h1>
+      <div class="page-header-inner">
+        <div class="brand"><img src="../icons/logo_32.png" alt="" /><span>Shirabe</span><span class="brand-separator" aria-hidden="true"></span><h1>Reader settings</h1></div>
+      </div>
     </header>
 
     <main class="settings-shell">
       <nav class="settings-nav" aria-label="Reader settings">
         <p>Settings</p>
-        <a href="#reading" aria-current="true">Reading</a>
+        <a href="#account" aria-current="true">Account</a>
+        <a href="#reading">Reading</a>
         <a href="#dictionary">Dictionary</a>
-        <a href="#account">Account</a>
-        <a href="#keyboard">Keyboard shortcuts</a>
         <a href="#advanced">Advanced</a>
       </nav>
 
       <article class="settings-content">
-        <section id="reading" class="card">
+        <section id="account" class="card">
           <div class="section-title">
-            <h2>Reading</h2>
-            <p>Lookup, furigana, and page decoration.</p>
+            <span class="section-icon" aria-hidden="true"><svg><use href="#icon-user" /></svg></span>
+            <h2>Account</h2>
           </div>
-          <form id="prefs" class="prefs-grid">
-            <label>Open popup on hover<select id="scanModifier"><option value="none">Always</option><option value="alt">Hold Alt / Option</option><option value="ctrl">Hold Ctrl</option><option value="shift">Hold Shift</option><option value="meta">Hold ⌘ Cmd</option></select></label>
-            <label>Definition language<select id="languages"><option value="eng">English</option><option value="spa">Español</option><option value="spa,eng">Español, then English</option><option value="eng,spa">English, then Español</option></select></label>
-            <label>Furigana<select id="furiganaMode"><option value="all">All words</option><option value="unknown">Unknown words</option><option value="hover">On hover</option><option value="off">Off</option></select></label>
-            <label>Highlighting preset<select id="colorPreset"></select></label>
-            <label>Word state colors<select id="stateColoring"><option value="underline">Color the underline</option><option value="text">Color the word</option><option value="off">Off</option></select></label>
-            <label>Part-of-speech colors<select id="posColoring"><option value="off">Off</option><option value="text">Color the word</option><option value="underline">Color the underline</option></select></label>
-            <label>Definition size<select id="definitionSize"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
-            <label>Theme<select id="theme"><option value="system">Follow the system</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-            <label>Pronunciation voice<select id="audioVoice"><option value="male">Male</option><option value="female">Female</option></select></label>
-            <label class="frequency-field">Popup opens after (ms)<input id="lookupDelay" type="number" min="0" max="2000" step="10" /></label>
-            <label class="frequency-field">Popup closes after (ms)<input id="popupHideDelay" type="number" min="0" max="5000" step="50" /></label>
-            <label class="frequency-field">i+1 maximum frequency rank<input id="iPlusOneFrequencyMax" type="number" min="1" max="1000000" step="1000" /></label>
-            <label class="frequency-field">Mark common words up to rank<input id="markFrequentMax" type="number" min="1" max="1000000" step="1000" /></label>
-            <fieldset class="marked-states">
-              <legend>Mark these words</legend>
-              <label class="check-row"><input id="marked-none" type="checkbox" data-state="none" /><span>Not saved yet</span></label>
-              <label class="check-row"><input id="marked-new" type="checkbox" data-state="new" /><span>New</span></label>
-              <label class="check-row"><input id="marked-learning" type="checkbox" data-state="learning" /><span>Learning</span></label>
-              <label class="check-row"><input id="marked-due" type="checkbox" data-state="due" /><span>Due</span></label>
-              <label class="check-row"><input id="marked-retired" type="checkbox" data-state="retired" /><span>Known</span></label>
-            </fieldset>
-            <div class="check-stack">
-              <label class="check-row"><input id="highlighting" type="checkbox" /><span>Show highlighting on the page (lookup and mining keep working without it)</span></label>
-              <label class="check-row"><input id="iPlusOneIncludesLearning" type="checkbox" /><span>Count learning words as known for i+1</span></label>
-              <label class="check-row"><input id="mineSentenceAudio" type="checkbox" /><span>Record the spoken line when mining a subtitle (replays it)</span></label>
-              <label class="check-row"><input id="markFrequent" type="checkbox" /><span>Mark the most common words you have not saved yet</span></label>
-              <label class="check-row"><input id="popupHideAutomatically" type="checkbox" /><span>Close the popup when the pointer leaves it (off keeps it open until you click away or press Escape)</span></label>
-              <label class="check-row"><input id="audioAutoplay" type="checkbox" /><span>Play pronunciation automatically when a word opens</span></label>
-              <label class="check-row"><input id="errorReports" type="checkbox" /><span>Send error reports (what broke and where in our code, never the page you were on)</span></label>
+          <div class="card-body">
+            <div class="status-stack" id="accountPanel" aria-label="Shirabe account">
+              <div data-state="connected" hidden>
+                <p class="status-line">Connected<span id="accountName"></span></p>
+                <label id="deckRow" class="deck-row">Save mined words to
+                  <select id="preferredDeck"><option value="">Saved words (default)</option></select>
+                </label>
+                <button class="disconnect ghost" type="button">Disconnect</button>
+              </div>
+              <div data-state="connecting" hidden>
+                <p class="status-line">Connecting</p>
+                <p class="muted">Approve access in the window that just opened, then return here.</p>
+              </div>
+              <div data-state="unentitled" hidden>
+                <p class="status-line">Signed in<span id="unentitledName"></span></p>
+                <p class="muted">Pro adds word-state sync, sentence mining, and FSRS reviews.</p>
+                <div class="button-row">
+                  <a id="upgradeLink" class="primary" href="#" target="_blank" rel="noopener">Upgrade to Pro</a>
+                  <button class="disconnect ghost" type="button">Disconnect</button>
+                </div>
+              </div>
+              <div data-state="disconnected" hidden>
+                <div class="account-connect"><img src="../icons/logo_32.png" alt="" /><button id="connect" class="primary" type="button">Connect an account</button></div>
+              </div>
             </div>
-          </form>
+          </div>
         </section>
 
-        <section id="advanced" class="card">
+        <section id="reading" class="card">
           <div class="section-title">
-            <h2>Advanced</h2>
-            <p>Sites that stay plain, your own CSS, and a copy of these settings.</p>
+            <span class="section-icon" aria-hidden="true"><svg><use href="#icon-reading" /></svg></span>
+            <h2>Reading</h2>
           </div>
-          <form id="advancedPrefs" class="prefs-grid">
-            <label class="stacked">Sites that stay plain
-              <span class="field-hint">One host or pattern per line. Lookup keeps working; the page keeps its own ink.</span>
-              <textarea id="plainHosts" rows="3" spellcheck="false"></textarea>
-            </label>
-            <label class="stacked">Your CSS for words on the page
-              <span class="field-hint">Applied after ours. <code>.sb-word</code> is a word, <code>.sb-new</code> / <code>.sb-due</code> / <code>.sb-retired</code> its state.</span>
-              <textarea id="customWordCss" rows="4" spellcheck="false"></textarea>
-            </label>
-            <label class="stacked">Your CSS for the lookup popup
-              <span class="field-hint">Applied inside the popup. <code>.sb-popup</code> is the card.</span>
-              <textarea id="customPopupCss" rows="4" spellcheck="false"></textarea>
-            </label>
-          </form>
-          <div class="settings-io">
-            <button id="exportSettings" class="ghost" type="button">Export settings</button>
-            <button id="importSettings" class="ghost" type="button">Import settings</button>
-            <input id="importSettingsFile" type="file" accept="application/json" hidden />
+          <div class="card-body">
+            <p class="section-description">How lookup opens, what it shows, and reading shortcuts.</p>
+            <form id="prefs" class="prefs-grid">
+              <h3 class="prefs-heading"><svg aria-hidden="true"><use href="#icon-search" /></svg>Lookup</h3>
+              <label>Open popup on hover<select id="scanModifier"><option value="none">Always</option><option value="alt">Hold Alt / Option</option><option value="ctrl">Hold Ctrl</option><option value="shift">Hold Shift</option><option value="meta">Hold ⌘ Cmd</option></select></label>
+              <label>Furigana<select id="furiganaMode"><option value="all">All words</option><option value="unknown">Unknown words</option><option value="hover">On hover</option><option value="off">Off</option></select></label>
+              <label class="frequency-field">Popup opens after (ms)<input id="lookupDelay" type="number" min="0" max="2000" step="10" /></label>
+              <label class="frequency-field">Popup closes after (ms)<input id="popupHideDelay" type="number" min="0" max="5000" step="50" /></label>
+              <div class="check-stack">
+                <label class="check-row"><input id="popupHideAutomatically" type="checkbox" /><span>Close the popup when the pointer leaves it (off keeps it open until you click away or press Escape)</span></label>
+                <label class="check-row"><input id="localOnlyAnalysis" type="checkbox" /><span>Keep page text on this device for parsing</span></label>
+              </div>
+
+              <h3 class="prefs-heading"><svg aria-hidden="true"><use href="#icon-volume" /></svg>Display and sound</h3>
+              <label>Definition size<select id="definitionSize"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+              <label>Theme<select id="theme"><option value="system">Follow the system</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+              <label>Pronunciation voice<select id="audioVoice"><option value="male">Male</option><option value="female">Female</option></select></label>
+              <div class="check-stack">
+                <label class="check-row"><input id="audioAutoplay" type="checkbox" /><span>Play pronunciation automatically when a word opens</span></label>
+              </div>
+
+              <h3 class="prefs-heading"><svg aria-hidden="true"><use href="#icon-swatch" /></svg>Highlights</h3>
+              <label>Highlighting preset<select id="colorPreset"></select></label>
+              <label>Word state colors<select id="stateColoring"><option value="underline">Color the underline</option><option value="text">Color the word</option><option value="off">Off</option></select></label>
+              <label>Part-of-speech colors<select id="posColoring"><option value="off">Off</option><option value="text">Color the word</option><option value="underline">Color the underline</option></select></label>
+              <div class="check-stack">
+                <label class="check-row"><input id="highlighting" type="checkbox" /><span>Show highlighting on the page (lookup and mining keep working without it)</span></label>
+              </div>
+              <fieldset class="marked-states">
+                <legend>Mark these words</legend>
+                <label class="check-row"><input id="marked-none" type="checkbox" data-state="none" /><span>Not saved yet</span></label>
+                <label class="check-row"><input id="marked-new" type="checkbox" data-state="new" /><span>New</span></label>
+                <label class="check-row"><input id="marked-learning" type="checkbox" data-state="learning" /><span>Learning</span></label>
+                <label class="check-row"><input id="marked-due" type="checkbox" data-state="due" /><span>Due</span></label>
+                <label class="check-row"><input id="marked-suspended" type="checkbox" data-state="suspended" /><span>Suspended</span></label>
+                <label class="check-row"><input id="marked-retired" type="checkbox" data-state="retired" /><span>Known</span></label>
+              </fieldset>
+
+              <h3 class="prefs-heading"><svg aria-hidden="true"><use href="#icon-sparkles" /></svg>Study cues</h3>
+              <label class="frequency-field">i+1 maximum frequency rank<input id="iPlusOneFrequencyMax" type="number" min="1" max="1000000" step="1000" /></label>
+              <label class="frequency-field">Mark common words up to rank<input id="markFrequentMax" type="number" min="1" max="1000000" step="1000" /></label>
+              <div class="check-stack">
+                <label class="check-row"><input id="iPlusOneIncludesLearning" type="checkbox" /><span>Count learning words as known for i+1</span></label>
+                <label class="check-row"><input id="mineSentenceAudio" type="checkbox" /><span>Record the spoken line when mining a subtitle (replays it)</span></label>
+                <label class="check-row"><input id="markFrequent" type="checkbox" /><span>Mark the most common words you have not saved yet</span></label>
+              </div>
+            </form>
+            <div id="keyboard" class="settings-subsection">
+              <h3><svg aria-hidden="true"><use href="#icon-keyboard" /></svg>Keyboard shortcuts</h3>
+              <p class="muted">Click a shortcut, then press keys. Backspace clears it.</p>
+              <div id="keybinds"></div>
+            </div>
           </div>
-          <p class="muted">Export writes a JSON file of your preferences. Your sign-in is never in it, so importing on another machine does not carry your account across.</p>
         </section>
 
         <section id="dictionary" class="card">
           <div class="section-title">
-            <h2>Dictionary pack</h2>
-            <p>The public dictionary and your enabled Shirabe uploads are stored on this device for local lookup.</p>
+            <span class="section-icon" aria-hidden="true"><svg><use href="#icon-book" /></svg></span>
+            <h2>Dictionaries</h2>
           </div>
+          <div class="card-body">
+            <div id="dictionarySources" class="dictionary-sources" aria-label="Dictionary order"></div>
+            <p id="dictionarySourcesHint" class="muted">Install the dictionary to arrange its sources and definition languages.</p>
+            <p class="dictionary-manage">Add or remove personal dictionaries in <a id="manageDictionariesLink" href="#" target="_blank" rel="noopener">Shirabe settings</a>.</p>
 
-          <div id="dictionarySources" class="dictionary-sources" aria-label="Dictionary order"></div>
-          <p id="dictionarySourcesHint" class="muted">Connect your Shirabe account to use uploaded dictionaries and sync their order.</p>
-
-          <div class="status-stack" id="dictionaryPanel" aria-label="Offline dictionary">
-            <div data-dictionary-state="missing" hidden>
-              <p class="status-line">Not installed</p>
-              <p class="muted">Install once for offline lookup on any page.</p>
-              <button id="installDictionary" class="primary" type="button">Install dictionary</button>
-            </div>
-            <div data-dictionary-state="installing" hidden>
-              <p class="status-line">Installing…</p>
-              <progress id="dictionaryProgress" max="1" value="0"></progress>
-              <p id="dictionaryProgressLabel" class="muted">Downloading and checking the pack</p>
-              <button id="cancelDictionaryInstall" class="ghost" type="button">Cancel</button>
-            </div>
-            <div data-dictionary-state="installed" hidden>
-              <p class="status-line">Ready</p>
-              <p id="dictionaryVersion" class="muted"></p>
-              <p class="credits">
-                <a id="creditsLink" href="#" target="_blank" rel="noopener">Dictionary credits</a>
-              </p>
-              <div class="button-row">
-                <button id="updateDictionary" class="ghost" type="button">Check for update</button>
-                <button id="removeDictionary" class="ghost danger" type="button">Remove</button>
+            <div class="status-stack" id="dictionaryPanel" aria-label="Offline dictionary">
+              <div data-dictionary-state="missing" hidden>
+                <p class="status-line">Not installed</p>
+                <p class="muted">Install once for offline lookup on any page.</p>
+                <button id="installDictionary" class="primary" type="button">Install dictionary</button>
               </div>
-            </div>
-            <div data-dictionary-state="error" hidden>
-              <p class="status-line">Install stopped</p>
-              <p id="dictionaryError" class="muted"></p>
-              <pre id="dictionaryDiagnostics" class="diagnostics" aria-label="Dictionary installer diagnostics"></pre>
-              <button id="retryDictionary" class="primary" type="button">Try again</button>
+              <div data-dictionary-state="installing" hidden>
+                <p class="status-line">Installing…</p>
+                <progress id="dictionaryProgress" max="1" value="0"></progress>
+                <p id="dictionaryProgressLabel" class="muted">Downloading and checking the pack</p>
+                <button id="cancelDictionaryInstall" class="ghost" type="button">Cancel</button>
+              </div>
+              <div data-dictionary-state="installed" hidden>
+                <p class="status-line">Ready</p>
+                <p id="dictionaryVersion" class="muted"></p>
+                <div class="button-row">
+                  <button id="updateDictionary" class="ghost" type="button">Check for update</button>
+                  <button id="removeDictionary" class="ghost danger" type="button">Remove</button>
+                </div>
+              </div>
+              <div data-dictionary-state="error" hidden>
+                <p class="status-line">Install stopped</p>
+                <p id="dictionaryError" class="muted"></p>
+                <pre id="dictionaryDiagnostics" class="diagnostics" aria-label="Dictionary installer diagnostics"></pre>
+                <button id="retryDictionary" class="primary" type="button">Try again</button>
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="account" class="card">
+        <section id="advanced" class="card">
           <div class="section-title">
-            <h2>Account</h2>
-            <p>Connect for word-state colouring, sentence mining, and FSRS reviews.</p>
+            <span class="section-icon" aria-hidden="true"><svg><use href="#icon-adjustments" /></svg></span>
+            <h2>Advanced</h2>
           </div>
-
-          <div class="status-stack" id="accountPanel" aria-label="Shirabe account">
-            <div data-state="connected" hidden>
-              <p class="status-line">Connected<span id="accountName"></span></p>
-              <label id="deckRow" class="deck-row">Save mined words to
-                <select id="preferredDeck"><option value="">Saved words (default)</option></select>
+          <div class="card-body">
+            <p class="section-description">Site rules, custom CSS, error reports, and settings files.</p>
+            <form id="advancedPrefs" class="prefs-grid">
+              <label class="check-row advanced-toggle"><input id="errorReports" type="checkbox" /><span>Send Reader error reports</span></label>
+              <label class="stacked">Sites that stay plain
+                <span class="field-hint">One host or pattern per line. Lookup keeps working; the page keeps its own ink.</span>
+                <textarea id="plainHosts" rows="3" spellcheck="false"></textarea>
               </label>
-              <button class="disconnect ghost" type="button">Disconnect</button>
+              <label class="stacked">Your CSS for words on the page
+                <span class="field-hint">Applied after ours. <code>.sb-word</code> is a word, <code>.sb-new</code> / <code>.sb-due</code> / <code>.sb-retired</code> its state.</span>
+                <textarea id="customWordCss" rows="4" spellcheck="false"></textarea>
+              </label>
+              <label class="stacked">Your CSS for the lookup popup
+                <span class="field-hint">Applied inside the popup. <code>.sb-popup</code> is the card.</span>
+                <textarea id="customPopupCss" rows="4" spellcheck="false"></textarea>
+              </label>
+            </form>
+            <div class="settings-io">
+              <button id="exportSettings" class="ghost" type="button">Export settings</button>
+              <button id="importSettings" class="ghost" type="button">Import settings</button>
+              <input id="importSettingsFile" type="file" accept="application/json" hidden />
             </div>
-            <div data-state="connecting" hidden>
-              <p class="status-line">Connecting</p>
-              <p class="muted">Approve access in the window that just opened, then return here.</p>
-            </div>
-            <div data-state="unentitled" hidden>
-              <p class="status-line">Signed in<span id="unentitledName"></span></p>
-              <p class="muted">Pro adds word-state sync, sentence mining, and FSRS reviews.</p>
-              <div class="button-row">
-                <a id="upgradeLink" class="primary" href="#" target="_blank" rel="noopener">Upgrade to Pro</a>
-                <button class="disconnect ghost" type="button">Disconnect</button>
-              </div>
-            </div>
-            <div data-state="disconnected" hidden>
-              <p class="status-line">Not connected</p>
-              <p class="muted">Lookup and the offline dictionary work without an account.</p>
-              <button id="connect" class="primary" type="button">Connect account</button>
-            </div>
+            <p class="muted">Export writes a JSON file of your preferences. Your sign-in is never in it, so importing on another machine does not carry your account across.</p>
           </div>
-        </section>
-
-        <section id="keyboard" class="card">
-          <div class="section-title">
-            <h2>Keyboard shortcuts</h2>
-            <p>Click a shortcut, then press keys. Backspace clears it.</p>
-          </div>
-          <div id="keybinds"></div>
         </section>
 
         <p class="muted footer-note">
-          Dictionary lookup and parsing stay on this device. Page context is sent only when you save it.
+          Dictionary lookup runs on this device. Stable page text may be sent to Shirabe to improve word boundaries; subtitles are parsed locally. Turn on local-only parsing above to keep page text on this device.
           <a id="privacyLink" href="#" target="_blank" rel="noopener">Privacy</a> ·
           <a id="settingsLink" href="#" target="_blank" rel="noopener">Shirabe settings</a>
         </p>

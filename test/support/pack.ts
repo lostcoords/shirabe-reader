@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { deinflect } from "../../src/common/deinflect.js";
+import { searchReadings } from "../../src/common/romaji.js";
 import { installDictionary, lookupVariants, removeDictionary, type PackManifest } from "../../src/common/offline-dictionary.js";
 
 // Dictionary-pack plumbing shared by every corpus harness: the segmentation
@@ -75,9 +76,11 @@ export function lookupKeys(sentences: string[], maxSpan = CORPUS_MAX_SPAN): Set<
         if (expanded.has(span)) continue;
         expanded.add(span);
 
-        for (const variant of lookupVariants(span)) {
-          keys.add(variant.text);
-          for (const found of deinflect(variant.text)) keys.add(found.term);
+        for (const source of /\p{Script=Latin}/u.test(span) ? [span, ...searchReadings(span)] : [span]) {
+          for (const variant of lookupVariants(source)) {
+            keys.add(variant.text);
+            for (const found of deinflect(variant.text)) keys.add(found.term);
+          }
         }
       }
     }
@@ -158,7 +161,7 @@ export async function installTestPack(
   // not accept (it could be shared). Copy into a plain ArrayBuffer rather than
   // asserting the type away.
   const body = new Uint8Array(payload);
-  globalThis.fetch = (async (input: string | URL | Request) => (String(input).endsWith("/current")
+  globalThis.fetch = (async (input: string | URL | Request) => ((input instanceof Request ? input.url : String(input)).endsWith("/current")
     ? new Response(JSON.stringify(manifest), { headers: { "Content-Type": "application/json" } })
     : new Response(body, { headers: { "Content-Type": "application/gzip" } }))) as typeof fetch;
   await installDictionary("https://api.test");

@@ -16,23 +16,16 @@ export type ParsedToken = {
   surface: string;
   reading: string | null; // hiragana reading, or null when no furigana needed
   lemma: string; // dictionary form: what we look up / save
+  inflection?: string[];
+  inflectionBase?: string;
+  components?: Array<{ surface: string; start: number; end: number; lemma?: string; reading?: string; pos?: string[] }>;
   entry?: string;
-  /** Every word this span could be, best first, `candidates[0]` being the one
-      `entry` names. The offline half of `POST /api/v1/words/identify`, and the
-      same reason it exists: one answer is a claim we often cannot support. きみ
-      is 君, 黄身 or 黍, and only the reader knows which they meant.
-
-      Present only where the span resolved to something and more than one word
-      claims it, so its absence means "no choice to offer" rather than "not
-      computed". The parser has always had this list: `contextualCandidates`
-      gathers it and greed threw the runners-up away at the last step.
-
-      Read off the PRE-gate set, so it holds the words a spelling merely carries
-      (君 for きみ) and not just the ones it names. The gate decides where to CUT
-      and is right to refuse those; deciding which word this is, is the other
-      question. See docs/specs/extension-parsing.md §3. */
+  /** Ordered card groups for this exact parsed span. */
+  groups?: string[][];
+  /** Same-span choices shown when the reader can pick another entry. */
   candidates?: TokenCandidate[];
   pos: string; // short POS label: "noun", "verb", "prt", …
+  kind?: string;
   content: boolean; // true for meaning-bearing words (not particles/punctuation)
   state: WordState;
   frequency?: number | null; // corpus rank, used for local i+1 filtering
