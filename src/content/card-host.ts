@@ -31,15 +31,19 @@ async function unavailable(query: string, message: string, entry?: string): Prom
 
 export const extensionHost: WordCardHost = {
   async lookup(query, kind, context) {
+    if (kind === "text" && context?.text && context.startOffset !== undefined) {
+      const res = await send({ type: "lookupScan", text: context.text, offset: context.startOffset });
+      return res.ok ? { status: "found", definition: res.definition, alternatives: res.alternatives, scanStart: res.startOffset }
+        : { status: "failed", message: res.error };
+    }
     if (kind !== "kanji" && context?.text && context.startOffset !== undefined && context.endOffset !== undefined) {
       const res = await send({ type: "lookupSpan", text: context.text, startOffset: context.startOffset,
-        endOffset: context.endOffset, reading: context.reading, pos: context.pos });
+        endOffset: context.endOffset, lemma: query, kind: context.kind, reading: context.reading, pos: context.pos,
+        inflection: context.inflection });
       return res.ok ? { status: "found", definition: res.definition, alternatives: res.alternatives }
         : { status: "failed", message: res.error };
     }
-    // A raw-text scan IS this engine's word lookup: it is handed the text from
-    // the cursor and takes the longest match from it, which is the cutting a
-    // host over the API has to ask the server to do first.
+    // A lookup without sentence context keeps the direct spelling search path.
     const res = await send({ type: "lookup", query, kind: kind === "kanji" ? "kanji" : "word" });
     if (!res.ok && res.code === "OFFLINE_LOOKUP_UNAVAILABLE") return unavailable(query, res.error);
     if (!res.ok) return { status: "failed", message: res.error };
@@ -72,7 +76,6 @@ export const extensionHost: WordCardHost = {
           ? res.alternatives.find((candidate) => candidate.entry === entry) ?? res.definition
           : res.definition;
         initialEntries.set(word, initialEntry);
-        if (selected?.entry) word.dataset.entry = selected.entry;
         return { status: "found", definition: selected, alternatives: res.alternatives };
       }
     }

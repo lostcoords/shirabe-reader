@@ -77,11 +77,12 @@ function batchNodes(nodes: Text[]): Text[][] {
 // Parse a batch of nodes in one local-worker request. Results stay index-aligned,
 // so each original text node can be replaced with its own detached wrapper.
 async function parseBatch(nodes: Text[], showFurigana: boolean): Promise<void> {
+  const generation = renderGeneration;
   const texts = nodes.map((node) => node.nodeValue ?? "");
   const res = await send({ type: "parseBatch", texts });
   if (!res.ok) throw new Error(res.error);
   if (res.dictionaryInstalling) throw new Error("The offline dictionary is still installing.");
-  if (paused) return;
+  if (paused || generation !== renderGeneration) return;
 
   const rendered: Array<HTMLElement | null> = [];
   res.tokens.forEach((tokens, i) => {
@@ -95,7 +96,6 @@ async function parseBatch(nodes: Text[], showFurigana: boolean): Promise<void> {
     rendered[i] = wrapper;
   });
   queueStateRefresh(res.tokens.flat());
-  const generation = renderGeneration;
   void requestOnlineParse(texts).then((online) => {
     if (!online || generation !== renderGeneration || paused) return;
     online.forEach((tokens, index) => {
@@ -117,8 +117,9 @@ async function requestOnlineParse(texts: string[]): Promise<ParsedToken[][] | nu
   }
 }
 
-function canReplaceOnline(wrapper: HTMLElement, source: string): boolean {
+export function canReplaceOnline(wrapper: HTMLElement, source: string): boolean {
   if (!wrapper.isConnected || sourceText(wrapper) !== source) return false;
+  if (wrapper.querySelector(".sb-word[data-sb-entry-picked]")) return false;
   if (wrapper.querySelector(".sb-word:hover, .sb-word:focus")) return false;
   return !document.querySelector<HTMLElement>(".sb-host")?.shadowRoot?.querySelector(".sb-popup.sb-visible");
 }
@@ -293,6 +294,7 @@ function hasUnparsedJapanese(root: Node, filter?: string): boolean {
 // keeps the snapshot to the actual caption text.
 export async function parseCaptionElement(root: HTMLElement, showFurigana: boolean): Promise<number> {
   if (paused) return 0;
+  const generation = renderGeneration;
   // Cheap tree-walk first: a fully-parsed cue just sitting on screen bails here
   // without paying the deep clone in `sourceText` on every streamed-cue tick.
   if (!hasUnparsedJapanese(root)) return 0;
@@ -304,7 +306,7 @@ export async function parseCaptionElement(root: HTMLElement, showFurigana: boole
     if (!res.ok) throw new Error(res.error);
     if (res.dictionaryInstalling) throw new Error("The offline dictionary is still installing.");
     // Cue moved on while we looked words up: drop the stale result.
-    if (paused || !root.isConnected || sourceText(root) !== snapshot) return 0;
+    if (paused || generation !== renderGeneration || !root.isConnected || sourceText(root) !== snapshot) return 0;
     const tokens = res.tokens[0] ?? [];
     reconcileCaption(root, buildWrapper(snapshot, tokens, showFurigana));
     queueStateRefresh(tokens);
@@ -511,6 +513,15 @@ export function setParsingPaused(value: boolean): void {
   queuedBlocks.clear();
   cancelAnimationFrame(blockFlushFrame);
   blockFlushFrame = 0;
+}
+
+export function resetParsedPage(root: Document | Element = document): void {
+  renderGeneration += 1;
+  for (const wrapper of root.querySelectorAll<HTMLElement>("[data-sb-parsed]")) {
+    if (wrapper.isConnected) wrapper.replaceWith(document.createTextNode(sourceText(wrapper)));
+  }
+  for (const block of root.querySelectorAll<HTMLElement>("[data-sb-block]")) delete block.dataset[LAZY_BLOCK_FLAG];
+  for (const block of visibleBlocks) if (root.contains(block)) enterBlock(block);
 }
 
 // The element's text as it reads on the page: our injected `<rt>` furigana

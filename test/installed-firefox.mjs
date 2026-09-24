@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createReadStream, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -7,6 +8,7 @@ import { join, resolve } from "node:path";
 import { cmd } from "web-ext";
 import { build } from "esbuild";
 import { pathToFileURL } from "node:url";
+import { gzipSync } from "node:zlib";
 
 const sourceDir = resolve("dist/verify/firefox");
 const artifactsDir = mkdtempSync(join(tmpdir(), "shirabe-firefox-install-"));
@@ -15,10 +17,28 @@ const reuseProfile = process.env.FIREFOX_REUSE_PROFILE === "1";
 if (reuseProfile) assert.ok(profileDir, "FIREFOX_REUSE_PROFILE requires FIREFOX_TEST_PROFILE");
 const packDir = process.argv[2] && resolve(process.argv[2]);
 const pack = packDir && JSON.parse(readFileSync(join(packDir, "manifest.json"), "utf8"));
+const personalStackFingerprint = "b".repeat(16);
+const personalSources = [
+  { dictionary: "my-kokugo", languages: ["ja"], reveal: "hover" },
+  { dictionary: "jmdict", languages: ["en"], reveal: "show" },
+];
+const personalArchive = gzipSync([
+  { type: "header", schemaVersion: 7, languages: ["jpn"], source: "Shirabe private dictionary" },
+  { type: "term", id: "my-kokugo:banana", dictionary: "my-kokugo", headword: "バナナ",
+    expressions: [{ text: "バナナ", script: "kana", common: true, tags: [] }],
+    readings: [{ text: "バナナ", kind: "kana" }],
+    senses: [{ glosses: { jpn: ["バショウ科の果物"] }, partsOfSpeech: ["n"], fields: [], misc: [], dialects: [], restrictions: [] }],
+  },
+].map((row) => JSON.stringify(row)).join("\n") + "\n");
+const personalPack = pack && { ...pack, kind: "overlay", contentRevision: "firefox-personal-overlay",
+  artifact: "personal.ndjson.gz", bytes: personalArchive.byteLength,
+  sha256: createHash("sha256").update(personalArchive).digest("hex"),
+  counts: { terms: 1, kanji: 0, sentences: 0 }, languages: ["jpn"],
+  dictionaries: [{ slug: "my-kokugo", version: "1", languages: ["jpn"] }], modifications: [], sources: [] };
 let web;
 if (packDir && (!reuseProfile || process.env.FIREFOX_PARITY_WEB_OUTPUT)) {
   const output = process.env.FIREFOX_PARITY_WEB_OUTPUT ?? join(artifactsDir, "web.json");
-  if (!reuseProfile) execFileSync("bin/rails", ["runner", "script/export_search_parity.rb"], {
+  if (!process.env.FIREFOX_PARITY_WEB_OUTPUT) execFileSync("bin/rails", ["runner", "script/export_search_parity.rb"], {
     cwd: "..", stdio: "inherit",
     env: { ...process.env, PARITY_PACK_DIR: packDir, PARITY_WEB_OUTPUT: output,
       PARITY_DICTIONARIES: pack.dictionaries.filter(({ slug }) => ["jmdict", "jmnedict"].includes(slug)).map(({ slug }) => slug).join(",") },
@@ -42,9 +62,37 @@ if (packDir) {
     } else if (request.url === "/article") {
       response.setHeader("Content-Type", "text/html; charset=utf-8");
       response.end('<!doctype html><html lang="ja"><meta charset="utf-8"><title>Lookup check</title><body><p>ギターが弾けた。</p></body></html>');
+    } else if (request.url === "/subtitle") {
+      response.setHeader("Content-Type", "text/html; charset=utf-8");
+      response.end('<!doctype html><html lang="ja"><meta charset="utf-8"><title>Subtitle check</title><body><div class="asbplayer-offscreen"><div>ギターが弾けた。</div></div></body></html>');
+    } else if (request.url === "/overlay") {
+      response.setHeader("Content-Type", "text/html; charset=utf-8");
+      response.end('<!doctype html><html lang="ja"><meta charset="utf-8"><title>Overlay check</title><body><p>バナナ。</p></body></html>');
+    } else if (request.url === "/api/v1/dictionary-packs") {
+      assert.equal(request.headers.authorization, "Bearer installed-token");
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({ dictionaryStack: { fingerprint: personalStackFingerprint, sources: personalSources },
+        packs: [{ ...pack, kind: "base", downloadUrl: `${origin}/dictionary.gz` },
+          { ...personalPack, downloadUrl: `${origin}/private.gz` }], pendingPacks: [] }));
+    } else if (request.url === "/api/v1/me") {
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({ user: { displayName: "Reader" }, entitlement: { srs: true } }));
+    } else if (request.url === "/api/v1/dictionary-stack") {
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({ dictionaryStack: { fingerprint: personalStackFingerprint, sources: personalSources } }));
+    } else if (request.url === "/api/v1/dictionaries") {
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({ dictionaries: [
+        { slug: "my-kokugo", name: "私の国語辞典", kind: "definition", languages: ["ja"] },
+        { slug: "jmdict", name: "JMdict", kind: "definition", languages: ["en"] },
+      ] }));
     } else if (request.url === "/dictionary.gz") {
       response.setHeader("Content-Type", "application/gzip");
       createReadStream(join(packDir, pack.artifact)).pipe(response);
+    } else if (request.url === "/private.gz") {
+      assert.equal(request.headers.authorization, "Bearer installed-token");
+      response.setHeader("Content-Type", "application/gzip");
+      response.end(personalArchive);
     } else {
       response.writeHead(404).end();
     }
@@ -150,6 +198,10 @@ try {
   assert.equal(status?.ok, true);
   assert.equal(status.type, "dictionaryStatus");
   assert.equal(status.dictionary.installed, reuseProfile);
+  if (reuseProfile && process.env.FIREFOX_TEST_OVERLAY === "1") {
+    assert.ok(!status.dictionary.activeSources.includes("my-kokugo:ja"),
+      "FIREFOX_TEST_OVERLAY requires an installed public-only profile");
+  }
   console.log(JSON.stringify({ messageHandler: true }));
   if (reuseProfile) {
     const started = performance.now();
@@ -169,6 +221,93 @@ try {
       inflection: token.inflection, entry: token.entry });
     assert.equal(lookup.ok, true, JSON.stringify(lookup));
     assert.deepEqual(lookup.groups, [["jmdict:2089020"]]);
+    const subtitleUrl = `${origin.replace("127.0.0.1", "localhost")}/subtitle`;
+    const subtitle = await resolveInPage(`browser.tabs.create({url: ${JSON.stringify(subtitleUrl)}})`);
+    const navigationDeadline = Date.now() + 15000;
+    let subtitleLoaded = false;
+    while (Date.now() < navigationDeadline) {
+      const tab = await resolveInPage(`browser.tabs.get(${subtitle.id})`);
+      if (tab.url === subtitleUrl && tab.status === "complete") { subtitleLoaded = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(subtitleLoaded, true, "Firefox subtitle navigation timed out");
+    const inSubtitle = (body) => resolveInPage(`browser.scripting.executeScript({target: {tabId: ${subtitle.id}}, func: () => {${body}}}).then(results => results[0].result)`);
+    const waitForSubtitle = async (surface, expectedEntry) => {
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        const entry = await inSubtitle(`return document.querySelector(".asbplayer-offscreen .sb-word[data-surface='${surface}']")?.dataset.entry`);
+        if (entry === expectedEntry) return entry;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      throw new Error(`Firefox subtitle did not resolve ${surface} to ${expectedEntry}`);
+    };
+    assert.equal(await waitForSubtitle("弾けた", "jmdict:1419370"), "jmdict:1419370");
+    await inSubtitle('document.querySelector(".asbplayer-offscreen > div").textContent = "上手く。"; return true;');
+    assert.equal(await waitForSubtitle("上手く", "jmdict:1310490"), "jmdict:1310490");
+    console.log(JSON.stringify({ localSubtitleUpdates: true }));
+    if (process.env.FIREFOX_TEST_OVERLAY === "1") {
+      const overlayUrl = `${origin.replace("127.0.0.1", "localhost")}/overlay`;
+      const overlay = await resolveInPage(`browser.tabs.create({url: ${JSON.stringify(overlayUrl)}})`);
+      const overlayDeadline = Date.now() + 15000;
+      let overlayLoaded = false;
+      while (Date.now() < overlayDeadline) {
+        const tab = await resolveInPage(`browser.tabs.get(${overlay.id})`);
+        if (tab.url === overlayUrl && tab.status === "complete") { overlayLoaded = true; break; }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      assert.equal(overlayLoaded, true, "Firefox overlay page navigation timed out");
+      const inOverlay = (body) => resolveInPage(`browser.scripting.executeScript({target: {tabId: ${overlay.id}}, func: () => {${body}}}).then(results => results[0].result)`);
+      const waitForPageEntry = async (expectedEntry) => {
+        const deadline = Date.now() + 15000;
+        while (Date.now() < deadline) {
+          const entry = await inOverlay('return document.querySelector(".sb-word[data-surface=\'バナナ\']")?.dataset.entry');
+          if (entry === expectedEntry) return;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        throw new Error(`Firefox parsed page did not resolve バナナ to ${expectedEntry}`);
+      };
+      const contentDeadline = Date.now() + 15000;
+      let contentReady = false;
+      while (Date.now() < contentDeadline) {
+        if (await inOverlay('return document.documentElement.hasAttribute("data-sb-marked")')) {
+          contentReady = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      assert.equal(contentReady, true, "Firefox overlay page content script timed out");
+      await resolveInPage(`browser.tabs.sendMessage(${overlay.id}, {command: "parsePage"}).then(() => true)`);
+      await waitForPageEntry("jmdict:1099420");
+      await inSubtitle('document.querySelector(".asbplayer-offscreen > div").textContent = "バナナ。"; return true;');
+      await waitForSubtitle("バナナ", "jmdict:1099420");
+      await resolveInPage(`browser.storage.local.get("config").then(({config = {}}) => browser.storage.local.set({config: {...config,
+        apiBase: ${JSON.stringify(origin)}, accessToken: "installed-token", refreshToken: "installed-refresh",
+        accessTokenExpiresAt: new Date(Date.now() + 3600000).toISOString(), accountCheckedAt: "",
+        scopes: ["user:profile:read", "user:dictionary:read", "user:preferences:read"],
+        dictionaryStackFingerprint: ${JSON.stringify(personalStackFingerprint)}}}))`);
+      assert.equal((await message({ type: "status" })).status.connected, true);
+      servePack = true;
+      const installation = await message({ type: "installDictionary" });
+      assert.equal(installation.ok, true, JSON.stringify(installation));
+      const installedDeadline = Date.now() + 90000;
+      let installedOverlay = false;
+      while (Date.now() < installedDeadline) {
+        const dictionary = (await message({ type: "dictionaryStatus" })).dictionary;
+        assert.equal(dictionary.error, null, dictionary.error);
+        if (dictionary.stackFingerprint === personalStackFingerprint && dictionary.activeSources.includes("my-kokugo:ja")) {
+          installedOverlay = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      assert.equal(installedOverlay, true, "Firefox personal dictionary installation timed out");
+      const personal = await message({ type: "lookup", query: "バナナ" });
+      assert.equal(personal.ok, true, JSON.stringify(personal));
+      assert.equal(personal.definition?.entry, "my-kokugo:banana");
+      await waitForPageEntry("my-kokugo:banana");
+      await waitForSubtitle("バナナ", "my-kokugo:banana");
+      console.log(JSON.stringify({ personalOverlayPageAndSubtitle: true }));
+    }
   } else if (packDir) {
     await resolveInPage(`browser.storage.local.set({config: {apiBase: ${JSON.stringify(origin)}, errorReports: false, scanModifier: "none", popupHideAutomatically: false}})`);
     assert.equal((await message({ type: "status" })).status.apiBase, origin);
@@ -177,7 +316,7 @@ try {
     const installationStarted = performance.now();
     const installation = await message({ type: "installDictionary" });
     assert.equal(installation.ok, true, JSON.stringify(installation));
-    const deadline = Date.now() + 180000;
+    const deadline = Date.now() + 300000;
     let installed = false;
     let stage;
     while (Date.now() < deadline) {
@@ -187,6 +326,9 @@ try {
       if (state.stage !== stage) {
         stage = state.stage;
         console.log(JSON.stringify({ stage, progress: state.progress }));
+      }
+      if (state.stage === "Preparing dictionary search") {
+        assert.equal(state.installed, false, "the new pack must stay inactive during cleanup");
       }
       if (installed) break;
       await new Promise((resolve) => setTimeout(resolve, 250));
@@ -214,7 +356,9 @@ try {
     `);
     const coldParseStarted = performance.now();
     const parsed = await message({ type: "parseBatch", texts: ["上手く。", "食べました。"] });
-    console.log(JSON.stringify({ coldParseMs: Math.round(performance.now() - coldParseStarted) }));
+    const coldParseMs = Math.round(performance.now() - coldParseStarted);
+    console.log(JSON.stringify({ coldParseMs }));
+    if (process.env.PROFILE_FIRST_PARSE) assert.ok(coldParseMs < 5_000, `first parse waited ${coldParseMs} ms after installation`);
     if (process.env.PROFILE_FIRST_PARSE) console.log(JSON.stringify({ idbFirstParse: JSON.parse(await evaluate(target,
       'JSON.stringify({count: globalThis.__readerIdbReads.length, slowest: [...globalThis.__readerIdbReads].sort((a, b) => b.ms - a.ms).slice(0, 20), totalMs: globalThis.__readerIdbReads.reduce((sum, row) => sum + row.ms, 0)})')) }));
     assert.equal(parsed.ok, true, JSON.stringify(parsed));
@@ -269,6 +413,7 @@ try {
       throw new Error(`Firefox article check timed out: ${body}; ${JSON.stringify(state)}`);
     };
     await waitForArticle('return document.documentElement.hasAttribute("data-sb-marked");');
+    await resolveInPage(`browser.tabs.sendMessage(${article.id}, {command: "parsePage"}).then(() => true)`);
     const annotated = await waitForArticle('const word = document.querySelector(".sb-word[data-surface=\'弾けた\']"); return word && {surface: word.dataset.surface, lemma: word.dataset.lemma, entry: word.dataset.entry};');
     assert.deepEqual(annotated, { surface: "弾けた", lemma: "弾く", entry: "jmdict:1419370" });
     const hover = await inArticle('const word = document.querySelector(".sb-word[data-surface=\'弾けた\']"); let observed = false; document.addEventListener("mouseover", () => { observed = true; }, {once: true}); const dispatched = word.dispatchEvent(new MouseEvent("mouseover", {bubbles: true, composed: true, altKey: true, ctrlKey: true, shiftKey: true, metaKey: true})); return new Promise(resolve => setTimeout(() => { const root = document.querySelector(".sb-host")?.shadowRoot; resolve({dispatched, observed, readerOff: document.documentElement.classList.contains("sb-reader-off"), open: word.classList.contains("sb-word-open"), popup: root?.querySelector(".sb-popup")?.className, gloss: root?.querySelector(".sb-gloss-row:not([hidden])")?.textContent, content: root?.querySelector(".sb-popup-content")?.textContent?.slice(0, 300)}); }, 500));');

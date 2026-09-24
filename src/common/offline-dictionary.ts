@@ -786,6 +786,22 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
   return parsed;
 }
 
+export async function lookupScanOffline(text: string, offset: number, languages: readonly GlossLanguage[], apiBase: string): Promise<{
+  token: ParsedToken; groups: string[][];
+} | null> {
+  if (!Number.isInteger(offset) || offset < 0 || offset >= text.length) return null;
+  const start = Math.max(0, offset - 64);
+  const end = Math.min(text.length, offset + 80);
+  const context = text.slice(start, end);
+  const tokens = await parseOffline(context, languages, apiBase);
+  const at = offset - start;
+  const index = tokens.findIndex((token) => token.content && token.start <= at && at < token.start + token.length);
+  if (index < 0) return null;
+  const token = tokens[index]!;
+  const resolved = await resolveParsedSpan(context, token);
+  return { token: { ...token, start: token.start + start }, groups: resolved.groups };
+}
+
 export type ParsedSpanResolution = { groups: string[][]; entry?: string; candidates: TokenCandidate[] };
 
 export async function resolveParsedSpan(text: string, token: ParsedToken, previous?: ParsedToken): Promise<ParsedSpanResolution> {
@@ -2502,14 +2518,13 @@ async function installPacks(
     }
     const manifest = combinedManifest(packs, generation, packs.length === 1 ? packs[0]!.artifact : "dictionary-overlay.ndjson.gz");
     const previous = await meta<string>(db, "activeGeneration");
-    if (previous && previous !== generation) await setMeta(db, "previousGeneration", previous);
-    await setMeta(db, "activeGeneration", generation);
-    await setMeta(db, "manifest", manifest);
+    reportInstallProgress(Math.max(installProgress, 0.96), "Preparing dictionary search");
+    await cleanupOtherGenerations(db, new Set([generation, ...(previous ? [previous] : [])]));
+    await activateGeneration(db, generation, manifest, previous);
     setGenerationCache(db, generation);
     if (db.name === PUBLIC_DB_NAME) audioRecipeCache = manifest.audio;
     lookupProbeCache.clear();
     candidateCache.clear();
-    await cleanupOtherGenerations(db, new Set([generation, ...(previous ? [previous] : [])]));
   } catch (error) {
     await clearGeneration(db, generation);
     throw error;
@@ -3013,6 +3028,15 @@ async function setMeta(db: IDBDatabase, key: string, value: unknown): Promise<vo
   await transactionDone(transaction);
 }
 
+async function activateGeneration(db: IDBDatabase, generation: string, manifest: PackManifest, previous?: string): Promise<void> {
+  const transaction = db.transaction("meta", "readwrite");
+  const metaStore = transaction.objectStore("meta");
+  if (previous && previous !== generation) metaStore.put({ key: "previousGeneration", value: previous });
+  metaStore.put({ key: "manifest", value: manifest });
+  metaStore.put({ key: "activeGeneration", value: generation });
+  await transactionDone(transaction);
+}
+
 async function deleteMeta(db: IDBDatabase, key: string): Promise<void> {
   const transaction = db.transaction("meta", "readwrite");
   transaction.objectStore("meta").delete(key);
@@ -3051,7 +3075,7 @@ async function getSentenceByPk(
 }
 
 async function clearGeneration(db: IDBDatabase, generation: string): Promise<void> {
-  for (const store of ["terms", "kanji", "sentences"]) await deleteByIndex(db, store, generation, false);
+  for (const store of ["terms", "kanji", "sentences"]) await deleteGenerationRows(db, store, generation);
 }
 
 async function clearAllDictionaryRecords(db: IDBDatabase): Promise<void> {
@@ -3062,33 +3086,39 @@ async function clearAllDictionaryRecords(db: IDBDatabase): Promise<void> {
 }
 
 async function cleanupOtherGenerations(db: IDBDatabase, retained: Set<string>): Promise<void> {
-  for (const store of ["terms", "kanji", "sentences"]) await deleteOutsideGenerations(db, store, retained);
+  for (const store of ["terms", "kanji", "sentences"]) {
+    const generations = await generationsInStore(db, store);
+    for (const generation of generations) {
+      if (!retained.has(generation)) await deleteGenerationRows(db, store, generation);
+    }
+  }
 }
 
-function deleteOutsideGenerations(db: IDBDatabase, storeName: string, retained: Set<string>): Promise<void> {
+function generationsInStore(db: IDBDatabase, storeName: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, "readwrite");
-    const request = transaction.objectStore(storeName).index("generation").openCursor();
+    const transaction = db.transaction(storeName);
+    const generations: string[] = [];
+    const request = transaction.objectStore(storeName).index("generation").openKeyCursor(null, "nextunique");
     request.onsuccess = () => {
       const cursor = request.result;
       if (!cursor) return;
-      if (!retained.has(String(cursor.key))) cursor.delete();
+      generations.push(String(cursor.key));
       cursor.continue();
     };
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => resolve(generations);
     transaction.onerror = () => reject(transaction.error ?? new Error("Dictionary cleanup failed."));
+    transaction.onabort = () => reject(transaction.error ?? new Error("Dictionary cleanup was aborted."));
   });
 }
 
-function deleteByIndex(db: IDBDatabase, storeName: string, generation: string, inverse: boolean): Promise<void> {
+function deleteGenerationRows(db: IDBDatabase, storeName: string, generation: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, "readwrite");
-    const request = transaction.objectStore(storeName).index("generation").openCursor();
+    const request = transaction.objectStore(storeName).index("generation").openCursor(IDBKeyRange.only(generation));
     request.onsuccess = () => {
       const cursor = request.result;
       if (!cursor) return;
-      const matches = cursor.key === generation;
-      if ((inverse && !matches) || (!inverse && matches)) cursor.delete();
+      cursor.delete();
       cursor.continue();
     };
     transaction.oncomplete = () => resolve();

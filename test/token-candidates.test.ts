@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { lookupEntryOffline, lookupOffline, parseOffline, resolveParsedSpan } from "../src/common/offline-dictionary.js";
+import { lookupEntryOffline, lookupOffline, lookupScanOffline, parseOffline, resolveParsedSpan } from "../src/common/offline-dictionary.js";
 import { installTestPack, packPayload } from "./support/pack.js";
 import contextEvidence from "../../db/reference/context_hints.json";
 
@@ -93,6 +93,51 @@ test("a suru noun constrains a clicked span even without a preceding token", asy
   assert.deepEqual((await resolveParsedSpan("勉強する。", token)).groups, [["jmdict:do"]]);
   assert.deepEqual((await resolveParsedSpan("する", { ...token, start: 0 })).groups.map((group) => group[0]),
     ["jmdict:do", "jmdict:rub"]);
+});
+
+test("a raw scan resolves the whole word at the caret with sentence context", async (context) => {
+  await install([
+    term("jmdict:study", "勉強", "勉強", "べんきょう", "study", true, "vs"),
+    term("jmdict:do", "する", null, "する", "do", true, "vs-i"),
+    term("jmdict:print", "刷る", "刷る", "する", "print", true, "v5r"),
+  ]);
+  const text = "勉強する。";
+  const answer = await lookupScanOffline(text, 3, ["eng"], HOST);
+  assert.equal(answer?.token.surface, "する");
+  assert.equal(answer?.token.start, 2);
+  assert.deepEqual(answer?.groups, [["jmdict:do"]]);
+  const directStart = performance.now();
+  for (let index = 0; index < 10; index += 1) await lookupOffline("する。", ["eng"], HOST);
+  const directMs = performance.now() - directStart;
+  const scanStart = performance.now();
+  for (let index = 0; index < 10; index += 1) await lookupScanOffline(text, 3, ["eng"], HOST);
+  context.diagnostic(`10 direct lookups ${directMs.toFixed(1)} ms; 10 contextual scans ${(performance.now() - scanStart).toFixed(1)} ms`);
+});
+
+test("a raw kana scan uses the same candidate order as a parsed span", async () => {
+  await install([
+    term("jmdict:yolk", "黄身", "黄身", "きみ", "egg yolk", false),
+    term("jmdict:you", "君", "君", "きみ", "you"),
+    term("jmdict:kana", "きみ", null, "きみ", "millet"),
+  ]);
+  const text = "きみ。";
+  const scan = await lookupScanOffline(text, 1, ["eng"], HOST);
+  const token = (await parseOffline(text, ["eng"], HOST))[0]!;
+  const parsed = await resolveParsedSpan(text, token);
+  assert.equal(scan?.token.start, 0);
+  assert.equal(scan?.token.surface, "きみ");
+  assert.deepEqual(scan?.groups, parsed.groups);
+});
+
+test("a raw scan keeps an expression whole before resolving its dictionary headword", async () => {
+  await install([
+    term("jmdict:then", "そうしたら", null, "そうしたら", "then", true, "conj"),
+    term("jmdict:do-so", "そうする", null, "そうする", "do so", true, "vs-i"),
+  ]);
+  const scan = await lookupScanOffline("そうしたら問題があった。", 3, ["eng"], HOST);
+  assert.equal(scan?.token.start, 0);
+  assert.equal(scan?.token.surface, "そうしたら");
+  assert.deepEqual(scan?.groups.slice(0, 2), [["jmdict:then"], ["jmdict:do-so"]]);
 });
 
 test("a sentence-final で offers the copula as an alternative", async () => {

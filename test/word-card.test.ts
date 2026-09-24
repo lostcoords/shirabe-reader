@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Definition } from "../src/common/types.js";
-import { answers, asked, drawn, hover, settle, shadow } from "./support/popup-page.js";
+import { answers, asked, drawn, hover, page, settle, shadow, spanAnswers } from "./support/popup-page.js";
 
 // The rest of the card: the word's other spellings, and its kanji.
 //
@@ -46,6 +46,33 @@ test("a word names its other spellings, and says which are rare", async () => {
   assert.deepEqual(forms.map((form) => form.classList.contains("sb-word-form-rare")), [ false, true ],
     "a rare spelling is shown, dimmed: it is exactly the one a reader cannot place");
   assert.equal(forms[1]?.lang, "ja");
+});
+
+test("a parsed span without an entry passes its morphology through the card host", async () => {
+  const before = asked.length;
+  await hover({ start: 0, length: 3, surface: "食べた", lemma: "食べる", reading: "タベタ",
+    pos: "verb", kind: "inflected", inflection: ["past"], entry: undefined },
+  { sentence: "食べた。", start: 0 });
+  const request = asked.slice(before).find((message) => message.type === "lookupSpan");
+  assert.deepEqual(request, { type: "lookupSpan", text: "食べた。", startOffset: 0, endOffset: 3,
+    lemma: "食べる", kind: "inflected", reading: "タベタ", pos: "verb", inflection: ["past"] });
+});
+
+test("a raw scan sends its sentence and caret offset to the contextual lookup", async () => {
+  const { popup, window } = await page();
+  const before = asked.length;
+  spanAnswers["勉強する。"] = [card({ headword: "する", reading: "する", sourceForm: "する" })];
+  const scan = () => popup.scheduleTextLookup("る。", new DOMRect(0, 0, 12, 20), "勉強する。", 3, undefined,
+    "text", { immediate: true, contextual: true });
+  scan();
+  await settle();
+
+  assert.ok(asked.slice(before).some((message) => message.type === "lookupScan"
+    && message.text === "勉強する。" && message.offset === 3));
+  assert.match(window.document.querySelector(".sb-host")?.shadowRoot?.textContent ?? "", /する/);
+  scan();
+  await settle();
+  assert.equal(asked.slice(before).filter((message) => message.type === "lookupScan").length, 1);
 });
 
 // Absence means "written one way", which is most words. A row labelled "Also

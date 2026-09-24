@@ -86,6 +86,7 @@ export type Request =
   | { type: "lookupParsed"; surface: string; entry?: string; groups: string[][] }
   | { type: "lookupSpan"; text: string; startOffset: number; endOffset: number;
     lemma?: string; kind?: string; reading?: string; pos?: string; inflection?: string[]; entry?: string }
+  | { type: "lookupScan"; text: string; offset: number }
   | { type: "dictionaryStatus" }
   | { type: "installDictionary" }
   | { type: "removeDictionary" }
@@ -137,6 +138,7 @@ export type Response =
   | { ok: true; type: "lookupEntry"; definition: Definition | null }
   | { ok: true; type: "lookupParsed"; definition: Definition | null; alternatives: Definition[] }
   | { ok: true; type: "lookupSpan"; definition: Definition | null; alternatives: Definition[]; groups: string[][] }
+  | { ok: true; type: "lookupScan"; definition: Definition | null; alternatives: Definition[]; startOffset: number }
   | { ok: true; type: "dictionaryStatus"; dictionary: DictionaryStatus }
   // `manifest` is set when install finished immediately (already current).
   // Long installs return without it; the popup polls dictionaryStatus instead.

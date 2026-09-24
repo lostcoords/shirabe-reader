@@ -4,7 +4,7 @@ import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveCo
 import { glossLanguagesFrom } from "@shirabe-org/card/word-card/languages";
 import { isR2AudioUrl } from "@shirabe-org/card/word-card/audio";
 import { refreshRemoteHostRules } from "../common/host-rules.js";
-import { cancelDictionaryInstall, checkDictionaryUpdate, clearLocalDictionaryStack, deactivatePrivateDictionaries, disablePrivateDictionaryLookups, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupEntryOffline, lookupGroupOffline, lookupKanjiOffline, lookupOffline, OfflineLookupUnavailableError, parseOffline, removeDictionary, resolveParsedSpan, resumeInterruptedDictionaryInstall, setActiveDictionaryStack } from "../common/offline-dictionary.js";
+import { cancelDictionaryInstall, checkDictionaryUpdate, clearLocalDictionaryStack, deactivatePrivateDictionaries, disablePrivateDictionaryLookups, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupEntryOffline, lookupGroupOffline, lookupKanjiOffline, lookupOffline, lookupScanOffline, OfflineLookupUnavailableError, parseOffline, removeDictionary, resolveParsedSpan, resumeInterruptedDictionaryInstall, setActiveDictionaryStack, type DictionaryStatus } from "../common/offline-dictionary.js";
 import type { Deck, Failure, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
 import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers, setTelemetryEnabled } from "./telemetry.js";
@@ -72,12 +72,15 @@ async function initializeBackground(): Promise<void> {
     await traceBackgroundTask("apply local dictionary stack", () => setActiveDictionaryStack(
       config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint));
   }
-  if (isConnected(config)) await refreshAccount(true);
   // Best-effort refresh of the server-maintained reader site list, so we can
   // add supported sites without shipping an extension update. No-ops if offline
   // or the endpoint isn't live yet (the bundled built-ins stay in charge).
   void traceBackgroundTask("refresh remote host rules", () => refreshRemoteHostRules(config.apiBase));
-  void traceBackgroundTask("check dictionary update", checkAndNotifyDictionary);
+  void traceBackgroundTask("refresh account and check dictionary update", async () => {
+    const before = await dictionaryStatus();
+    if (isConnected(config)) await refreshAccount(true);
+    await checkAndNotifyDictionary(before);
+  });
   void ext.scripting.unregisterContentScripts({ ids: ["shirabe-auto-sites"] }).catch(() => undefined);
   // Popup close can kill an MV3 worker mid-import; pick up the persisted job.
   void dictionaryAuthorization().then((authorization) => resumeInterruptedDictionaryInstall(config.apiBase, authorization));
@@ -147,9 +150,9 @@ function repairDictionaryInstallation(): Promise<void> {
   return dictionaryRepair;
 }
 
-async function checkAndNotifyDictionary(): Promise<void> {
+async function checkAndNotifyDictionary(previous?: DictionaryStatus): Promise<void> {
   const connectionEpoch = dictionaryConnectionEpoch;
-  const before = await dictionaryStatus();
+  const before = previous ?? await dictionaryStatus();
   if (connectionEpoch !== dictionaryConnectionEpoch) return;
   const authorization = await dictionaryAuthorization();
   if (connectionEpoch !== dictionaryConnectionEpoch) return;
@@ -250,6 +253,14 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
           inflectionBase: request.lemma ?? alternatives[0].inflectionBase ?? alternatives[0].headword };
       }
       return { ok: true, type: "lookupSpan", definition: alternatives[0] ?? null, alternatives, groups: resolved.groups };
+    }
+    case "lookupScan": {
+      const resolved = await lookupScanOffline(request.text, request.offset, config.languages, config.apiBase);
+      const startOffset = resolved?.token.start ?? request.offset;
+      const surface = resolved?.token.surface ?? request.text.slice(request.offset, request.offset + 32);
+      const alternatives = resolved?.groups.length ? await hydrateGroups(resolved.groups, surface) : [];
+      const definition = alternatives[0] ?? await lookupOffline(request.text.slice(request.offset), config.languages, config.apiBase, config.audioVoice);
+      return { ok: true, type: "lookupScan", definition, alternatives, startOffset };
     }
     case "dictionaryStatus":
       return { ok: true, type: "dictionaryStatus", dictionary: await dictionaryStatus() };

@@ -5,10 +5,10 @@ import test from "node:test";
 // Rendering behaviour that needs a real DOM: what the parser puts on the page,
 // and what the status bar cues on top of it.
 
-test("a dictionary replacement dismisses any definition rendered from the previous stack", () => {
+test("a dictionary replacement discards previous cards and parsed spans", () => {
   const content = readFileSync("src/content/content.ts", "utf8");
   const handler = content.slice(content.indexOf("ext.runtime.onMessage.addListener"), content.indexOf("// Yomitan's other lookup surface"));
-  assert.match(handler, /message\.command === "dictionaryChanged"[^\n]*dismissPopup\(\)/);
+  assert.match(handler, /message\.command === "dictionaryChanged"[\s\S]*?dismissPopup\(\);\s*resetParsedPage\(\)/);
 });
 
 test("a token split across inline markup does not stamp its reading on each fragment", async () => {

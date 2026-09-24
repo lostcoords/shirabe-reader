@@ -257,8 +257,7 @@ try {
   assert.equal(await adverbWord.getAttribute("data-lemma"), "上手い");
   assert.equal(await adverbWord.getAttribute("data-surface"), "上手く");
   await adverbWord.hover();
-  await article.locator(".sb-host .sb-visible").waitFor({ timeout: 15000 });
-  assert.equal(await article.locator(".sb-host .sb-gloss-row:visible").innerText(), "well");
+  await article.locator(".sb-host .sb-gloss-row:visible", { hasText: "well" }).waitFor({ timeout: 15000 });
 
   const beforeSubtitle = onlineParseRequests;
   await article.goto(`${origin.replace("127.0.0.1", "localhost")}/subtitle`);
@@ -266,6 +265,16 @@ try {
   await article.locator(".asbplayer-offscreen > div").evaluate((element) => { element.textContent = "上手く。"; });
   await article.locator(".asbplayer-offscreen .sb-word[data-entry='jmdict:well']").waitFor({ timeout: 15000 });
   assert.equal(onlineParseRequests, beforeSubtitle, `live subtitle cues stay local: ${JSON.stringify(onlineParseTexts)}`);
+
+  await article.goto(`${origin.replace("127.0.0.1", "localhost")}/article`);
+  await article.waitForFunction(() => document.documentElement.hasAttribute("data-sb-marked"));
+  await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "parsePage" }), tab.id);
+  await article.locator(".sb-word[data-entry='jmdict:banana']").waitFor({ timeout: 15000 });
+  const [subtitlePage] = await Promise.all([
+    context.waitForEvent("page"),
+    page.evaluate((url) => chrome.tabs.create({ url }), `${origin.replace("127.0.0.1", "localhost")}/subtitle`),
+  ]);
+  await subtitlePage.locator(".asbplayer-offscreen .sb-word[data-entry='jmdict:banana']").waitFor({ timeout: 15000 });
 
   await page.evaluate(async ({ accessToken, stackFingerprint }) => {
     const { config = {} } = await chrome.storage.local.get("config");
@@ -283,6 +292,11 @@ try {
   assert.equal(personalLookup.definition.senses[0].dictionary, "私の国語辞典");
   assert.equal(personalLookup.definition.senses[0].covered, true);
   assert.equal(privateDownloadAuthorized, true);
+  const personalParse = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatch", texts: ["ﾊﾞﾅﾅ。"] }));
+  assert.equal(personalParse.tokens[0][0].entry, "my-kokugo:banana");
+  await article.locator(".sb-word[data-entry='my-kokugo:banana']").waitFor({ timeout: 15000 });
+  assert.equal(await article.locator(".sb-word[data-entry='jmdict:banana']").count(), 0);
+  await subtitlePage.locator(".asbplayer-offscreen .sb-word[data-entry='my-kokugo:banana']").waitFor({ timeout: 15000 });
   if (process.env.PARITY_SAVE_API) {
     const saveApi = new URL(process.env.PARITY_SAVE_API);
     assert.equal(saveApi.protocol, "http:");

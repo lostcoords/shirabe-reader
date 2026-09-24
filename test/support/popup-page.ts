@@ -56,6 +56,10 @@ async function buildPage(): Promise<Page> {
       const alternatives = spanAnswers[message.text.slice(message.startOffset, message.endOffset)] ?? [];
       return { ok: true, type: "lookupSpan", definition: alternatives[0] ?? null, alternatives };
     }
+    if (message.type === "lookupScan") {
+      const alternatives = spanAnswers[message.text] ?? [];
+      return { ok: true, type: "lookupScan", definition: alternatives[0] ?? null, alternatives, startOffset: 2 };
+    }
     if (message.type === "states") return { ok: true, type: "states", states: {}, details: {} };
     return { ok: true };
   }) as typeof ext.runtime.sendMessage;

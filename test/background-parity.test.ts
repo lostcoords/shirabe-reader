@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Request, Response as WorkerResponse } from "../src/common/messages.js";
 
-test("background messages parse locally with stable offsets and entry identity", async () => {
+test("background messages parse locally with stable offsets and entry identity during account refresh", async () => {
   const firefox = process.env.PARITY_MESSAGE_API === "firefox";
   let listener: (request: Request, sender: object, respond: (response: WorkerResponse) => void) => unknown;
   const storage: Record<string, unknown> = {};
@@ -74,8 +74,17 @@ test("background messages parse locally with stable offsets and entry identity",
   let revokeUnavailable = true;
   let onlineParses = 0;
   let parsePackRevision = publicManifest.contentRevision;
+  const finishProfiles: Array<() => void> = [];
+  let profileStarted!: () => void;
+  const profileRequested = new Promise<void>((resolve) => { profileStarted = resolve; });
   globalThis.fetch = (async (input: unknown) => {
     const url = input instanceof Request ? input.url : String(input);
+    if (["/api/v1/me", "/api/v1/dictionary-stack", "/api/v1/dictionaries"].some((path) => url.includes(path))) {
+      profileStarted();
+      return new Promise<Response>((resolve) => {
+        finishProfiles.push(() => resolve(new Response(null, { status: 503 })));
+      });
+    }
     if (url.endsWith("/api/v1/oauth/revoke")) {
       if (revokeUnavailable) {
         revokeUnavailable = false;
@@ -113,6 +122,7 @@ test("background messages parse locally with stable offsets and entry identity",
   }) as typeof fetch;
   await installDictionary("https://api.test", "Bearer access-token");
   await import("../src/background/background.js");
+  await profileRequested;
   const send = (request: Request) => new Promise<WorkerResponse>((resolve) => {
     const result = listener(request, {}, resolve);
     if (firefox) {
@@ -122,7 +132,19 @@ test("background messages parse locally with stable offsets and entry identity",
       assert.equal(result, true);
     }
   });
-  const parsed = await send({ type: "parseBatch", texts: ["ﾊﾞﾅﾅ。", "バナナ。"] });
+  let parsed: WorkerResponse;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    parsed = await Promise.race([
+      send({ type: "parseBatch", texts: ["ﾊﾞﾅﾅ。", "バナナ。"] }),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("Local parse waited for the account network request")), 500);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    finishProfiles.forEach((finish) => finish());
+  }
   assert.ok(parsed.ok && parsed.type === "parseBatch");
   assert.equal(parsed.tokens[0][0].entry, "jmdict:banana");
   assert.equal(parsed.tokens[0][0].surface, "ﾊﾞﾅﾅ");
@@ -142,6 +164,10 @@ test("background messages parse locally with stable offsets and entry identity",
   const span = await send({ type: "lookupSpan", text: "バナナ。", startOffset: 0, endOffset: 3 });
   assert.ok(span.ok && span.type === "lookupSpan");
   assert.equal(span.definition?.entry, "jmdict:banana");
+  const scan = await send({ type: "lookupScan", text: "バナナ。", offset: 1 });
+  assert.ok(scan.ok && scan.type === "lookupScan");
+  assert.equal(scan.startOffset, 0);
+  assert.equal(scan.definition?.entry, "jmdict:banana");
   const parsedCard = await send({ type: "lookupParsed", surface: "バナナ", entry: "jmdict:banana",
     groups: [["jmdict:banana"]] });
   assert.ok(parsedCard.ok && parsedCard.type === "lookupParsed");

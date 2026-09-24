@@ -39,6 +39,17 @@ test("page scanning sends Japanese widths unchanged without scanning Latin-only 
   }
 });
 
+test("an online parse does not replace a word whose alternative the reader chose", async () => {
+  const window = installDom("<p id='line'></p>");
+  const { buildWrapper, canReplaceOnline } = await import("../src/content/parser.js");
+  const wrapper = buildWrapper("あめ", [{ start: 0, length: 2, surface: "あめ", lemma: "あめ",
+    reading: "あめ", entry: "jmdict:rain", pos: "noun", content: true, state: "none" }], false);
+  window.document.getElementById("line")!.append(wrapper);
+  assert.equal(canReplaceOnline(wrapper, "あめ"), true);
+  (wrapper.querySelector(".sb-word") as HTMLElement).dataset.sbEntryPicked = "1";
+  assert.equal(canReplaceOnline(wrapper, "あめ"), false);
+});
+
 test("a caption that grows word by word keeps the moment it first appeared", async () => {
   // Auto-generated captions roll a line in one word at a time, and every added
   // word is another parse. Re-stamping each time walks the line's start forward

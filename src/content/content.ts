@@ -8,7 +8,7 @@ import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
 type WordAction = Exclude<KeybindAction, "parse" | "highlighting">;
 import { send } from "../common/messages.js";
 import { grade, markKnown, REVIEW_IN_READER, save, type Outcome } from "./actions.js";
-import { observeLazy, parse, setParsingPaused } from "./parser.js";
+import { observeLazy, parse, resetParsedPage, setParsingPaused } from "./parser.js";
 import { refreshMetrics, setMetricsOptions, startMetrics, stopMetrics } from "./metrics-reporter.js";
 import { setSentenceAudioEnabled } from "./sentence-audio.js";
 import { forgetOpenCue, setCueSource } from "./cues.js";
@@ -215,7 +215,10 @@ function boot(): void {
     const word = (e.target as Element | null)?.closest?.(".sb-word");
     if (word instanceof HTMLElement) {
       hovered = word;
-      if (wantPopup(e)) scheduleShow(word);
+      if (wantPopup(e)) {
+        if (scanModifier === "none") scheduleShow(word);
+        else showNow(word);
+      }
     }
   });
   document.addEventListener("mouseout", (e) => {
@@ -225,9 +228,8 @@ function boot(): void {
   });
 
   // ── Local caret scanner ──────────────────────────────────────────────────────
-  // This is the offline fast path: no page parse/wrapping and no network. Read a
-  // short text window from the caret under the pointer; IndexedDB lookup decides
-  // the longest/deinflected term. Existing parsed spans keep their richer state UI.
+  // This path does not wrap the page or use the network. The local dictionary
+  // resolves the sentence around the caret. Parsed spans keep their state UI.
   let scanFrame = 0;
   let pendingPointer: MouseEvent | null = null;
   let lastPointer: MouseEvent | null = null;
@@ -248,7 +250,7 @@ function boot(): void {
   // dictionary can answer, and not unless the reader's scan modifier is held.
   function scanPointer(event: MouseEvent, force = false): void {
     if (mode === "off" || !localDictionaryReady || (!force && !wantPopup(event))) return;
-    sdkScan(event);
+    sdkScan(event, undefined, undefined, undefined, undefined, { immediate: force, contextual: true });
   }
 
   document.addEventListener("pointerup", (event) => {
@@ -420,7 +422,11 @@ function boot(): void {
     if (message.command === "parsePage") { if (isTopFrame) parsePage(); }
     else if (message.command === "parseSelection") parseSelection();
     else if (message.command === "lookupSelection") lookupSelection();
-    else if (message.command === "dictionaryChanged") { dismissPopup(); void sendDictionaryStatus(); }
+    else if (message.command === "dictionaryChanged") {
+      dismissPopup();
+      resetParsedPage();
+      void sendDictionaryStatus();
+    }
   });
 
   // Yomitan's other lookup surface, and the escape hatch when our cut is wrong:
