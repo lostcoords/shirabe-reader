@@ -455,8 +455,8 @@ test("missing offline storage self-heals and the word popup has a stable scrolla
   // The wording belongs to whoever knows there is a pack: the card renders
   // whatever message the pending result carried.
   assert.match(readFileSync("src/content/card-host.ts", "utf8"), /Preparing the offline dictionary/);
-  assert.match(popup, /width: min\(420px, calc\(100vw - 24px\)\)/);
-  assert.match(popup, /max-height: min\(60vh, 460px\)/);
+  assert.match(popup, /width: min\(480px, calc\(100vw - 24px\)\)/);
+  assert.match(popup, /max-height: min\(70vh, 620px\)/);
   assert.doesNotMatch(popup, /\n  height: min\(460px/);
   assert.match(popup, /overflow-y: auto/);
 

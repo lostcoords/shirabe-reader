@@ -89,17 +89,15 @@ test("background messages preserve online parse offsets and picked entry identit
         : new Response(JSON.stringify(publicManifest), { headers: { "Content-Type": "application/json" } });
     }
     if (url.endsWith("/api/v1/parse")) {
-      return new Response(JSON.stringify({ tokens: [
-        [
-          { position: 0, length: 4, surface: "ﾊﾞﾅﾅ", lemma: "バナナ", pos: "noun", kind: "word",
-            entry: { dictionary: "jmdict", sourceId: "banana" }, state: "none" },
-          { position: 4, length: 1, surface: "。", lemma: "。", pos: null, kind: "symbol" },
-        ],
-        [
-          { position: 0, length: 3, surface: "バナナ", lemma: "バナナ", pos: "noun", kind: "word",
-            entry: { dictionary: "jmdict", sourceId: "banana" }, state: "none" },
-          { position: 3, length: 1, surface: "。", lemma: "。", pos: null, kind: "symbol" },
-        ],
+      return new Response(JSON.stringify({ results: [
+        { text: "ﾊﾞﾅﾅ。", tokens: [
+          { startOffset: 0, endOffset: 4, surface: "ﾊﾞﾅﾅ", lemma: "バナナ", partOfSpeech: "noun", kind: "word" },
+          { startOffset: 4, endOffset: 5, surface: "。", lemma: "。", kind: "symbol" },
+        ] },
+        { text: "バナナ。", tokens: [
+          { startOffset: 0, endOffset: 3, surface: "バナナ", lemma: "バナナ", partOfSpeech: "noun", kind: "word" },
+          { startOffset: 3, endOffset: 4, surface: "。", lemma: "。", kind: "symbol" },
+        ] },
       ] }));
     }
     if (url.endsWith("/public.gz")) return new Response(new Uint8Array(publicPayload));
@@ -119,7 +117,7 @@ test("background messages preserve online parse offsets and picked entry identit
   });
   const parsed = await send({ type: "parseBatch", texts: ["ﾊﾞﾅﾅ。", "バナナ。"] });
   assert.ok(parsed.ok && parsed.type === "parseBatch");
-  assert.equal(parsed.tokens[0][0].entry, "jmdict:banana");
+  assert.equal(parsed.tokens[0][0].entry, undefined);
   assert.equal(parsed.tokens[0][0].surface, "ﾊﾞﾅﾅ");
   assert.equal(parsed.tokens[0][1].start, 4);
   assert.equal(parsed.tokens[1][1].start, 3);

@@ -348,7 +348,7 @@ test("an authenticated stack installs personal overlays and applies source chang
   let privateAvailable = true;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
-    if (url.endsWith("/stack")) {
+    if (url.endsWith("/api/v1/dictionary-packs")) {
       assert.equal((init?.headers as Record<string, string>)?.Authorization, "Bearer secret");
       return new Response(JSON.stringify(stack), { headers: { "Content-Type": "application/json" } });
     }

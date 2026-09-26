@@ -256,11 +256,11 @@ export class ShirabeApi {
   }
 
   async parse(texts: string[]): Promise<ParsedToken[][]> {
-    const response = await this.post<{ parses: Array<{ tokens: ParseTokenResponse[] }> }>("/api/v1/parse", {
+    const response = await this.post<{ results: Array<{ tokens: ParseTokenResponse[] }> }>("/api/v1/parse", {
       texts,
       include: ["furigana", "study"],
     });
-    return response.parses.map(({ tokens }) => tokens.map((token) => ({
+    return response.results.map(({ tokens }) => tokens.map((token) => ({
       start: token.startOffset,
       length: token.endOffset - token.startOffset,
       surface: token.surface,

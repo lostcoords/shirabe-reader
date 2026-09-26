@@ -49,7 +49,7 @@ async function installPrivateTerms(records: string[]): Promise<void> {
   };
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input);
-    if (url.endsWith("/stack")) return new Response(JSON.stringify(stack), { headers: { "Content-Type": "application/json" } });
+    if (url.endsWith("/api/v1/dictionary-packs")) return new Response(JSON.stringify(stack), { headers: { "Content-Type": "application/json" } });
     if (url === publicManifest.downloadUrl) return new Response(new Uint8Array(publicPayload));
     if (url === privateManifest.downloadUrl) return new Response(new Uint8Array(privatePayload));
     return new Response(null, { status: 404 });
