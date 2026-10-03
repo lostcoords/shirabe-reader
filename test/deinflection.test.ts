@@ -57,7 +57,8 @@ test("contextual deinflection retains copulas but leaves nominal predicates as s
 
 test("irregular class decisions match Daidai across proper and regularized paradigms", () => {
   for (const { surface, base, pos, accepted } of irregularCases) {
-    assert.equal(deinflect(surface).some((candidate) => candidate.term === base && matchesPos(candidate, [pos])), accepted, `${surface} → ${base} (${pos})`);
+    const negativeCommand = surface === `${base}な`;
+    assert.equal(deinflect(surface).some((candidate) => candidate.term === base && matchesPos(candidate, [pos])), accepted || negativeCommand, `${surface} → ${base} (${pos})`);
   }
 });
 
@@ -267,4 +268,21 @@ test("rules are gated by grammatical condition", () => {
   assert.ok(!forms("高くなかった").includes("高る"), "an i-adjective must never deinflect as a verb");
   const found = deinflect("食べてる").find((candidate) => candidate.term === "食べる");
   assert.ok(found?.dictionaryForm, "食べる is a dictionary form");
+});
+
+test("short commands, concessions and contracted motion retain their predicate class", () => {
+  const cases = [
+    ["行きな", "行く", "v5k-s"], ["行くな", "行く", "v5k-s"],
+    ["食べな", "食べる", "v1"], ["食べるな", "食べる", "v1"],
+    ["行ったって", "行く", "v5k-s"], ["飲んだって", "飲む", "v5m"],
+    ["食べてく", "食べる", "v1"], ["走ってった", "走る", "v5r"],
+    ["行ってった", "行く", "v5k-s"], ["そうだったり", "そうだ", "cop"],
+  ];
+  for (const contextual of [false, true]) {
+    for (const [surface, base, pos] of cases) {
+      const candidates = deinflect(surface!, { contextual }).filter((candidate) => candidate.term === base);
+      assert.ok(candidates.some((candidate) => matchesPos(candidate, [pos!])), `${surface} → ${base} (${pos})`);
+      assert.ok(!candidates.some((candidate) => matchesPos(candidate, ["n"])), `${surface} must not inflect a noun`);
+    }
+  }
 });

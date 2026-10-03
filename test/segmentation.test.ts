@@ -1,10 +1,12 @@
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
 import { parse as parseYaml } from "yaml";
-import { parseOffline } from "../src/common/offline-dictionary.js";
+import type { ParsedToken } from "../src/common/types.js";
+import { lookupGroupOffline, parseOffline, resolveParsedSpan, setActiveDictionaryStack } from "../src/common/offline-dictionary.js";
 import { installTestPack, packPayload, realPackPath, subsetPack } from "./support/pack.js";
 
 // The extension's segmentation ratchet: every corpus in test/tokenizer_eval/ that
@@ -23,7 +25,10 @@ import { installTestPack, packPayload, realPackPath, subsetPack } from "./suppor
 // mis-parse fixed today can return on the next dictionary refresh. A row here can
 // never come back without turning this test red.
 
-const CORPORA = ["cross_engine", "segmentation", "search_mapping"] as const;
+type StackVariant = { name: string; sources: string[]; languages: Array<"eng" | "spa"> };
+const STACKS = parseYaml(readFileSync("../test/tokenizer_eval/dictionary_stacks.yml", "utf8")) as StackVariant[];
+
+const CORPORA = ["cross_engine", "segmentation", "search_mapping", "contextual_boundaries"] as const;
 
 // The floor a real-pack subset has to clear before it counts as one. The corpora
 // currently subset to a few thousand entries, so this only trips when the
@@ -32,7 +37,15 @@ const MINIMUM_REAL_ENTRIES = 500;
 
 type SegmentationCase = {
   name: string;
+  stack?: string;
   sentence: string;
+  family?: string;
+  target?: { start: number; end: number };
+  queries?: string[];
+  targetEntries?: string[];
+  contains?: string[];
+  labels?: string[];
+  alternatives?: string[];
   // The words the parser resolves against the dictionary: exact, but brittle to
   // unrelated dictionary changes. Named for what this engine means by it, because
   // the web tokenizer's "content word" is a narrower thing (see the corpus header).
@@ -59,7 +72,11 @@ type SegmentationCase = {
 /** Every row, tagged with the corpus it came from so failures name their source. */
 const allRows: Array<SegmentationCase & { corpus: string }> = CORPORA.flatMap((name) => {
   const rows = parseYaml(readFileSync(`../test/tokenizer_eval/${name}.yml`, "utf8")) as SegmentationCase[];
-  return rows.map((row) => ({ ...row, corpus: name }));
+  return (name === "contextual_boundaries" ? STACKS : [STACKS[0]!]).flatMap((stack) => rows.map((row) => ({
+    ...row, stack: stack.name,
+    name: `${stack.name}/${row.name ?? (row.family ? `${row.family}/${row.sentence}` : row.sentence)}`,
+    merges: row.merges ?? row.contains, corpus: name,
+  })));
 });
 
 const corpus = allRows.filter((row) => !row.divergence);
@@ -132,7 +149,7 @@ test("segmentation corpus", async (context) => {
   // way a dictionary refresh can be caught. The bundled fixture is the fallback so
   // the `pack: fixture` rows still ratchet on a clean checkout.
   const packPath = realPackPath();
-  const realSubset = packPath ? subsetPack(packPath, corpus.map((entry) => entry.sentence)) : null;
+  const realSubset = packPath ? subsetPack(packPath, corpus.flatMap((entry) => [entry.sentence, ...(entry.queries ?? [])])) : null;
   // A pack that subsets down to almost nothing is a broken subsetter, not a small
   // corpus, and it must not quietly become a fixture run: every case would then be
   // judged against a 12-entry field it cannot lose in, and report green. Only the
@@ -152,8 +169,55 @@ test("segmentation corpus", async (context) => {
     context.diagnostic("segmentation corpus: no local dictionary pack: running fixture cases only");
   }
 
+  const webPath = "../tmp/contextual-boundaries-audit.json";
+  const requireWeb = process.env.SHIRABE_REQUIRE_CONTEXTUAL_WEB === "1";
+  assert.ok(!requireWeb || usingRealPack, "combined audit requires a real dictionary pack");
+  assert.ok(!requireWeb || existsSync(webPath), "run the backend contextual boundary audit first");
+  const webTokens = new Map<string, ParsedToken[]>();
+  if (existsSync(webPath)) {
+    const report = JSON.parse(readFileSync(webPath, "utf8"));
+    const digest = createHash("sha256").update(readFileSync("../test/tokenizer_eval/contextual_boundaries.yml")).digest("hex");
+    if (report.corpusDigest === digest && report.stackDigest === createHash("sha256").update(readFileSync("../test/tokenizer_eval/dictionary_stacks.yml")).digest("hex")) {
+      const expectedCases = corpus.filter((row) => row.corpus === "contextual_boundaries").length;
+      assert.equal(report.cases * STACKS.length, expectedCases, "backend report must cover the whole shared corpus");
+      assert.equal(report.results.length, expectedCases, "backend report must retain every case");
+      assert.ok(report.results.every((row: { problems: string[] }) => !row.problems.length), "backend audit must pass before extension parity");
+      const originalFetch = globalThis.fetch;
+      const originalChrome = globalThis.chrome;
+      Object.assign(globalThis, { chrome: originalChrome ?? {
+        runtime: { id: "reader-test" },
+        storage: { local: { get: async () => ({}) }, onChanged: { addListener() {} } },
+      } });
+      try {
+        const { ShirabeApi } = await import("../src/common/api.js");
+        const { DEFAULTS } = await import("../src/common/config.js");
+        for (const stack of STACKS) {
+          const results = report.results.filter((row: { stack: string }) => row.stack === stack.name);
+          assert.equal(results.length, report.cases, `backend report must cover ${stack.name}`);
+          globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+            assert.deepEqual((await new Request(_input, init).json()).sources, stack.sources, "online extension must request the active stack");
+            return Response.json({
+              packRevision: "b".repeat(16), stackFingerprint: "a".repeat(16), sources: stack.sources,
+              results: results.map((row: { text: string; tokens: unknown[] }) => ({ text: row.text, tokens: row.tokens })),
+            });
+          }) as typeof fetch;
+          const parsed = await new ShirabeApi({ ...DEFAULTS, languages: stack.languages, apiBase: "https://shirabe.test" })
+            .parseWithProvenance(results.map((row: { text: string }) => row.text), stack.sources);
+          results.forEach((row: { text: string }, index: number) => webTokens.set(`${stack.name}\0${row.text}`, parsed.tokens[index]!));
+        }
+      } finally {
+        globalThis.fetch = originalFetch;
+        Object.assign(globalThis, { chrome: originalChrome });
+      }
+    } else {
+      assert.ok(!requireWeb, "backend report is stale; rerun bin/tokenizer-audit");
+      context.diagnostic("backend report is stale: online parity skipped; use bin/tokenizer-audit for both engines");
+    }
+  }
+
   const skipped: string[] = [];
   let checked = 0;
+  let installedStack = "";
 
   // One subtest per case, so a JMdict refresh that breaks four rows reports all
   // four. Asserting inline in the parent meant the first throw ended the loop and
@@ -171,11 +235,72 @@ test("segmentation corpus", async (context) => {
     checked += 1;
 
     await context.test(label, async () => {
-      const tokens = await parseOffline(entry.sentence, ["eng"], "https://shirabe.test");
+      const stack = STACKS.find((variant) => variant.name === entry.stack)!;
+      if (installedStack !== stack.name) {
+        await setActiveDictionaryStack(stack.sources, {}, {}, createHash("sha256").update(stack.sources.join(",")).digest("hex").slice(0, 16));
+        installedStack = stack.name;
+      }
+      const tokens = await parseOffline(entry.sentence, stack.languages, "https://shirabe.test");
       const resolved = tokens.filter((token) => token.content);
       const surfaces = tokens.map((token) => token.surface);
       const shown = surfaces.join(" | ");
       const why = entry.why ? `\n  why: ${entry.why.trim()}` : "";
+      assert.equal(surfaces.join(""), entry.sentence, `[${label}] preserves source text`);
+      for (const token of tokens) {
+        assert.equal(entry.sentence.slice(token.start, token.start + token.length), token.surface,
+          `[${label}] UTF-16 offsets for ${token.surface}`);
+      }
+      if (entry.target && entry.queries) {
+        const start = [...entry.sentence].slice(0, entry.target.start).join("").length;
+        const selected = tokens.find((token) => token.start === start);
+        assert.ok(selected?.entry, `[${label}] target must have a dictionary identity: ${shown}`);
+        assert.ok(entry.targetEntries?.includes(selected.entry),
+          `[${label}] ${selected.surface} → ${selected.lemma} (${selected.entry}); expected ${entry.targetEntries}`);
+        const resolved = await resolveParsedSpan(entry.sentence, selected, tokens[tokens.indexOf(selected) - 1]);
+        assert.ok(resolved.entry && entry.targetEntries?.includes(resolved.entry),
+          `[${label}] resolving parsed span chose ${resolved.entry}; expected ${entry.targetEntries}`);
+        const enabledDictionaries = new Set(stack.sources.map((source) => source.split(":")[0]));
+        assert.ok(resolved.groups.flat().every((id) => enabledDictionaries.has(id.split(":")[0]!)),
+          `[${label}] disabled dictionaries must not appear in candidates`);
+        if (entry.sentence === "猫っていう動物" && enabledDictionaries.has("jmnedict")) {
+          assert.ok(resolved.groups.flat().some((id) => id.startsWith("jmnedict:")),
+            `[${label}] valid name alternatives must remain available`);
+        }
+        if (entry.sentence === "食べちゃったって言った") {
+          const definition = await lookupGroupOffline(resolved.groups[0]!, selected.surface, stack.languages, "https://shirabe.test");
+          assert.ok(definition);
+          const glosses = definition.senses.find((sense) => sense.glosses.length)?.glosses ?? [];
+          assert.deepEqual(glosses.map((gloss) => gloss.lang), stack.sources.filter((source) => source.startsWith("jmdict:")).map((source) => source.endsWith(":es") ? "spa" : "eng"),
+            `[${label}] definition languages must follow the configured stack order`);
+        }
+        if (entry.alternatives) {
+          const candidates = new Set(resolved.groups.flat());
+          for (const id of entry.targetEntries ?? []) {
+            assert.ok(candidates.has(id), `[${label}] offline resolver lost valid alternative ${id}`);
+          }
+        }
+        const online = webTokens.get(`${entry.stack}\0${entry.sentence}`);
+        if (entry.corpus === "contextual_boundaries" && online) {
+          assert.equal(online.map((token) => token.surface).join(""), entry.sentence, `[${label}] online source text`);
+          for (const token of online) {
+            assert.equal(entry.sentence.slice(token.start, token.start + token.length), token.surface, `[${label}] online UTF-16 offsets`);
+          }
+          const webSelected = online.find((token) => token.start === start);
+          assert.ok(webSelected, `[${label}] backend must expose the target boundary`);
+          const webResolved = await resolveParsedSpan(entry.sentence, webSelected, online[online.indexOf(webSelected) - 1]);
+          assert.ok(webResolved.entry && entry.targetEntries?.includes(webResolved.entry),
+            `[${label}] online extension resolved ${webSelected.surface} → ${webResolved.entry}; expected ${entry.targetEntries}`);
+          if (entry.alternatives) {
+            const candidates = new Set(webResolved.groups.flat());
+            for (const id of entry.targetEntries ?? []) {
+              assert.ok(candidates.has(id), `[${label}] online resolver lost valid alternative ${id}`);
+            }
+          }
+        }
+        for (const label of entry.labels ?? []) {
+          assert.ok(selected.inflection?.includes(label), `[${entry.sentence}] missing inflection ${label}: ${selected.inflection}`);
+        }
+      }
       for (const surface of entry.clickable ?? []) {
         const token = tokens.find((item) => item.surface === surface);
         assert.ok(token?.content && token.entry, `${surface} must be clickable with a dictionary identity`);
@@ -229,6 +354,7 @@ test("segmentation corpus", async (context) => {
     });
   }
 
+  context.diagnostic(`online extension parity: ${webTokens.size} backend cases available`);
   context.diagnostic(
     `segmentation corpus: ${checked}/${corpus.length} cases checked against the ${usingRealPack ? "real" : "fixture"} pack`,
   );

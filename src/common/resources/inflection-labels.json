@@ -81,7 +81,9 @@
     "-てください": "polite request (-tekudasai)",
     "-がち": "tends to (-gachi)",
     "-っぱなし": "left as it is (-ppanashi)",
-    "-かねる": "cannot (-kaneru)"
+    "-かねる": "cannot (-kaneru)",
+    "concessive_tatte": "concessive (〜たって)",
+    "imperative_na": "imperative (〜な)"
   },
   "display": {
     "suru verb": "suru verb",
@@ -162,6 +164,8 @@
     "tends to (-gachi)": "tends to (〜がち)",
     "left as it is (-ppanashi)": "left as it is (〜っぱなし)",
     "cannot (-kaneru)": "cannot (〜かねる)",
+    "concessive (〜たって)": "concessive (〜たって)",
+    "imperative (〜な)": "imperative",
     "potential_ranuki": "potential (ら抜き)"
   },
   "subsuming": [

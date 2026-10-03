@@ -660,6 +660,7 @@ export async function parseOffline(text: string, languages: readonly GlossLangua
         && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("aux-v"))).sort(byLadder)[0];
       if (become) definition = termDefinition(become, languages, apiBase);
     }
+    definition = await predicateBoundaryDefinition(db, generation, rest, tokens, definition, languages, apiBase);
     const beforeParticle = tokens[tokens.length - 2];
     const recipient = previous?.surface === "に" && beforeParticle && /^(?:n|pn)/u.test(beforeParticle.pos)
       && tokens[tokens.length - 3]?.surface === "と";
@@ -903,7 +904,8 @@ function parsedCandidateAllowed(hit: LookupHit, token: ParsedToken, atEnd: boole
   const codes = hit.term.senses.flatMap((sense) => sense.partsOfSpeech);
   if (suruNoun && hit.candidate.text === "する" && !codes.includes("vs-i")) return false;
   if (contextual && token.pos === "aux") {
-    if (codes.includes("int") && !codes.includes("aux")) return false;
+    if (codes.includes("int") && !codes.includes("aux") && !
+      (hit.candidate.deinflection && posSatisfiesInflection(hit.term, hit.candidate))) return false;
     if (surface === "だ" && token.lemma === "だ" && codes.includes("aux-v") && !codes.includes("cop")) return false;
   }
   if (contextual && token.lemma === token.surface && ["noun", "pron", "adv", "adj"].includes(token.pos) &&
@@ -931,7 +933,7 @@ function parsedCandidateAllowed(hit: LookupHit, token: ParsedToken, atEnd: boole
   }
   if ((token.pos === "verb" || token.pos.startsWith("v")) && /った$/u.test(token.surface) &&
       !token.surface.endsWith("なかった") && token.lemma !== token.surface) {
-    return hit.candidate.deinflection ? firstSensePos(hit).startsWith("v5")
+    return hit.candidate.deinflection ? hit.candidate.deinflection.inflections.length > 1 || firstSensePos(hit).startsWith("v5")
       : hit.term.expressions.some((expression) => expression.text === surface);
   }
   return true;
@@ -1015,6 +1017,8 @@ function rankParsedHits(hits: LookupHit[], token: ParsedToken): LookupHit[] {
   if (token.pos === "aux" && token.lemma === token.surface) ordered.sort((a, b) => Number(b.term.senses.some((sense) =>
     sense.partsOfSpeech.some((pos) => pos.startsWith("aux") || pos === "cop"))) -
     Number(a.term.senses.some((sense) => sense.partsOfSpeech.some((pos) => pos.startsWith("aux") || pos === "cop"))));
+  const selectedIdentity = ordered.findIndex((hit) => hit.term.id === token.entry && normalize(hit.candidate.text) === normalize(token.lemma));
+  if (selectedIdentity > 0) ordered.unshift(...ordered.splice(selectedIdentity, 1));
   return ordered;
 }
 
@@ -1249,9 +1253,10 @@ async function copulaBaseHit(db: IDBDatabase, generation: string, definition: De
   const headword = definition.headword;
   const pos = firstPartOfSpeech(definition);
   const lexicalPast = pos === "exp" && headword.endsWith("た");
-  if (lexicalPast || pos === "aux") {
+  const lexicalNegative = /^じゃ/u.test(headword) && /^(?:aux|exp)/u.test(pos);
+  if (lexicalPast || lexicalNegative || pos === "aux") {
     const candidates = deinflect(headword, { contextual: true })
-      .filter((found) => lexicalPast || found.inflections.includes("-なら"))
+      .filter((found) => lexicalPast || lexicalNegative || found.inflections.includes("-なら"))
       .filter((found) => found.term !== headword && matchesPos(found, ["cop"]))
       .map((found) => ({ prefix: headword, candidate: {
         text: found.term, reasons: found.inflections.map(inflectionLabel), deinflection: found,
@@ -1416,7 +1421,7 @@ async function bestWithLookahead(
     && !hit.candidate.reasons.length && hit.candidate.text === normalize(hit.surface)
     && /\p{Script=Han}/u.test(hit.surface) && matchingExpression(hit)
     && firstSensePos(hit).match(/^n(?:-|$)/)
-    && !startsJapanese(rest.slice(hit.surface.length))).sort(byLadder)[0];
+    && (!startsJapanese(rest.slice(hit.surface.length)) || /^な(?:い|く|けれ|かった)/u.test(rest.slice(hit.surface.length)))).sort(contextualCompare)[0];
   if (literalNoun) return termDefinition(literalNoun, languages, apiBase);
   const following = rest.slice(matched.length);
   if (interjectionContext && /^(?:aux|exp)/.test(firstPartOfSpeech(best)) &&
@@ -1455,6 +1460,73 @@ async function bestWithLookahead(
   if (selected?.sourceForm && !selected.inflection?.length && firstPartOfSpeech(selected).startsWith("v")) {
     const adverb = await adverbBeforeVerb(db, generation, rest, selected.sourceForm, all);
     if (adverb) return termDefinition(adverb, languages, apiBase);
+  }
+  return selected;
+}
+
+const REPORTING_VERBS = new Set(["言う", "いう", "聞く", "きく", "思う", "おもう", "話す", "書く", "伝える", "答える", "教える", "考える", "感じる", "感ずる", "報告する", "説明する", "主張する"]);
+const COMPLEMENT_VERBS = new Set(["知る", "分かる", "わかる", "信じる", "信ずる", "覚える", "忘れる", "気付く", "気づく", "理解する", "認識する"]);
+
+async function followingPredicate(db: IDBDatabase, generation: string, text: string,
+  languages: readonly GlossLanguage[], apiBase: string): Promise<PendingDefinition | null> {
+  let rest = text;
+  while (rest.length) {
+    rest = rest.trimStart();
+    if (!rest || /^[。！？!?「『]/u.test(rest)) return null;
+    const word = await bestWithLookahead(db, generation, rest, languages, apiBase);
+    if (!word?.sourceForm) return null;
+    const composite = `${word.baseForm}する`;
+    if (REPORTING_VERBS.has(composite) || COMPLEMENT_VERBS.has(composite)) {
+      if (word.inflection?.length) return { ...word, baseForm: composite };
+      const auxiliary = await bestWithLookahead(db, generation, rest.slice(word.sourceForm.length).trimStart(), languages, apiBase);
+      if (auxiliary?.baseForm === "する") return { ...auxiliary, baseForm: composite };
+    }
+    const pos = firstPartOfSpeech(word);
+    if (pos === "conj") return null;
+    if (/^(?:v|adj|cop)/u.test(pos) || word.senses.some((sense) => sense.posCodes?.includes("cop"))) return word;
+    rest = rest.slice(word.sourceForm.length);
+  }
+  return null;
+}
+
+async function predicateBoundaryDefinition(db: IDBDatabase, generation: string, rest: string, tokens: ParsedToken[],
+  selected: PendingDefinition | null, languages: readonly GlossLanguage[], apiBase: string): Promise<PendingDefinition | null> {
+  const marker = rest.indexOf("って");
+  const command = /な(?:って|よ|ね|$)/u.test(rest);
+  if (marker <= 0 && !command && !/^です/u.test(rest)) return selected;
+  const { all } = await contextualCandidates(db, generation, rest.slice(0, MAX_SCAN_CHARS));
+  const verb = (hit: LookupHit): boolean => /^(?:v|adj)/u.test(firstSensePos(hit)) || hit.term.senses.some((sense) => sense.partsOfSpeech.includes("cop"));
+  if (/^[はがをにへもとで]って/u.test(rest) && tokens.at(-1)?.content) {
+    const particle = all.filter((hit) => hit.surface === rest[0] && firstSensePos(hit) === "prt").sort(byLadder)[0];
+    if (particle) return termDefinition(particle, languages, apiBase);
+  }
+  for (const occurrence of rest.slice(0, MAX_SCAN_CHARS).matchAll(/って/gu)) {
+    const marker = occurrence.index;
+    if (!marker) continue;
+    const heads = all.filter((hit) => hit.surface.length === marker && verb(hit)).sort((a, b) =>
+      (/^で(?:す|した)/u.test(rest) ? Number(b.candidate.text === "です") - Number(a.candidate.text === "です") : 0) || byLadder(a, b));
+    if (heads.length) {
+      const predicate = await followingPredicate(db, generation, rest.slice(marker + 2), languages, apiBase);
+      const clause = tokens.slice(tokens.map((token) => /[。！？!?]/u.test(token.surface)).lastIndexOf(true) + 1);
+      const subject = clause.some((token) => ["は", "が"].includes(token.surface));
+      const reporting = predicate && (REPORTING_VERBS.has(predicate.baseForm) || COMPLEMENT_VERBS.has(predicate.baseForm) &&
+        (subject || !predicate.inflection?.includes("negative") && /^(?:v|adj)/u.test(firstSensePos(heads[0]!))));
+      if (reporting) return termDefinition(heads[0]!, languages, apiBase);
+      const concession = predicate && all.filter((hit) => hit.surface.length === marker + 2 &&
+        hit.candidate.deinflection?.inflections.includes("concessive_tatte")).sort(byLadder)[0];
+      if (concession) return termDefinition(concession, languages, apiBase);
+    }
+  }
+  if (command) {
+    const imperative = all.filter((hit) => verb(hit) && hit.surface.endsWith("な") &&
+      hit.candidate.deinflection?.inflections.some((step) => step === "imperative" || step === "imperative_na") &&
+      (!rest.slice(hit.surface.length) || /^(?:って|よ|ね)/u.test(rest.slice(hit.surface.length)))).sort(byLadder)[0];
+    if (imperative) return termDefinition(imperative, languages, apiBase);
+  }
+  if (selected?.sourceForm && /^です/u.test(rest) && tokens.at(-1)?.content) {
+    const copula = all.filter((hit) => verb(hit) && hit.term.senses.some((sense) => sense.partsOfSpeech.includes("cop")) &&
+      hit.surface.length >= selected.sourceForm!.length && /^です/u.test(hit.surface)).sort(byLadder)[0];
+    if (copula) return termDefinition(copula, languages, apiBase);
   }
   return selected;
 }
@@ -1832,7 +1904,7 @@ async function gatherCandidates(db: IDBDatabase, generation: string, source: str
   // per-word score shattered 全く (adverb, common, but usually-kana so never
   // confident) into 全 + く on a hair's-breadth score difference.
   if (!confident.length) {
-    hits.sort((a, b) => b.prefixLength - a.prefixLength || dictionaryRung(a, b) || score(b, source) - score(a, source));
+    hits.sort((a, b) => b.prefixLength - a.prefixLength || Number(a.term.dictionary === "jmnedict") - Number(b.term.dictionary === "jmnedict") || dictionaryRung(a, b) || score(b, source) - score(a, source));
     return { trusted: hits, all: hits };
   }
   confident.sort(contextualCompare);
@@ -2208,6 +2280,7 @@ function posSatisfiesInflection(term: Stored<OfflineTerm>, candidate: Candidate)
   }
   const codes = term.senses.flatMap((sense) => sense.partsOfSpeech);
   if (matchesPos(candidate.deinflection, codes)) return true;
+  if (codes.includes("exp") && /(?:だ|です)$/u.test(candidate.text) && matchesPos(candidate.deinflection, ["cop"])) return true;
   if (!codes.length || !codes.every((code) => code === "exp" || code === "unc")) return false;
   const expression = term.expressions.find((item) => normalize(item.text) === normalize(candidate.text));
   return Boolean(expression?.inflectionClass && matchesPos(candidate.deinflection, [expression.inflectionClass]));
@@ -2358,6 +2431,8 @@ function contextualCompare(a: LookupHit, b: LookupHit): number {
   if (forced) return forced;
   const length = b.prefixLength - a.prefixLength;
   if (length) return length;
+  const names = Number(a.term.dictionary === "jmnedict") - Number(b.term.dictionary === "jmnedict");
+  if (names) return names;
   const dictionary = dictionaryRung(a, b);
   if (dictionary) return dictionary;
   // Prefer the most literal spelling (Yomitan's shortest text-processing chain):

@@ -180,6 +180,22 @@ export function deinflect(text: string, { contextual = false }: { contextual?: b
     }
   }
   const candidates = [...byKey.values()];
+  const expanded = text.replace(/([てで])く$/u, "$1いく").replace(/([てで])った$/u, "$1いった");
+  if (expanded !== text) candidates.push(...deinflect(expanded));
+  if (/[ただ]って$/u.test(text)) {
+    candidates.push(...deinflect(text.slice(0, -2)).filter((form) => form.inflections.includes("-た"))
+      .map((form) => ({ ...form, inflections: ["concessive_tatte", ...form.inflections.filter((step) => step !== "-た")] })));
+  }
+  if (text.endsWith("な")) {
+    candidates.push({ term: text.slice(0, -1), inflections: ["imperative", "negative"], dictionaryForm: true,
+      conditions: CONDITION_FLAGS.v!, baseSurface: text });
+    candidates.push(...deinflect(`${text}さい`).filter((form) => form.inflections.includes("-なさい"))
+      .map((form) => ({ ...form, inflections: ["imperative_na", ...form.inflections.filter((step) => step !== "-なさい")] })));
+  }
+  if (text.endsWith("だったり")) {
+    candidates.push({ term: `${text.slice(0, -4)}だ`, inflections: ["-たり"], dictionaryForm: true,
+      conditions: CONDITION_FLAGS.copula!, baseSurface: text });
+  }
   if (!contextual) return candidates;
   const nominalClasses = (CONDITION_FLAGS["vs-noun"] ?? 0) | (CONDITION_FLAGS["adj-na"] ?? 0) | (CONDITION_FLAGS.n ?? 0);
   return candidates.flatMap((candidate) => {

@@ -17,6 +17,7 @@ const manifestVersion = JSON.parse(readFileSync(new URL("../manifest.base.json",
 // another test's still-pending transactions. All of them share one process and
 // one installed pack, so the 58 MB pack is scanned once rather than per corpus.
 const suites = [
+  { name: "click-positions.test.ts", entry: "test/click-positions.test.ts", outfile: join(dir, "click-positions.cjs") },
   { name: "telemetry-permission.test.ts", entry: "test/telemetry-permission.test.ts", outfile: join(dir, "telemetry-permission.cjs") },
   { name: "background-parity.test.ts", entry: "test/background-parity.test.ts", outfile: join(dir, "background-parity.cjs") },
   { name: "background-private-startup.test.ts", entry: "test/background-private-startup.test.ts", outfile: join(dir, "background-private-startup.cjs") },
@@ -24,8 +25,12 @@ const suites = [
   { name: "segmentation.test.ts", entry: "test/segmentation.test.ts", outfile: join(dir, "segmentation.cjs") },
 ];
 
+const requested = process.argv.slice(2);
+const selectedSuites = requested.length ? suites.filter((suite) => requested.includes(suite.name)) : suites;
+if (requested.some((name) => !suites.some((suite) => suite.name === name))) throw new Error("Unknown extension test suite");
+
 try {
-  for (const suite of suites) {
+  for (const suite of selectedSuites) {
     await build({
       entryPoints: [suite.entry], bundle: true, platform: "node", format: "cjs", outfile: suite.outfile, logLevel: "silent",
       define: {
@@ -44,7 +49,7 @@ try {
       },
     });
   }
-  for (const suite of suites) {
+  for (const suite of selectedSuites) {
     execFileSync(process.execPath, ["--test", suite.outfile], { stdio: "inherit" });
     if (suite.name === "background-parity.test.ts") {
       execFileSync(process.execPath, ["--test", suite.outfile], {
