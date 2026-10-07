@@ -76,6 +76,26 @@ type ActiveStack = { stackFingerprint: string; dictionaries: string[];
   dictionaryReveal: Record<string, "show" | "hover">; dictionaryNames: Record<string, string>;
   selected?: boolean };
 
+type InstalledStack = ActiveStack & { privateRevision: string | null };
+type InstalledPrivatePack = { generation: string; manifest: PackManifest };
+type DictionarySyncState = {
+  scope: "public" | "account";
+  inProgress: boolean;
+  targets: PackManifest[];
+  pendingPacks: string[];
+  retryAt: string | null;
+  lastSyncedAt: string | null;
+  failures: number;
+  error: string | null;
+};
+export type DictionaryPackStatus = {
+  slug: string;
+  enabled: boolean;
+  revision: string | null;
+  state: "ready" | "building" | "updating" | "error";
+  terms: number;
+};
+
 export type DictionaryStatus = {
   installed: boolean;
   revision: string | null;
@@ -94,7 +114,26 @@ export type DictionaryStatus = {
   sources: PackManifest["sources"];
   availableDictionaries: Array<{ slug: string; name: string; languages: string[] }>;
   lastCheckedAt: string | null;
+  lastSyncedAt: string | null;
+  retryAt: string | null;
+  pendingPacks: string[];
+  packs: DictionaryPackStatus[];
+  preferencesPending?: boolean;
 };
+
+class DictionarySyncError extends Error {
+  readonly retryAt: string | null;
+  constructor(message: string, response?: Response) {
+    super(message);
+    this.retryAt = retryAfter(response?.headers.get("Retry-After"));
+  }
+}
+
+function retryAfter(value?: string | null): string | null {
+  if (!value) return null;
+  const when = /^\d+$/.test(value) ? Date.now() + Number(value) * 1000 : Date.parse(value);
+  return Number.isFinite(when) ? new Date(Math.max(Date.now() + 60_000, when)).toISOString() : null;
+}
 
 export class DictionaryNotInstalledError extends Error {
   constructor(operation: "look up words" | "parse text") {
@@ -216,7 +255,7 @@ let publicDatabasePromise: Promise<IDBDatabase> | null = null;
 let privateDatabasePromise: Promise<IDBDatabase> | null = null;
 let privateDatabaseAbsent = false;
 let publicGenerationCache: string | undefined | null = null;
-let privateGenerationCache: string | undefined | null = null;
+let privatePacksCache: InstalledPrivatePack[] | null = null;
 let audioRecipeCache: PackManifest["audio"] | null | undefined = undefined;
 let activeStackCache: ActiveStack | null = null;
 let privateActivationEpoch = 0;
@@ -257,6 +296,13 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
   const publicRevision = manifest?.contentRevision ?? null;
   stack ??= manifest ? publicStack(manifest) : undefined;
   const privateManifest = await activePrivateManifest();
+  const installedStack = await installedActiveStack();
+  const sync = await meta<DictionarySyncState>(db, "syncState");
+  const privateDb = await privateDatabaseIfPresent();
+  const personalPacks = privateDb ? await installedPrivatePacks(privateDb) : [];
+  const installed = [manifest, ...personalPacks.map((pack) => pack.manifest)].filter((pack): pack is PackManifest => !!pack);
+  const targets = sync?.targets ?? installed;
+  const slugs = [...new Set([...targets.flatMap((pack) => pack.dictionaries.map(({ slug }) => slug)), ...(sync?.pendingPacks ?? [])])];
   if (manifest && privateManifest) {
     manifest = combinedManifest([manifest, privateManifest], `${manifest.contentRevision}.${privateManifest.contentRevision}`, "dictionary-stack.ndjson.gz");
   }
@@ -271,7 +317,7 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
     revision: manifest?.contentRevision ?? null,
     publicRevision,
     activeSources: stack?.dictionaries ?? [],
-    stackFingerprint: stack?.stackFingerprint ?? null,
+    stackFingerprint: installedStack?.stackFingerprint ?? publicRevision,
     builtAt: manifest?.builtAt ?? null,
     bytes: manifest?.bytes ?? 0,
     terms: manifest?.counts.terms ?? 0,
@@ -279,42 +325,58 @@ export async function dictionaryStatus(): Promise<DictionaryStatus> {
     installing,
     progress: installPromise ? installProgress : (snapshot?.progress ?? installProgress),
     stage: installPromise ? installStage : (snapshot?.stage ?? installStage),
-    error: installPromise ? installError : (snapshot?.error ?? installError),
+    error: installPromise ? installError : (sync?.error ?? snapshot?.error ?? installError),
     storageBytes: estimate?.usage ?? null,
     sources: manifest?.sources ?? [],
-    availableDictionaries: (manifest?.dictionaries ?? []).filter(({ slug }) => slug !== "kanjidic").map(({ slug }) => ({
-      slug, name: activeStackCache?.dictionaryNames[slug] ?? ({ jmdict: "JMdict", jmnedict: "JMnedict" } as Record<string, string>)[slug] ?? slug,
-      languages: manifest?.languages ?? [],
-    })),
+    availableDictionaries: [
+      ...installed.flatMap((pack) => pack.dictionaries.filter(({ slug }) => slug !== "kanjidic").map((dictionary) => ({
+        slug: dictionary.slug,
+        name: stack?.dictionaryNames[dictionary.slug] ?? ({ jmdict: "JMdict", jmnedict: "JMnedict" } as Record<string, string>)[dictionary.slug] ?? dictionary.slug,
+        languages: dictionary.languages ?? pack.languages,
+      }))),
+      ...(sync?.pendingPacks ?? []).filter((slug) => !installed.some((pack) => pack.dictionaries.some((dictionary) => dictionary.slug === slug))).map((slug) => ({
+        slug, name: stack?.dictionaryNames[slug] ?? slug,
+        languages: glossLanguagesFrom((stack?.dictionaries ?? []).filter((source) => source.startsWith(`${slug}:`)).map((source) => source.split(":")[1]!)),
+      })),
+    ],
     lastCheckedAt: lastCheckedAt ?? null,
+    lastSyncedAt: sync?.lastSyncedAt ?? null,
+    retryAt: sync?.retryAt ?? null,
+    pendingPacks: sync?.pendingPacks ?? [],
+    packs: slugs.map((slug) => {
+      const current = installed.find((pack) => pack.dictionaries.some((dictionary) => dictionary.slug === slug));
+      const target = targets.find((pack) => pack.dictionaries.some((dictionary) => dictionary.slug === slug));
+      const building = sync?.pendingPacks.includes(slug);
+      const ready = !!current && !!target && current.contentRevision === target.contentRevision && current.sha256 === target.sha256;
+      return { slug, enabled: slug === "kanjidic" || !!stack?.dictionaries.some((source) => source.split(":")[0] === slug),
+        revision: current?.contentRevision ?? null, terms: current?.counts.terms ?? 0,
+        state: building ? "building" : ready ? "ready" : sync?.error ? "error" : "updating" };
+    }),
   };
 }
 
-/** If a previous worker died mid-install, pick the job back up. */
-export function resumeInterruptedDictionaryInstall(apiBase: string, authorization?: string): void {
-  if (installPromise) return;
-  void readInstallSnapshot().then((snapshot) => {
-    if (!snapshot?.installing) return;
-    void installDictionary(snapshot.apiBase || apiBase, authorization).catch(() => undefined);
-  });
+export async function resumeInterruptedDictionaryInstall(apiBase: string, authorization?: string): Promise<void> {
+  if (installPromise) { await installPromise; return; }
+  const snapshot = await readInstallSnapshot();
+  if (!snapshot?.installing) return;
+  if (snapshot.apiBase && snapshot.apiBase !== apiBase) { await clearInstallSnapshot(); return; }
+  await installDictionary(apiBase, authorization);
 }
 
-export async function checkDictionaryUpdate(apiBase: string, authorization?: string, current = () => true): Promise<void> {
+export async function checkDictionaryUpdate(apiBase: string, authorization?: string, current = () => true,
+  expectedFingerprint?: string): Promise<void> {
   const db = await openPublicDatabase();
-  const active = await activePublicGeneration(db);
-  if (!current()) return;
-  if (!active) {
-    await installDictionary(apiBase, authorization);
-    if (!current()) return;
-    await setMeta(db, "lastUpdateCheck", new Date().toISOString());
-    return;
-  }
-  const last = await meta<string>(db, "lastUpdateCheck");
-  if (!current()) return;
-  if (last && Date.now() - Date.parse(last) < 24 * 60 * 60 * 1000) return;
-  await setMeta(db, "lastUpdateCheck", new Date().toISOString());
-  if (!current()) return;
+  const [active, sync, installed, last] = await Promise.all([
+    activePublicGeneration(db), meta<DictionarySyncState>(db, "syncState"), installedActiveStack(), meta<string>(db, "lastUpdateCheck"),
+  ]);
+  if (!current() || (sync?.retryAt && Date.parse(sync.retryAt) > Date.now())) return;
+  const changed = !!expectedFingerprint && installed?.stackFingerprint !== expectedFingerprint;
+  const interval = authorization ? 5 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  if (active && !changed && !sync?.inProgress && !sync?.pendingPacks.length && !sync?.error && last && Date.now() - Date.parse(last) < interval) return;
   await installDictionary(apiBase, authorization);
+  if (current() && !(await meta<DictionarySyncState>(db, "syncState"))?.pendingPacks.length) {
+    await setMeta(db, "lastUpdateCheck", new Date().toISOString());
+  }
 }
 
 export function installDictionary(apiBase: string, authorization?: string): Promise<PackManifest> {
@@ -333,22 +395,29 @@ export function installDictionary(apiBase: string, authorization?: string): Prom
   void writeInstallSnapshot(true);
   const activationEpoch = privateActivationEpoch;
   installPromise = performInstall(apiBase, installController.signal, authorization, activationEpoch)
-    .catch((error: unknown) => {
+    .catch(async (error: unknown) => {
       installError = error instanceof DOMException && error.name === "AbortError" ? null : describeInstallError(error, installStage);
       if (installError && typeof location !== "undefined" && /^(moz|chrome)-extension:$/.test(location.protocol)) {
         console.error("[Shirabe] Dictionary installation failed", { stage: installStage, error });
       }
+      const db = await openPublicDatabase();
+      const sync = await meta<DictionarySyncState>(db, "syncState");
+      const failures = (sync?.failures ?? 0) + 1;
+      await setMeta(db, "syncState", { ...sync, scope: authorization ? "account" : "public", inProgress: false, targets: sync?.targets ?? [], pendingPacks: sync?.pendingPacks ?? [],
+        lastSyncedAt: sync?.lastSyncedAt ?? null, failures, error: installError,
+        retryAt: installError ? new Date(Math.max(Date.now() + Math.min(15, 2 ** Math.min(failures - 1, 4)) * 60_000,
+          error instanceof DictionarySyncError && error.retryAt ? Date.parse(error.retryAt) : 0)).toISOString() : null });
       throw error;
     })
-    .finally(() => {
+    .finally(async () => {
       const failed = installError != null;
+      if (failed) await writeInstallSnapshot(false);
+      else await clearInstallSnapshot();
       installPromise = null;
       installController = null;
       installApiBase = null;
       installAuthorization = undefined;
       stopInstallKeepAlive();
-      if (failed) void writeInstallSnapshot(false);
-      else void clearInstallSnapshot();
     });
   return installPromise;
 }
@@ -459,7 +528,7 @@ export async function removeDictionary(): Promise<void> {
   installStage = null;
   installError = null;
   publicGenerationCache = null;
-  privateGenerationCache = null;
+  privatePacksCache = null;
   audioRecipeCache = undefined;
   activeStackCache = null;
   lookupProbeCache.clear();
@@ -475,6 +544,12 @@ export async function deactivatePrivateDictionaries(): Promise<void> {
   }
   await deleteDictionaryDatabase("private");
   const db = await openPublicDatabase();
+  if ((await meta<DictionarySyncState>(db, "syncState"))?.scope === "account") {
+    await deleteMeta(db, "syncState");
+    await clearInstallSnapshot();
+    installError = null;
+    installStage = null;
+  }
   const manifest = await meta<PackManifest>(db, "manifest");
   activeStackCache = await meta<ActiveStack>(db, "localStack") ?? (manifest ? publicStack(manifest) : null);
   lookupProbeCache.clear();
@@ -486,9 +561,9 @@ export async function setActiveDictionaryStack(dictionaries: string[], dictionar
   const db = await openPublicDatabase();
   if (!await meta<PackManifest>(db, "manifest")) return;
   const next: ActiveStack = { stackFingerprint, dictionaries, dictionaryReveal, dictionaryNames, selected: true };
+  if (JSON.stringify(activeStackCache) === JSON.stringify(next)) return;
   await setMeta(db, "localStack", next);
   activeStackCache = next;
-  lookupProbeCache.clear();
   candidateCache.clear();
 }
 
@@ -2513,17 +2588,16 @@ function cardFrequency(term: Stored<OfflineTerm>, reading: string | null): numbe
 
 async function termsForProbe(db: IDBDatabase, generation: string, probe: string): Promise<Array<Stored<OfflineTerm>>> {
   const privateDb = await privateDatabaseIfPresent();
-  const privateGeneration = privateDb ? await activeGeneration(privateDb) : undefined;
-  const key = `${generation}\0${privateGeneration ?? ""}\0${probe}`;
+  const personal = privateDb ? (await installedPrivatePacks(privateDb)).filter((pack) => dictionaryEnabled(pack.manifest.dictionaries[0]!.slug)) : [];
+  const key = `${generation}\0${personal.map((pack) => pack.generation).join(",")}\0${probe}`;
   const cached = lookupProbeCache.get(key);
   if (cached) return cached;
   const requests = [requestResult<Array<Stored<OfflineTerm>>>(
     db.transaction("terms").objectStore("terms").index("lookupKeys").getAll(IDBKeyRange.only(`${generation}\0${probe}`)),
   )];
-  if (privateDb && privateGeneration) {
-    requests.push(requestResult<Array<Stored<OfflineTerm>>>(
-      privateDb.transaction("terms").objectStore("terms").index("lookupKeys").getAll(IDBKeyRange.only(`${privateGeneration}\0${probe}`)),
-    ));
+  if (privateDb && personal.length) {
+    const index = privateDb.transaction("terms").objectStore("terms").index("lookupKeys");
+    requests.push(...personal.map((pack) => requestResult<Array<Stored<OfflineTerm>>>(index.getAll(IDBKeyRange.only(`${pack.generation}\0${probe}`)))));
   }
   const terms = (await Promise.all(requests)).flat();
   lookupProbeCache.set(key, terms);
@@ -2531,6 +2605,11 @@ async function termsForProbe(db: IDBDatabase, generation: string, probe: string)
 }
 
 async function performInstall(apiBase: string, signal: AbortSignal, authorization: string | undefined, activationEpoch: number): Promise<PackManifest> {
+  const publicDb = await openPublicDatabase();
+  const previousSync = await meta<DictionarySyncState>(publicDb, "syncState");
+  await setMeta(publicDb, "syncState", { ...previousSync, scope: authorization ? "account" : "public", inProgress: true,
+    targets: previousSync?.targets ?? [], pendingPacks: previousSync?.pendingPacks ?? [], retryAt: null, error: null,
+    failures: previousSync?.failures ?? 0, lastSyncedAt: previousSync?.lastSyncedAt ?? null });
   reportInstallProgress(0, "Fetching the dictionary manifest");
   const client = createShirabeClient({ baseUrl: apiBase, accessToken: authorization?.replace(/^Bearer /, "") });
   const manifest = authorization
@@ -2539,7 +2618,7 @@ async function performInstall(apiBase: string, signal: AbortSignal, authorizatio
   if (signal.aborted) throw new DOMException("Dictionary installation cancelled.", "AbortError");
   if (!manifest.data) {
     const detail = manifest.error as { detail?: string; title?: string } | undefined;
-    throw new Error(`Dictionary manifest: ${detail?.detail ?? detail?.title ?? `HTTP ${manifest.response?.status ?? 0}`}`);
+    throw new DictionarySyncError(`Dictionary manifest: ${detail?.detail ?? detail?.title ?? `HTTP ${manifest.response?.status ?? 0}`}`, manifest.response);
   }
   const payload = manifest.data as PackManifest | DictionaryStackManifest;
   const stack = authorization ? validateStackManifest(payload as DictionaryStackManifest) : null;
@@ -2549,36 +2628,107 @@ async function performInstall(apiBase: string, signal: AbortSignal, authorizatio
     if (activationEpoch !== privateActivationEpoch) throw new DOMException("Private dictionary activation was superseded.", "AbortError");
     await openPrivateDatabase();
     if (activationEpoch !== privateActivationEpoch) throw new DOMException("Private dictionary activation was superseded.", "AbortError");
-    const installedStack = activeStack(stack);
+    const installedStack = { ...activeStack(stack), dictionaryNames: activeStackCache?.dictionaryNames ?? {} };
+    const changed = JSON.stringify(activeStackCache?.dictionaries) !== JSON.stringify(installedStack.dictionaries) ||
+      JSON.stringify(activeStackCache?.dictionaryReveal) !== JSON.stringify(installedStack.dictionaryReveal);
     activeStackCache = installedStack;
-    lookupProbeCache.clear();
-    candidateCache.clear();
+    if (changed) candidateCache.clear();
   }
   reportInstallProgress(installProgress, "Checking offline dictionary storage");
   const publicPack = packs[0]!;
-  const publicDb = await openPublicDatabase();
+  await setMeta(publicDb, "syncState", { inProgress: true, scope: authorization ? "account" : "public", targets: packs, pendingPacks: stack?.pendingPacks ?? [],
+    retryAt: null, lastSyncedAt: previousSync?.lastSyncedAt ?? null, failures: previousSync?.failures ?? 0, error: null });
+  if (stack) {
+    if (signal.aborted || activationEpoch !== privateActivationEpoch) throw new DOMException("Dictionary installation cancelled.", "AbortError");
+    await reconcilePrivatePacks(await openPrivateDatabase(), stack.packs.filter((pack) => pack.kind === "overlay"), stack.pendingPacks);
+  }
   await installPacks(publicDb, publicPack.contentRevision, [publicPack], signal);
 
   if (!stack) {
     await deleteDictionaryDatabase("private");
     activeStackCache = await meta<ActiveStack>(publicDb, "localStack") ?? publicStack(publicPack);
+    await finishDictionarySync(publicDb, []);
     reportInstallProgress(1, null);
     return publicPack;
   }
 
   const privateDb = await openPrivateDatabase();
   const personalPacks = stack.packs.filter((pack) => pack.kind === "overlay");
-  const privateRevision = privateGeneration(personalPacks);
-  if (privateRevision) {
-    await installPacks(privateDb, privateRevision, personalPacks, signal, authorization);
-  } else {
-    await clearAllDictionaryRecords(privateDb);
-  }
-  const installedStack = activeStack(stack);
+  await installPrivatePacks(privateDb, personalPacks, signal, authorization, activationEpoch);
+  if (signal.aborted || activationEpoch !== privateActivationEpoch) throw new DOMException("Dictionary installation cancelled.", "AbortError");
+  const installedStack: InstalledStack = { ...activeStack(stack),
+    privateRevision: privateGeneration((await installedPrivatePacks(privateDb)).map((pack) => pack.manifest)) };
   if (stack.pendingPacks.length) installedStack.stackFingerprint = "";
   await setMeta(privateDb, "stack", installedStack);
+  await finishDictionarySync(publicDb, stack.pendingPacks, retryAfter(manifest.response?.headers.get("Retry-After")));
   reportInstallProgress(1, null);
   return combinedManifest(packs, packs.map((pack) => pack.contentRevision).join("."), "dictionary-stack.ndjson.gz");
+}
+
+async function finishDictionarySync(db: IDBDatabase, pendingPacks: string[], retryAt: string | null = null): Promise<void> {
+  const previous = await meta<DictionarySyncState>(db, "syncState");
+  await setMeta(db, "syncState", { ...previous, inProgress: false, pendingPacks, failures: 0, error: null,
+    lastSyncedAt: pendingPacks.length ? previous?.lastSyncedAt ?? null : new Date().toISOString(),
+    retryAt: pendingPacks.length ? retryAt ?? new Date(Date.now() + 60_000).toISOString() : null });
+}
+
+async function installedPrivatePacks(db: IDBDatabase): Promise<InstalledPrivatePack[]> {
+  if (privatePacksCache) return privatePacksCache;
+  const epoch = privateActivationEpoch;
+  const packs = await meta<InstalledPrivatePack[]>(db, "packs") ?? [];
+  if (epoch !== privateActivationEpoch) return [];
+  privatePacksCache = packs.filter((pack) => {
+    try { validateManifest(pack.manifest); return pack.manifest.dictionaries.length === 1; }
+    catch { return false; }
+  });
+  return privatePacksCache;
+}
+
+async function savePrivatePacks(db: IDBDatabase, packs: InstalledPrivatePack[]): Promise<void> {
+  const previous = await installedPrivatePacks(db);
+  const changed = previous.length !== packs.length || previous.some((pack) => !packs.some((item) => item.generation === pack.generation));
+  const stack = changed ? await meta<ActiveStack>(db, "stack") : undefined;
+  const transaction = db.transaction("meta", "readwrite");
+  transaction.objectStore("meta").put({ key: "packs", value: packs });
+  if (stack) transaction.objectStore("meta").put({ key: "stack", value: { ...stack, stackFingerprint: "" } });
+  await transactionDone(transaction);
+  privatePacksCache = packs;
+  if (changed) {
+    lookupProbeCache.clear();
+    candidateCache.clear();
+  }
+}
+
+async function reconcilePrivatePacks(db: IDBDatabase, packs: PackManifest[], pending: string[]): Promise<void> {
+  const accessible = new Set([...packs.flatMap((pack) => pack.dictionaries.map(({ slug }) => slug)), ...pending]);
+  const installed = (await installedPrivatePacks(db)).filter((pack) => accessible.has(pack.manifest.dictionaries[0]!.slug));
+  await savePrivatePacks(db, installed);
+  await cleanupOtherGenerations(db, new Set(installed.map((pack) => pack.generation)));
+}
+
+async function installPrivatePacks(db: IDBDatabase, packs: PackManifest[], signal: AbortSignal,
+  authorization: string | undefined, activationEpoch: number): Promise<void> {
+  let installed = await installedPrivatePacks(db);
+  const ordered = [...packs].sort((a, b) => dictionaryRank(a.dictionaries[0]!.slug) - dictionaryRank(b.dictionaries[0]!.slug));
+  for (const pack of ordered) {
+    if (pack.dictionaries.length !== 1) throw new Error("A personal pack must contain one dictionary.");
+    const slug = pack.dictionaries[0]!.slug;
+    const generation = `${slug}@${pack.contentRevision}-${pack.sha256}`;
+    if (installed.some((current) => current.generation === generation)) continue;
+    if (signal.aborted || activationEpoch !== privateActivationEpoch) throw new DOMException("Dictionary installation cancelled.", "AbortError");
+    reportInstallProgress(Math.max(installProgress, 0.1), `Updating ${slug}; unchanged dictionaries stay installed`);
+    await clearGeneration(db, generation);
+    try {
+      await importPack(db, generation, pack, signal, authorization);
+      if (signal.aborted || activationEpoch !== privateActivationEpoch) throw new DOMException("Dictionary installation cancelled.", "AbortError");
+      installed = [...installed.filter((current) => current.manifest.dictionaries[0]!.slug !== slug), { generation, manifest: pack }];
+      await savePrivatePacks(db, installed);
+    } catch (error) {
+      await clearGeneration(db, generation);
+      throw error;
+    }
+    await cleanupOtherGenerations(db, new Set(installed.map((current) => current.generation)));
+  }
 }
 
 async function installPacks(
@@ -2612,7 +2762,7 @@ async function importPack(
   const response = await fetch(pack.downloadUrl, {
     cache: "no-store", signal, ...(authorization ? { headers: { Authorization: authorization } } : {}),
   });
-  if (!response.ok) throw new Error(await responseFailure("Dictionary download", response));
+  if (!response.ok) throw new DictionarySyncError(await responseFailure("Dictionary download", response), response);
   if (!response.body) throw new Error("This browser cannot stream the dictionary download.");
   const [importBranch, hashBranch] = response.body.tee();
   const digestPromise = sha256Stream(hashBranch, pack.bytes, signal);
@@ -2668,7 +2818,7 @@ function combinedManifest(packs: PackManifest[], contentRevision: string, artifa
 
 function privateGeneration(packs: PackManifest[]): string | null {
   if (!packs.length) return null;
-  const identity = packs.map((pack) => `${pack.dictionaries.map(({ slug }) => slug).join(",")}@${pack.contentRevision}`).join("\0");
+  const identity = packs.map((pack) => `${pack.dictionaries.map(({ slug }) => slug).join(",")}@${pack.contentRevision}:${pack.sha256}`).sort().join("\0");
   return `private-${bytesToHex(createSha256(new TextEncoder().encode(identity))).slice(0, 32)}`;
 }
 
@@ -2745,6 +2895,9 @@ async function importRecords(db: IDBDatabase, generation: string, stream: Readab
       } else if (raw.type === "term") {
         const record = raw as OfflineTerm;
         validateTerm(record);
+        if (db.name === PRIVATE_DB_NAME && (!manifest.dictionaries.some(({ slug }) => slug === record.dictionary) || !record.id.startsWith(`${record.dictionary}:`))) {
+          throw new Error("A personal pack contains an entry from a different dictionary.");
+        }
         if (seenIds.has(record.id)) throw new Error(`Dictionary contains duplicate record id ${record.id}.`);
         seenIds.add(record.id);
         batch.push(record);
@@ -2914,7 +3067,7 @@ async function deleteDictionaryDatabase(kind: "public" | "private"): Promise<voi
 
 export function disablePrivateDictionaryLookups(): void {
   privateActivationEpoch += 1;
-  privateGenerationCache = null;
+  privatePacksCache = null;
   privateDatabaseAbsent = true;
   activeStackCache = null;
   lookupProbeCache.clear();
@@ -2948,7 +3101,7 @@ async function meta<T>(db: IDBDatabase, key: string): Promise<T | undefined> {
 }
 
 async function activeGeneration(db: IDBDatabase): Promise<string | undefined> {
-  const cached = db.name === PUBLIC_DB_NAME ? publicGenerationCache : privateGenerationCache;
+  const cached = publicGenerationCache;
   if (cached !== null) return cached;
   const [generation, manifest] = await Promise.all([
     meta<string>(db, "activeGeneration"), meta<PackManifest>(db, "manifest"),
@@ -2990,18 +3143,24 @@ async function storedActiveStack(): Promise<ActiveStack | undefined> {
 
 async function installedActiveStack(): Promise<ActiveStack | undefined> {
   const db = await privateDatabaseIfPresent();
-  return db ? meta<ActiveStack>(db, "stack") : undefined;
+  if (!db) return;
+  const stack = await meta<InstalledStack>(db, "stack");
+  if (!stack) return;
+  const revision = privateGeneration((await installedPrivatePacks(db)).map((pack) => pack.manifest));
+  return stack.privateRevision === revision ? stack : { ...stack, stackFingerprint: "" };
 }
 
 async function activePrivateManifest(): Promise<PackManifest | undefined> {
   const db = await privateDatabaseIfPresent();
-  if (!db || !await activeGeneration(db)) return;
-  return meta<PackManifest>(db, "manifest");
+  if (!db) return;
+  const packs = (await installedPrivatePacks(db)).map((pack) => pack.manifest);
+  const revision = privateGeneration(packs);
+  return revision ? combinedManifest(packs, revision, "dictionary-overlay.ndjson.gz") : undefined;
 }
 
 function setGenerationCache(db: IDBDatabase, generation: string | undefined | null): void {
   if (db.name === PUBLIC_DB_NAME) publicGenerationCache = generation;
-  else privateGenerationCache = generation;
+  else privatePacksCache = null;
 }
 
 async function audioRecipe(db: IDBDatabase): Promise<PackManifest["audio"] | null> {
@@ -3124,41 +3283,26 @@ async function getByPk<T>(db: IDBDatabase, store: string, key: string): Promise<
 
 async function getTermByPk(db: IDBDatabase, generation: string, entry: string): Promise<Stored<OfflineTerm> | undefined> {
   const privateDb = await privateDatabaseIfPresent();
-  const privateGeneration = privateDb ? await activeGeneration(privateDb) : undefined;
-  const [published, personal] = await Promise.all([
-    getByPk<Stored<OfflineTerm>>(db, "terms", `${generation}\0${entry}`),
-    privateDb && privateGeneration
-      ? getByPk<Stored<OfflineTerm>>(privateDb, "terms", `${privateGeneration}\0${entry}`)
-      : undefined,
+  const personal = privateDb ? (await installedPrivatePacks(privateDb)).find((pack) => entry.startsWith(`${pack.manifest.dictionaries[0]!.slug}:`)) : undefined;
+  const [published, uploaded] = await Promise.all([
+    personal ? undefined : getByPk<Stored<OfflineTerm>>(db, "terms", `${generation}\0${entry}`),
+    privateDb && personal ? getByPk<Stored<OfflineTerm>>(privateDb, "terms", `${personal.generation}\0${entry}`) : undefined,
   ]);
-  return [published, personal].filter((term): term is Stored<OfflineTerm> => !!term && dictionaryEnabled(term.dictionary))
-    .sort((a, b) => dictionaryRank(a.dictionary) - dictionaryRank(b.dictionary))[0];
+  return [published, uploaded].find((term) => !!term && dictionaryEnabled(term.dictionary));
 }
 
-async function getSentenceByPk(
-  db: IDBDatabase, generation: string, id: string,
-): Promise<Stored<OfflineSentence> | undefined> {
+async function getSentenceByPk(db: IDBDatabase, generation: string, id: string): Promise<Stored<OfflineSentence> | undefined> {
   const privateDb = await privateDatabaseIfPresent();
-  const privateGeneration = privateDb ? await activeGeneration(privateDb) : undefined;
-  const [published, personal] = await Promise.all([
-    getByPk<Stored<OfflineSentence>>(db, "sentences", `${generation}\0${id}`),
-    privateDb && privateGeneration
-      ? getByPk<Stored<OfflineSentence>>(privateDb, "sentences", `${privateGeneration}\0${id}`)
-      : undefined,
-  ]);
-  return personal ?? published;
+  const packs = privateDb ? (await installedPrivatePacks(privateDb)).filter((pack) => pack.manifest.counts.sentences > 0 && dictionaryEnabled(pack.manifest.dictionaries[0]!.slug)) : [];
+  const published = getByPk<Stored<OfflineSentence>>(db, "sentences", `${generation}\0${id}`);
+  const personal = privateDb && packs.length ? packs.map((pack) => getByPk<Stored<OfflineSentence>>(privateDb, "sentences", `${pack.generation}\0${id}`)) : [];
+  return (await Promise.all(personal)).find((sentence) => !!sentence) ?? await published;
 }
 
 async function clearGeneration(db: IDBDatabase, generation: string): Promise<void> {
   for (const store of ["terms", "kanji", "sentences"]) await deleteGenerationRows(db, store, generation);
 }
 
-async function clearAllDictionaryRecords(db: IDBDatabase): Promise<void> {
-  const transaction = db.transaction(["meta", "terms", "kanji", "sentences"], "readwrite");
-  for (const store of ["meta", "terms", "kanji", "sentences"]) transaction.objectStore(store).clear();
-  await transactionDone(transaction);
-  setGenerationCache(db, undefined);
-}
 
 async function cleanupOtherGenerations(db: IDBDatabase, retained: Set<string>): Promise<void> {
   for (const store of ["terms", "kanji", "sentences"]) {
@@ -3186,20 +3330,10 @@ function generationsInStore(db: IDBDatabase, storeName: string): Promise<string[
   });
 }
 
-function deleteGenerationRows(db: IDBDatabase, storeName: string, generation: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, "readwrite");
-    const request = transaction.objectStore(storeName).index("generation").openCursor(IDBKeyRange.only(generation));
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (!cursor) return;
-      cursor.delete();
-      cursor.continue();
-    };
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error ?? new Error("Dictionary cleanup failed."));
-    transaction.onabort = () => reject(transaction.error ?? new Error("Dictionary cleanup was aborted."));
-  });
+async function deleteGenerationRows(db: IDBDatabase, storeName: string, generation: string): Promise<void> {
+  const transaction = db.transaction(storeName, "readwrite");
+  transaction.objectStore(storeName).delete(IDBKeyRange.bound(`${generation}\0`, `${generation}\u0001`, false, true));
+  await transactionDone(transaction);
 }
 
 function transactionDone(transaction: IDBTransaction): Promise<void> {

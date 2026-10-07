@@ -1,3 +1,4 @@
+import type { DictionaryStatus, DictionaryPackStatus } from "./offline-dictionary.js";
 import { sendDictionary } from "./dictionary-port.js";
 
 // The install/update/progress/diagnostics card, mounted by BOTH the toolbar
@@ -31,10 +32,37 @@ export function mountDictionaryPanel(hooks: DictionaryPanelHooks): DictionaryPan
   const card = $<HTMLElement>("dictionary");
   const pane = (state: string) => card.querySelector<HTMLElement>(`[data-dictionary-state="${state}"]`) as HTMLElement;
   let poll: number | undefined;
+  let diagnosticError: string | null = null;
 
   function show(state: DictionaryState): void {
     for (const name of DICTIONARY_STATES) pane(name).hidden = name !== state;
     hooks.onBusy?.(state === "installing");
+  }
+
+  function renderSync(dict: DictionaryStatus): void {
+    const available = dict.installed ? "Offline lookup is available. " : "";
+    const retry = dict.retryAt ? ` Sync will retry automatically at ${new Date(dict.retryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.` : "";
+    const pending = dict.pendingPacks.length;
+    const preferences = dict.preferencesPending ? "Dictionary choices are saved here; waiting to sync with Shirabe. " : "";
+    $<HTMLElement>("dictionarySyncSummary").textContent = available + preferences + (pending
+      ? `Waiting for ${pending} dictionary export${pending === 1 ? "" : "s"}.${retry}`
+      : dict.error ? `Some dictionaries could not be updated.${retry}`
+      : dict.installing ? "Updating changed dictionaries; unchanged ones stay installed."
+      : dict.lastSyncedAt ? `Last complete sync: ${new Date(dict.lastSyncedAt).toLocaleString()}.` : "");
+    const names = new Map(dict.availableDictionaries.map((dictionary) => [dictionary.slug, dictionary.name]));
+    $<HTMLElement>("dictionaryPackStatus").replaceChildren(...dict.packs.map((pack) => {
+      const row = document.createElement("li");
+      row.textContent = `${names.get(pack.slug) ?? pack.slug}: ${packState(pack)}`;
+      return row;
+    }));
+  }
+
+  function packState(pack: DictionaryPackStatus): string {
+    if (pack.state === "ready") return pack.enabled ? "Ready offline" : "Stored offline; disabled";
+    const previous = pack.revision ? "; previous version stored" : "";
+    if (pack.state === "building") return `Export building${previous}`;
+    if (pack.state === "error") return `${pack.revision ? "Update" : "Download"} failed${previous}`;
+    return `${pack.revision ? "Update" : "Download"} pending${previous}`;
   }
 
   async function refresh(): Promise<void> {
@@ -46,6 +74,8 @@ export function mountDictionaryPanel(hooks: DictionaryPanelHooks): DictionaryPan
       return;
     }
     const dict = res.dictionary;
+    window.clearTimeout(poll);
+    renderSync(dict);
     if (dict.installing) {
       show("installing");
       $<HTMLProgressElement>("dictionaryProgress").value = dict.progress;
@@ -57,7 +87,10 @@ export function mountDictionaryPanel(hooks: DictionaryPanelHooks): DictionaryPan
     } else if (dict.error) {
       show("error");
       $<HTMLElement>("dictionaryError").textContent = dict.error;
-      await diagnose(dict.error);
+      if (diagnosticError !== dict.error) {
+        diagnosticError = dict.error;
+        await diagnose(dict.error);
+      }
     } else if (dict.installed) {
       show("installed");
       const size = dict.bytes ? `${(dict.bytes / 1024 / 1024).toFixed(1)} MB download` : "installed";
@@ -66,6 +99,7 @@ export function mountDictionaryPanel(hooks: DictionaryPanelHooks): DictionaryPan
     } else {
       show("missing");
     }
+    if (!dict.installing && (dict.pendingPacks.length || dict.retryAt)) poll = window.setTimeout(() => void refresh(), 15_000);
   }
 
   async function install({ update = false } = {}): Promise<void> {
@@ -108,6 +142,12 @@ export function mountDictionaryPanel(hooks: DictionaryPanelHooks): DictionaryPan
       show("error");
       $<HTMLElement>("dictionaryError").textContent = settled.dictionary.error;
       await diagnose(settled.dictionary.error);
+      return;
+    }
+    if (settled.ok && settled.dictionary.pendingPacks.length) {
+      hooks.status("Available dictionaries are installed; pending exports will sync automatically");
+      await refresh();
+      await hooks.onInstalled?.();
       return;
     }
     const revision = await installedRevision();

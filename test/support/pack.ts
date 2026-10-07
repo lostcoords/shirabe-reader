@@ -23,7 +23,7 @@ export const CORPUS_MAX_SPAN = 24;
 /**
  * The newest locally-built dictionary pack, or null when none is built.
  * SHIRABE_PACK overrides the search; otherwise it is the dev pack that
- * `npm run prepare:dev-pack` writes.
+ * `bin/rails dictionary_packs:ensure` writes.
  */
 export function realPackPath(): string | null {
   if (process.env.SHIRABE_PACK) return existsSync(process.env.SHIRABE_PACK) ? process.env.SHIRABE_PACK : null;

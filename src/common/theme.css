@@ -1,0 +1,29 @@
+:root {
+  color-scheme: light dark;
+  --surface-page: light-dark(#f8fafc, #1d1d1d);
+  --surface: light-dark(#ffffff, #252526);
+  --surface-muted: light-dark(#f1f5f9, #1d1d1d);
+  --surface-hover: light-dark(#f1f5f9, #2c2c2c);
+  --ink: light-dark(#111827, #e8e8e8);
+  --ink-muted: light-dark(#4b5563, #a8a8a8);
+  --ink-subtle: light-dark(#64748b, #8a8a8a);
+  --outline: light-dark(#e2e8f0, #3c3c3c);
+  --primary: light-dark(#0369a1, oklch(68% 0.167 245));
+  --primary-hover: light-dark(#025a83, oklch(76% 0.128 245));
+  --primary-tint: light-dark(#e2f1fa, color-mix(in oklab, var(--primary) 15%, transparent));
+  --on-primary: light-dark(#ffffff, oklch(18% 0.03 245));
+  --success-text: light-dark(#15803d, oklch(76% 0.181 155));
+  --success-tint: light-dark(#dcfce7, color-mix(in oklab, var(--success-text) 15%, transparent));
+  --warning-text: light-dark(#c2410c, oklch(76% 0.164 65));
+  --warning-tint: light-dark(#ffedd5, color-mix(in oklab, var(--warning-text) 15%, transparent));
+  --danger-text: light-dark(#b91c1c, #f87171);
+  --danger-tint: light-dark(#fef2f2, color-mix(in srgb, var(--danger-text) 15%, transparent));
+  --radius-button: 8px;
+  --radius-card: 12px;
+  --ring: 0 0 0 3px color-mix(in oklab, var(--primary) 25%, transparent);
+  --shadow-e1: none;
+  --state-known: #22c55e;
+  --state-due: #ef4444;
+  --state-learning: #f59e0b;
+  --state-unknown: light-dark(#cbd5e1, #3c3c3c);
+}

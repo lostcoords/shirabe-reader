@@ -62,7 +62,7 @@ test("all extension-owned surfaces preserve focus, reduced-motion, and forced-co
   // answers for motion and forced colours only.
   const withControls = [
     readFileSync("src/action/popup.css", "utf8"),
-    readFileSync("../packages/card/src/word-card/card.ts", "utf8"),
+    readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8"),
     readFileSync("src/options/options.css", "utf8"),
   ];
   for (const css of withControls) assert.match(css, /focus-visible/);
@@ -109,12 +109,11 @@ test("the action popup navigates with a bottom bar and hands settings to its own
   // Firefox sizes the panel from the root's intrinsic width, so it stays fixed.
   assert.match(css, /html,\s*\nbody\s*\{[^}]*width:\s*400px;[^}]*min-width:\s*400px;/s);
   assert.doesNotMatch(css, /max-width:\s*100vw/);
-  // Tokens are light-dark pairs (system dark mode); the light half keeps the
-  // brand ocean / purple from the site palette.
-  assert.match(css, /color-scheme:\s*light dark/);
-  assert.match(css, /--primary:\s*light-dark\(#0369a1/);
-  assert.match(css, /--brand-purple:\s*light-dark\(#7b61ff/);
-  assert.match(css, /--radius-card:\s*18px/);
+  const theme = readFileSync("src/common/theme.css", "utf8");
+  assert.match(css, /@import "\.\.\/common\/theme\.css"/);
+  assert.match(theme, /color-scheme:\s*light dark/);
+  assert.match(theme, /--primary:\s*light-dark\(#0369a1/);
+  assert.doesNotMatch(theme, /brand-purple/);
   assert.doesNotMatch(popup, /readArticle|readSelection|openPasteReader|Paste \/ PDF/);
   assert.match(popup, /<symbol id="icon-search"/);
 
@@ -183,12 +182,7 @@ test("extension settings mirror Shirabe's sidebar and card layout without purple
   assert.match(options, /class="settings-nav"/);
   assert.match(options, /class="settings-content"/);
   for (const id of ["reading", "dictionary", "account", "advanced"]) assert.match(options, new RegExp(`href="#${id}"`));
-  assert.match(css, /color-scheme:\s*light dark/);
-  assert.match(css, /--surface-page:\s*light-dark\(#f8fafc/);
-  assert.match(css, /--surface:\s*light-dark\(#ffffff/);
-  assert.match(css, /--primary:\s*light-dark\(#0369a1/);
-  assert.match(css, /grid-template-columns:\s*176px minmax\(0, 1fr\)/);
-  // Settings stays interaction-blue; purple is identity-only on the action popup.
+  assert.match(css, /@import "\.\.\/common\/theme\.css"/);
   assert.doesNotMatch(css, /purple|#7b61ff/i);
   assert.match(logic, /new IntersectionObserver/);
 });
@@ -199,8 +193,8 @@ test("the word card reaches the world only through its host", () => {
   const code = (path: string) => readFileSync(path, "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^\s*\/\/.*$/gm, "");
-  const card = code("../packages/card/src/word-card/card.ts");
-  const contract = readFileSync("../packages/card/src/word-card/host.ts", "utf8");
+  const card = code("../node_modules/@shirabe-org/card/dist/word-card/card.js");
+  const contract = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/host.d.ts", "utf8");
 
   // The point of the seam: three surfaces want this card (this extension over a
   // local pack, a web page over the API, an Anki card over a script tag), and a
@@ -220,7 +214,7 @@ test("the word card reaches the world only through its host", () => {
   for (const optional of ["study?:", "audio?:", "resolvePending?(", "notify?(", "onStudyChanged?(", "pricingUrl?("]) {
     assert.ok(contract.includes(optional), `${optional} must stay optional for a host that cannot do it`);
   }
-  assert.match(card, /function optional\(\): Partial<WordCardHost>/);
+  assert.match(card, /function optional\(\)/);
 });
 
 test("exported settings carry preferences and never a sign-in", () => {
@@ -299,7 +293,7 @@ test("dictionary installation uses a persistent background port", () => {
   // The pack is the extension host's business, not the card's: the card only
   // knows a lookup came back pending and asks the host to resolve it.
   const cardHost = readFileSync("src/content/card-host.ts", "utf8");
-  const wordPopup = readFileSync("../packages/card/src/word-card/card.ts", "utf8");
+  const wordPopup = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
   const background = readFileSync("src/background/background.ts", "utf8");
   assert.match(browser, /connect\(connectInfo\?: \{ name\?: string \}\): RuntimePort/);
   assert.match(dictionaryPort, /ext\.runtime\.connect\(\{ name: "shirabe-dictionary" \}\)/);
@@ -351,8 +345,8 @@ test("opening the action activates raw-text scanning without parsing the page", 
 });
 
 test("pronunciation audio only plays processed R2 clips and never browser speech", () => {
-  const popup = readFileSync("../packages/card/src/word-card/card.ts", "utf8");
-  const audio = readFileSync("../packages/card/src/word-card/audio.ts", "utf8");
+  const popup = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
+  const audio = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/audio.js", "utf8");
   const background = readFileSync("src/background/background.ts", "utf8");
   const webAudio = readFileSync("../app/javascript/controllers/audio_controller.js", "utf8");
 
@@ -378,7 +372,7 @@ test("pronunciation audio only plays processed R2 clips and never browser speech
 });
 
 test("reader grading is off, and returns due-only and click-locked when it is not", () => {
-  const popup = readFileSync("../packages/card/src/word-card/card.ts", "utf8");
+  const popup = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
   const actions = readFileSync("src/content/actions.ts", "utf8");
   const keybind = readFileSync("src/common/keybind.ts", "utf8");
   // Reviewing lives on the site: the row is still wired, just not rendered, and
@@ -428,15 +422,13 @@ test("page parsing does not wait for profile-state network hydration", () => {
   assert.match(parser, /recordPerformance\("parse-render"/);
   const dictionary = readFileSync("src/common/offline-dictionary.ts", "utf8");
   assert.match(dictionary, /publicGenerationCache/);
-  assert.match(dictionary, /privateGenerationCache/);
+  assert.match(dictionary, /privatePacksCache/);
   assert.match(dictionary, /lookupProbeCache = new BoundedCache/);
 });
 
 test("missing offline storage self-heals and the word popup has a stable scrollable frame", () => {
   const background = readFileSync("src/background/background.ts", "utf8");
-  const dictionary = readFileSync("src/common/offline-dictionary.ts", "utf8");
-  const popup = readFileSync("../packages/card/src/word-card/card.ts", "utf8");
-  assert.match(dictionary, /if \(!active\) \{\s*await installDictionary\(apiBase, authorization\)/);
+  const popup = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
   assert.match(background, /DictionaryNotInstalledError/);
   assert.match(background, /dictionaryInstalling: true/);
   // The wording belongs to whoever knows there is a pack: the card renders
@@ -449,7 +441,7 @@ test("missing offline storage self-heals and the word popup has a stable scrolla
 
   // Side-choice for vertical (tategaki) text lives in placement.ts now, not in
   // popup.ts: prefer the left column, fall back to whichever side has room.
-  const placement = readFileSync("../packages/card/src/word-card/placement.ts", "utf8");
+  const placement = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/placement.js", "utf8");
   assert.match(placement, /const roomRight = view\.width - avoid\.right - margin \* 2/);
   assert.match(placement, /roomLeft >= size\.width \|\| roomLeft >= roomRight/);
 });

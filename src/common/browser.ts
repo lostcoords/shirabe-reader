@@ -20,6 +20,12 @@ export type RuntimePort = {
 };
 
 type WebExt = {
+  alarms?: {
+    create(name: string, info: { when?: number; periodInMinutes?: number }): Promise<void>;
+    get(name: string): Promise<{ scheduledTime: number; periodInMinutes?: number } | undefined>;
+    clear(name: string): Promise<boolean>;
+    onAlarm: { addListener(fn: (alarm: { name: string }) => void): void };
+  };
   action?: {
     setBadgeText(details: { text: string; tabId?: number }): Promise<void>;
     setBadgeBackgroundColor(details: { color: string; tabId?: number }): Promise<void>;
@@ -39,8 +45,6 @@ type WebExt = {
     // Used as a light keep-alive ping while a long dictionary install runs without
     // an open popup (MV3 service workers otherwise suspend and drop in-memory state).
     getPlatformInfo?(): Promise<unknown>;
-    // Watch builds only, to reload themselves after a rebuild (`dev-reload.ts`).
-    reload?(): void;
   };
   storage: {
     local: StorageArea;

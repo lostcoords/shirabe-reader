@@ -18,6 +18,7 @@ import { startYouTubeCaptions } from "./parsers/youtube.js";
 import { startDynamicReader } from "./parsers/dynamic-reader.js";
 import { dismissPopup, picksForWord, scheduleShow, scheduleTextLookup, setCardHost, setPopupOptions, setWriteState, showNow } from "@shirabe-org/card/word-card";
 import { extensionHost } from "./card-host.js";
+import { CARD_THEME_CSS } from "./card-theme.js";
 import { selectionText } from "@shirabe-org/card/word-card/dom-text";
 import { scanPointer as sdkScan } from "@shirabe-org/card/word-card/scan";
 import { toast } from "./toast.js";
@@ -98,7 +99,7 @@ function boot(): void {
       hideAutomatically: config.popupHideAutomatically,
       theme: config.theme,
       audioAutoplay: config.audioAutoplay,
-      customCss: config.customPopupCss,
+      customCss: `${CARD_THEME_CSS}\n${config.customPopupCss}`,
     });
 
     const resolution = resolveHostMode(location.href, {

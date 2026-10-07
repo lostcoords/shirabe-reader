@@ -1,7 +1,3 @@
-// The page parser's own type, plus the card vocabulary re-exported from the SDK.
-// `Definition` and everything under it belong to the card contract three
-// surfaces share (packages/card/src/word-card/types.ts); this file is where the
-// extension reads them from, so its importers do not each reach across.
 export type {
   Definition, DeckMembership, Example, GlossRow, IntervalPreviews, KanjiDetail,
   PitchPattern, Sense, SenseChip, SenseScope, SenseXref, SourceHeadword, SourceTag, StudyDetails, TokenCandidate,

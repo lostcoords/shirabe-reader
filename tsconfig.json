@@ -3,11 +3,6 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "baseUrl": ".",
-    "paths": {
-      "@shirabe-org/api": ["../packages/api/src/index.ts"],
-      "@shirabe-org/card/*": ["../packages/card/src/*"]
-    },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
     "noUnusedLocals": true,

@@ -6,8 +6,8 @@
     <link rel="stylesheet" href="popup.css" />
     <title>Shirabe Reader</title>
   </head>
-  <body>
-    <svg class="icon-sprite" aria-hidden="true">
+  <body class="flex max-h-[580px] flex-col overflow-hidden bg-surface-page font-sans text-ink">
+    <svg class="absolute size-0 overflow-hidden" aria-hidden="true">
       <symbol id="icon-book" viewBox="0 0 24 24"><path d="M2.25 3.75A2.25 2.25 0 0 1 4.5 1.5h4.125c1.24 0 2.25 1.01 2.25 2.25v16.5A2.25 2.25 0 0 0 8.625 18H4.5a2.25 2.25 0 0 0-2.25 2.25V3.75Zm19.5 0A2.25 2.25 0 0 0 19.5 1.5h-4.125a2.25 2.25 0 0 0-2.25 2.25v16.5A2.25 2.25 0 0 1 15.375 18H19.5a2.25 2.25 0 0 1 2.25 2.25V3.75Z" /></symbol>
       <symbol id="icon-search" viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m2.1-5.4a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" /></symbol>
       <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="M9.813 15.904 9 18.75l-.813-2.846A4.5 4.5 0 0 0 5.096 12.813L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.091-3.091L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.091 3.091L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.091 3.091Zm8.445-7.347L18 9.75l-.258-1.193a3.375 3.375 0 0 0-2.299-2.299L14.25 6l1.193-.258a3.375 3.375 0 0 0 2.299-2.299L18 2.25l.258 1.193a3.375 3.375 0 0 0 2.299 2.299L21.75 6l-1.193.258a3.375 3.375 0 0 0-2.299 2.299Z" /></symbol>
@@ -19,55 +19,57 @@
       <symbol id="icon-user" viewBox="0 0 24 24"><path d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.118a7.5 7.5 0 0 1 15 0A17.9 17.9 0 0 1 12 21.75a17.9 17.9 0 0 1-7.5-1.632Z" /></symbol>
     </svg>
 
-    <main>
-      <button id="readerToggle" class="reader-toggle" type="button" aria-pressed="true" hidden>
-        <span class="reader-toggle-copy">
-          <strong id="readerToggleLabel">Reader is on</strong>
-          <span id="readerToggleHost"></span>
-        </span>
-        <span class="reader-switch" aria-hidden="true"><span></span></span>
-      </button>
-      <button id="pagePause" class="ghost" type="button" hidden>Pause on this page</button>
+    <main class="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto p-4">
+      <header class="hidden items-center gap-2 rounded-xl border border-outline bg-surface p-3 has-[button:not([hidden])]:flex" aria-label="Current page">
+        <div class="grid min-w-0 flex-1 gap-0.5">
+          <strong id="readerToggleLabel" class="text-sm font-semibold">Reader is on</strong>
+          <span id="readerToggleHost" class="truncate text-xs text-ink-muted"></span>
+        </div>
+        <button id="pagePause" class="ghost compact shrink-0 cursor-pointer" type="button" hidden>Pause on this page</button>
+        <button id="readerToggle" class="reader-toggle flex h-8 shrink-0 cursor-pointer items-center px-1.5" type="button" aria-pressed="true" aria-label="Turn reader off" hidden>
+          <span class="reader-switch" aria-hidden="true"><span></span></span>
+        </button>
+      </header>
 
       <!-- ── Lookup: this page, and what you can read of it ─────────────── -->
-      <section id="panel-lookup" class="panel" role="tabpanel" aria-labelledby="tab-lookup">
+      <section id="panel-lookup" class="panel grid gap-4" role="tabpanel" aria-labelledby="tab-lookup">
         <!-- Nothing works without a dictionary, so it outranks everything. -->
-        <section id="needsDictionary" class="card prompt-card" hidden>
-          <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-book" /></svg></span><p class="account-line">Install the dictionary first</p></div>
-          <p class="muted">Shirabe reads pages with a dictionary stored on this device. Install it once and lookup works offline, with no account.</p>
+        <section id="needsDictionary" class="card grid gap-3" hidden>
+          <div class="card-heading"><span class="icon-box"><svg><use href="#icon-book" /></svg></span><p class="account-line">Install the dictionary first</p></div>
+          <p class="muted">Install once for offline lookup and page reading. No account needed.</p>
           <button id="goInstallDictionary" class="primary"><svg><use href="#icon-document" /></svg>Install dictionary</button>
         </section>
-        <section id="dictionaryInstallingBanner" class="card prompt-card" hidden>
-          <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-book" /></svg></span><p class="account-line">Dictionary installing…</p></div>
+        <section id="dictionaryInstallingBanner" class="card grid gap-3" hidden>
+          <div class="card-heading"><span class="icon-box"><svg><use href="#icon-book" /></svg></span><p class="account-line">Dictionary installing…</p></div>
           <p class="muted">Download and import continue in the background. Open the Dictionary tab for progress.</p>
           <button id="goDictionaryProgress" class="primary"><svg><use href="#icon-document" /></svg>Show progress</button>
         </section>
 
         <!-- Coverage is per-word study state, which is exactly what an account buys. -->
-        <aside id="signInBanner" class="card banner-card" hidden>
+        <aside id="signInBanner" class="card grid gap-3" hidden>
           <div>
-            <p class="banner-title">Connect to see what you know</p>
+            <p class="text-sm font-semibold">Connect to see what you know</p>
             <p class="muted">Coverage, colouring, mining and reviews need a Shirabe account. Lookup and parsing stay free either way.</p>
           </div>
-          <button id="bannerConnect" class="ghost compact">Connect</button>
+          <button id="bannerConnect" class="ghost compact justify-self-start">Connect</button>
         </aside>
 
-        <section id="coverage" class="card coverage-card" hidden>
-          <div class="coverage-head">
+        <section id="coverage" class="card grid gap-3" hidden>
+          <div class="flex items-end justify-between gap-3">
             <div>
-              <p class="eyebrow">You can read</p>
-              <p id="coverageValue" class="coverage-value">:</p>
+              <p class="text-xs text-ink-muted">You can read</p>
+              <p id="coverageValue" class="text-2xl font-semibold text-primary">:</p>
             </div>
-            <p id="coverageDetail" class="muted"></p>
+            <p id="coverageDetail" class="muted text-right"></p>
           </div>
-          <div id="coverageBar" class="coverage-bar" role="img" aria-label="Word states on this page">
+          <div id="coverageBar" class="coverage-bar flex h-2 overflow-hidden rounded-full bg-surface" role="img" aria-label="Word states on this page">
             <span data-band="known"></span><span data-band="due"></span><span data-band="learning"></span><span data-band="unknown"></span>
           </div>
-          <ul id="coverageLegend" class="coverage-legend"></ul>
-          <p id="iPlusOne" class="i-plus-one" hidden><span class="i-plus-one-badge">i+1</span><span id="iPlusOneLabel"></span></p>
+          <ul id="coverageLegend" class="coverage-legend flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-muted"></ul>
+          <p id="iPlusOne" class="flex items-center gap-2 text-xs text-ink-muted" hidden><span class="rounded bg-surface px-1.5 py-0.5 font-medium text-primary">i+1</span><span id="iPlusOneLabel"></span></p>
         </section>
 
-        <section class="settings-list" aria-label="Page settings">
+        <section class="card settings-list" aria-label="Page settings">
           <div class="setting-row">
             <label class="setting-label" for="lookupScanModifier">Open popup</label>
             <select id="lookupScanModifier">
@@ -98,15 +100,15 @@
       </section>
 
       <!-- ── Offline dictionary ─────────────────────────────────────────── -->
-      <section id="panel-dictionary" class="panel" role="tabpanel" aria-labelledby="tab-dictionary" hidden>
+      <section id="panel-dictionary" class="panel grid gap-4" role="tabpanel" aria-labelledby="tab-dictionary" hidden>
         <section id="dictionary" class="card status-card" aria-label="Offline dictionary">
           <div data-dictionary-state="missing" hidden>
-            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-book" /></svg></span><p class="account-line">Offline dictionary</p></div>
+            <div class="card-heading"><span class="icon-box"><svg><use href="#icon-book" /></svg></span><p class="account-line">Offline dictionary</p></div>
             <p class="muted">Install Shirabe's public pack for local lookup and parsing. Stable page text can also use Shirabe's free online parser without an account.</p>
             <button id="installDictionary" class="primary"><svg><use href="#icon-document" /></svg>Install dictionary</button>
           </div>
           <div data-dictionary-state="installing" hidden>
-            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-book" /></svg></span><p class="account-line">Installing dictionary…</p></div>
+            <div class="card-heading"><span class="icon-box"><svg><use href="#icon-book" /></svg></span><p class="account-line">Installing dictionary…</p></div>
             <progress id="dictionaryProgress" max="1" value="0"></progress>
             <p id="dictionaryProgressLabel" class="muted">Downloading and checking the pack</p>
             <button id="cancelDictionaryInstall" class="ghost">Cancel</button>
@@ -114,7 +116,7 @@
           <div data-dictionary-state="installed" hidden>
             <div class="card-heading"><span class="icon-box success"><svg><use href="#icon-book" /></svg></span><p class="account-line">Offline dictionary ready</p></div>
             <p id="dictionaryVersion" class="muted"></p>
-            <div class="button-row">
+            <div class="flex gap-2 *:flex-1">
               <button id="updateDictionary" class="ghost">Check for update</button>
               <button id="removeDictionary" class="ghost danger">Remove</button>
             </div>
@@ -125,45 +127,49 @@
             <pre id="dictionaryDiagnostics" class="diagnostics" aria-label="Dictionary installer diagnostics"></pre>
             <button id="retryDictionary" class="primary">Try again</button>
           </div>
+          <div aria-label="Dictionary sync status">
+            <p id="dictionarySyncSummary" class="muted" role="status"></p>
+            <ul id="dictionaryPackStatus" class="muted" aria-label="Installed dictionaries"></ul>
+          </div>
         </section>
-        <section class="settings-list" aria-label="Dictionary settings">
+        <section class="card settings-list" aria-label="Dictionary settings">
           <div class="setting-row">
             <span class="setting-label">Definition stack</span>
-            <span id="dictionaryStackSummary" class="muted"></span>
+            <span id="dictionaryStackSummary" class="muted wrap-anywhere"></span>
           </div>
-          <button id="editDictionaryStack" class="ghost" type="button">Edit dictionaries and languages</button>
+          <button id="editDictionaryStack" class="ghost mt-2 w-full" type="button">Edit dictionaries and languages</button>
         </section>
       </section>
 
       <!-- ── Account and profile ────────────────────────────────────────── -->
-      <section id="panel-account" class="panel" role="tabpanel" aria-labelledby="tab-account" hidden>
+      <section id="panel-account" class="panel grid gap-4" role="tabpanel" aria-labelledby="tab-account" hidden>
         <section id="account" class="card status-card" aria-label="Shirabe account">
           <div data-state="connected" hidden>
             <div class="card-heading"><span class="icon-box success"><svg><use href="#icon-user" /></svg></span><p class="account-line">Connected<span id="accountName"></span></p></div>
-            <label id="deckRow" class="deck-row">Save mined words to<select id="preferredDeck"><option value="">Saved words (default)</option></select></label>
+            <label id="deckRow" class="grid gap-2 text-xs text-ink-muted">Save mined words to<select id="preferredDeck"><option value="">Saved words (default)</option></select></label>
             <button class="disconnect ghost">Disconnect</button>
           </div>
           <div data-state="connecting" hidden>
-            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-user" /></svg></span><p class="account-line">Connecting</p></div>
+            <div class="card-heading"><span class="icon-box"><svg><use href="#icon-user" /></svg></span><p class="account-line">Connecting</p></div>
             <p class="muted">Approve access in the window that just opened, then reopen this popup.</p>
           </div>
           <div data-state="unentitled" hidden>
-            <div class="card-heading"><span class="icon-box identity"><svg><use href="#icon-user" /></svg></span><p class="account-line">Signed in<span id="unentitledName"></span></p></div>
+            <div class="card-heading"><span class="icon-box"><svg><use href="#icon-user" /></svg></span><p class="account-line">Signed in<span id="unentitledName"></span></p></div>
             <p class="muted">Pro adds word-state sync, sentence mining, and FSRS reviews.</p>
             <a id="upgradeLink" class="primary" href="#" target="_blank" rel="noopener">Upgrade to Pro <svg><use href="#icon-arrow" /></svg></a>
             <button class="disconnect ghost">Disconnect</button>
           </div>
           <div data-state="disconnected" hidden>
-            <div class="account-connect"><img src="../icons/logo_32.png" alt="" /><button id="connect" class="primary">Connect an account <svg><use href="#icon-arrow" /></svg></button></div>
+            <div class="flex items-center gap-3"><img class="size-8 rounded-lg" src="../icons/logo_32.png" alt="" /><button id="connect" class="primary">Connect an account <svg><use href="#icon-arrow" /></svg></button></div>
           </div>
         </section>
       </section>
     </main>
 
-    <p id="status" class="status" role="status"></p>
+    <p id="status" class="status px-4 pb-2 text-center text-xs text-ink-muted empty:hidden" role="status"></p>
 
-    <nav class="tabbar">
-      <div class="tabs" role="tablist" aria-label="Shirabe Reader sections">
+    <nav class="tabbar flex shrink-0 gap-1 border-t border-outline bg-surface p-2">
+      <div class="tabs contents" role="tablist" aria-label="Shirabe Reader sections">
         <button id="tab-lookup" class="tab" type="button" role="tab" aria-controls="panel-lookup" aria-selected="true" data-panel="lookup">
           <svg><use href="#icon-search" /></svg><span>Lookup</span>
         </button>
@@ -175,7 +181,7 @@
           <svg><use href="#icon-user" /></svg><span>Account</span>
         </button>
       </div>
-      <button id="openSettings" class="tab tab-link" type="button">
+      <button id="openSettings" class="tab" type="button">
         <svg><use href="#icon-adjustments" /></svg><span>Settings</span>
       </button>
     </nav>

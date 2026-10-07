@@ -7,6 +7,9 @@ import { createRequire } from "node:module";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { verifyPopupLayout } from "./support/popup-layout.mjs";
+import { verifyCardTheme } from "./support/card-theme.mjs";
+import { verifyPageControls } from "./support/page-controls.mjs";
 
 const { chromium } = createRequire(resolve("../package.json"))("playwright");
 const extension = resolve("dist/verify/chrome");
@@ -177,6 +180,7 @@ try {
     const result = await chrome.runtime.sendMessage({ type: "dictionaryStatus" });
     return result.ok && result.dictionary.installed;
   }, undefined, { timeout: 15000 });
+  await verifyPopupLayout(context, id);
   const parsed = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatch", texts: ["ﾊﾞﾅﾅ。"] }));
   assert.equal(parsed.ok, true, JSON.stringify(parsed));
   assert.equal(parsed.tokens[0][0].entry, "jmdict:banana");
@@ -231,6 +235,7 @@ try {
   await article.locator(".sb-host .sb-visible").waitFor({ timeout: 15000 });
   assert.equal(await word.getAttribute("data-entry"), "jmdict:banana");
   assert.equal(await word.getAttribute("data-lemma"), "バナナ");
+  await verifyCardTheme(article, page);
   parsePackRevision = "stale-pack";
   const stale = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatchOnline", texts: ["ﾊﾞﾅﾅ。"] }));
   assert.equal(stale.accepted, false);
@@ -239,10 +244,7 @@ try {
   const pickedWord = await word.evaluate((element) => ({
     lemma: element.dataset.lemma, surface: element.dataset.surface, reading: element.dataset.reading, entry: element.dataset.entry,
   }));
-  assert.deepEqual(await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "togglePagePause" }), tab.id), { paused: true });
-  assert.equal(await article.locator("html").evaluate((element) => element.classList.contains("sb-reader-off")), true);
-  assert.deepEqual(await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "togglePagePause" }), tab.id), { paused: false });
-  assert.equal(await article.locator("html").evaluate((element) => element.classList.contains("sb-reader-off")), false);
+  await verifyPageControls(context, id, article, tab.id, page);
   await article.goto(`${origin.replace("127.0.0.1", "localhost")}/adverb`);
   await article.waitForFunction(() => document.documentElement.hasAttribute("data-sb-marked"));
   const rawWord = await article.locator("p").boundingBox();

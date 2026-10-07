@@ -1,25 +1,4 @@
-:root {
-  color-scheme: light dark;
-  --surface: light-dark(#ffffff, oklch(23.5% 0.014 285.7));
-  --surface-page: light-dark(#f8fafc, oklch(16.5% 0.008 285.7));
-  --surface-muted: light-dark(#f1f5f9, oklch(20% 0.011 285.7));
-  --surface-hover: light-dark(rgb(15 23 42 / 0.05), rgb(255 255 255 / 0.07));
-  --ink: light-dark(#111827, #e8e6e3);
-  --ink-muted: light-dark(#4b5563, oklch(74% 0.007 80));
-  --ink-subtle: light-dark(oklch(54% 0.041 257.4), oklch(65% 0.009 80));
-  --outline: light-dark(#e2e8f0, oklch(92% 0.02 285.7 / 0.14));
-  --primary: light-dark(#0369a1, oklch(72% 0.15 245));
-  --primary-hover: light-dark(#025a83, oklch(80% 0.13 245));
-  --primary-tint: light-dark(#e2f1fa, color-mix(in oklab, var(--primary) 20%, transparent));
-  --success-text: light-dark(#15803d, oklch(83% 0.19 155));
-  --danger-text: light-dark(#b91c1c, oklch(75% 0.17 25));
-  --danger-tint: light-dark(#fef2f2, oklch(28% 0.06 25));
-  --on-primary: #ffffff;
-  --radius-button: 12px;
-  --radius-card: 18px;
-  --shadow-e1: 0 1px 2px light-dark(rgb(15 23 42 / 0.05), rgb(0 0 0 / 0.45));
-  --ring: 0 0 0 4px light-dark(rgb(3 105 161 / 0.14), oklch(68% 0.167 245 / 0.35));
-}
+@import "../common/theme.css";
 
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }

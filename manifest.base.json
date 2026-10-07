@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Shirabe Reader",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "description": "Parse Japanese on any web page and look it up with Shirabe.",
   "icons": {
     "16": "icons/logo_16.png",
@@ -11,6 +11,7 @@
   },
   "permissions": [
     "storage",
+    "alarms",
     "unlimitedStorage",
     "contextMenus",
     "activeTab",

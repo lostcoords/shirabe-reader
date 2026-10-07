@@ -37,7 +37,7 @@ const bump = (map: Map<string, { count: number; example: string }>, key: string,
   if (!process.env.SWEEP_RUN) return;
 
   const pack = realPackPath();
-  if (!pack) throw new Error("no dictionary pack: run `npm run prepare:dev-pack`");
+  if (!pack) throw new Error("no dictionary pack: run `bin/rails dictionary_packs:ensure`");
   process.stdout.write(`Subsetting ${pack} for ${rows.length} sentences…\n`);
   // Subsets at the same span cap as the asserting corpora. The sweep used to cap
   // at 16, which put every longer expression out of reach of its own subset and

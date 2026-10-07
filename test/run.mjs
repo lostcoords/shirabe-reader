@@ -17,6 +17,10 @@ const manifestVersion = JSON.parse(readFileSync(new URL("../manifest.base.json",
 // another test's still-pending transactions. All of them share one process and
 // one installed pack, so the 58 MB pack is scanned once rather than per corpus.
 const suites = [
+  { name: "background-dictionary-sync.test.ts", entry: "test/background-dictionary-sync.test.ts", outfile: join(dir, "background-dictionary-sync.cjs") },
+  { name: "background-install-reporting.test.ts", entry: "test/background-install-reporting.test.ts", outfile: join(dir, "background-install-reporting.cjs") },
+  { name: "dictionary-panel.test.ts", entry: "test/dictionary-panel.test.ts", outfile: join(dir, "dictionary-panel.cjs") },
+  { name: "dictionary-sync.test.ts", entry: "test/dictionary-sync.test.ts", outfile: join(dir, "dictionary-sync.cjs") },
   { name: "click-positions.test.ts", entry: "test/click-positions.test.ts", outfile: join(dir, "click-positions.cjs") },
   { name: "telemetry-permission.test.ts", entry: "test/telemetry-permission.test.ts", outfile: join(dir, "telemetry-permission.cjs") },
   { name: "background-parity.test.ts", entry: "test/background-parity.test.ts", outfile: join(dir, "background-parity.cjs") },
@@ -26,6 +30,9 @@ const suites = [
 ];
 
 const requested = process.argv.slice(2);
+if (!requested.length || requested.includes("all.test.ts")) {
+  execFileSync(process.execPath, ["--test", "test/watch-build.test.mjs"], { stdio: "inherit" });
+}
 const selectedSuites = requested.length ? suites.filter((suite) => requested.includes(suite.name)) : suites;
 if (requested.some((name) => !suites.some((suite) => suite.name === name))) throw new Error("Unknown extension test suite");
 
@@ -34,7 +41,6 @@ try {
     await build({
       entryPoints: [suite.entry], bundle: true, platform: "node", format: "cjs", outfile: suite.outfile, logLevel: "silent",
       define: {
-        __DEV_RELOAD_URL__: JSON.stringify(""),
         __EXTENSION_VERSION__: JSON.stringify(manifestVersion),
         __DEFAULT_API_BASE__: JSON.stringify("https://shirabe.org"),
         // Straight from the builder, so the host matrix under test is the one that

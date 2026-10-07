@@ -8,7 +8,6 @@ import { cancelDictionaryInstall, checkDictionaryUpdate, clearLocalDictionarySta
 import type { Deck, Failure, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
 import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers, setTelemetryEnabled } from "./telemetry.js";
-import { installDevReload } from "./dev-reload.js";
 
 // Single API client + our own copy of the config (the client hides it). Both
 // stay in sync with stored settings.
@@ -16,7 +15,6 @@ let config: Config = DEFAULTS;
 let api: ShirabeApi;
 let dictionaryConnectionEpoch = 0;
 installBackgroundErrorHandlers();
-installDevReload();
 
 // Installs and upgrades, which is the one number a store dashboard reports and
 // nothing else can: how many people took a given version, and how quickly. It
@@ -25,7 +23,29 @@ ext.runtime.onInstalled?.addListener(({ reason }) => {
   if (reason !== "install" && reason !== "update") return;
   captureEvent("extension_installed", { reason });
 });
+const DICTIONARY_SYNC_ALARM = "shirabe-dictionary-sync";
 const ready = initializeBackground();
+ext.alarms?.onAlarm.addListener(({ name }) => {
+  if (name !== DICTIONARY_SYNC_ALARM) return;
+  void traceBackgroundTask("scheduled dictionary sync", async () => {
+    await ready;
+    await refreshAccount();
+    await checkAndNotifyDictionary();
+  });
+});
+
+async function scheduleDictionaryCheck(): Promise<void> {
+  if (!ext.alarms) return;
+  const status = await dictionaryStatus();
+  if (!isConnected(config) && !status.installed && !status.retryAt) {
+    await ext.alarms.clear(DICTIONARY_SYNC_ALARM);
+    return;
+  }
+  const when = status.retryAt ? Math.max(Date.now() + 60_000, Date.parse(status.retryAt)) : Date.now() + 5 * 60_000;
+  const existing = await ext.alarms.get(DICTIONARY_SYNC_ALARM);
+  if (existing && existing.scheduledTime <= when) return;
+  await ext.alarms.create(DICTIONARY_SYNC_ALARM, { when, periodInMinutes: 5 });
+}
 
 async function initializeBackground(): Promise<void> {
   try {
@@ -68,10 +88,11 @@ async function initializeBackground(): Promise<void> {
     await traceBackgroundTask("remove private dictionaries for signed-out reader", deactivatePrivateDictionaries);
     await clearLocalDictionaryStack();
   }
-  if (config.dictionaryStack.length) {
+  if (isConnected(config) || config.dictionaryStack.length) {
     await traceBackgroundTask("apply local dictionary stack", () => setActiveDictionaryStack(
       config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint));
   }
+  await traceBackgroundTask("schedule dictionary sync", scheduleDictionaryCheck);
   // Best-effort refresh of the server-maintained reader site list, so we can
   // add supported sites without shipping an extension update. No-ops if offline
   // or the endpoint isn't live yet (the bundled built-ins stay in charge).
@@ -83,7 +104,10 @@ async function initializeBackground(): Promise<void> {
   });
   void ext.scripting.unregisterContentScripts({ ids: ["shirabe-auto-sites"] }).catch(() => undefined);
   // Popup close can kill an MV3 worker mid-import; pick up the persisted job.
-  void dictionaryAuthorization().then((authorization) => resumeInterruptedDictionaryInstall(config.apiBase, authorization));
+  void traceBackgroundTask("resume interrupted dictionary sync", async () => {
+    try { await resumeInterruptedDictionaryInstall(config.apiBase, await dictionaryAuthorization()); }
+    finally { await scheduleDictionaryCheck(); }
+  });
 }
 
 async function tracedBackgroundStep<T>(stage: string, task: () => Promise<T>): Promise<T> {
@@ -137,37 +161,48 @@ async function dictionaryAuthorization(): Promise<string | undefined> {
 
 function repairDictionaryInstallation(): Promise<void> {
   if (dictionaryRepair) return dictionaryRepair;
-  dictionaryRepair = dictionaryAuthorization().then((authorization) => installDictionary(config.apiBase, authorization))
-    .then(async () => {
-      if (config.dictionaryStack.length) await setActiveDictionaryStack(
-        config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
-      lookupCache.clear();
-      await notifyDictionaryChanged();
-    })
-    .finally(() => {
-      dictionaryRepair = null;
-    });
+  dictionaryRepair = (async () => {
+    const status = await dictionaryStatus();
+    if (status.retryAt && Date.parse(status.retryAt) > Date.now()) return;
+    await checkDictionaryUpdate(config.apiBase, await dictionaryAuthorization());
+    if (isConnected(config) || config.dictionaryStack.length) await setActiveDictionaryStack(
+      config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
+    lookupCache.clear();
+    await notifyDictionaryChanged();
+  })().finally(async () => {
+    dictionaryRepair = null;
+    await scheduleDictionaryCheck();
+  });
   return dictionaryRepair;
 }
 
-async function checkAndNotifyDictionary(previous?: DictionaryStatus): Promise<void> {
+let dictionaryCheck: Promise<void> | null = null;
+function checkAndNotifyDictionary(previous?: DictionaryStatus): Promise<void> {
+  if (dictionaryCheck) return dictionaryCheck;
+  dictionaryCheck = checkAndNotifyDictionaryNow(previous).finally(() => { dictionaryCheck = null; });
+  return dictionaryCheck;
+}
+
+async function checkAndNotifyDictionaryNow(previous?: DictionaryStatus): Promise<void> {
   const connectionEpoch = dictionaryConnectionEpoch;
   const before = previous ?? await dictionaryStatus();
   if (connectionEpoch !== dictionaryConnectionEpoch) return;
-  const authorization = await dictionaryAuthorization();
-  if (connectionEpoch !== dictionaryConnectionEpoch) return;
-  if (authorization && config.dictionaryStackFingerprint && before.stackFingerprint !== config.dictionaryStackFingerprint) {
-    await installDictionary(config.apiBase, authorization);
-  } else {
-    await checkDictionaryUpdate(config.apiBase, authorization, () => connectionEpoch === dictionaryConnectionEpoch);
-  }
-  if (config.dictionaryStack.length) await setActiveDictionaryStack(
-    config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
-  if (connectionEpoch !== dictionaryConnectionEpoch) return;
-  const after = await dictionaryStatus();
-  if (before.revision !== after.revision || before.stackFingerprint !== after.stackFingerprint || before.installed !== after.installed) {
-    lookupCache.clear();
-    await notifyDictionaryChanged();
+  try {
+    const authorization = await dictionaryAuthorization();
+    if (connectionEpoch !== dictionaryConnectionEpoch) return;
+    await checkDictionaryUpdate(config.apiBase, authorization, () => connectionEpoch === dictionaryConnectionEpoch, config.dictionaryStackFingerprint);
+  } finally {
+    if (connectionEpoch === dictionaryConnectionEpoch) {
+      if (isConnected(config) || config.dictionaryStack.length) await setActiveDictionaryStack(
+        config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
+      const after = await dictionaryStatus();
+      if (before.revision !== after.revision || before.stackFingerprint !== after.stackFingerprint || before.installed !== after.installed ||
+          JSON.stringify(before.activeSources) !== JSON.stringify(after.activeSources)) {
+        lookupCache.clear();
+        await notifyDictionaryChanged();
+      }
+      await scheduleDictionaryCheck();
+    }
   }
 }
 
@@ -263,31 +298,36 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       return { ok: true, type: "lookupScan", definition, alternatives, startOffset };
     }
     case "dictionaryStatus":
-      return { ok: true, type: "dictionaryStatus", dictionary: await dictionaryStatus() };
+      return { ok: true, type: "dictionaryStatus", dictionary: { ...await dictionaryStatus(), preferencesPending: config.dictionaryStackDirty } };
     case "installDictionary": {
       // Do not await the full import on this message channel. The popup may close
       // mid-install; progress is polled via dictionaryStatus, and a keep-alive +
       // storage snapshot keep the job visible after reopen.
       const pending = dictionaryAuthorization().then((authorization) => installDictionary(config.apiBase, authorization));
-      // Fast failures (manifest/network) reject the race and surface immediately
-      // to the caller, which reports them through errorResponse.
+      let acknowledged = false;
+      void traceBackgroundTask("finish dictionary installation", async () => {
+        try { await pending; }
+        catch (error) {
+          if (acknowledged && !(error instanceof DOMException && error.name === "AbortError")) {
+            captureException(error, "background", { request: "installDictionary" });
+            captureEvent("dictionary_install_failed", { request: "installDictionary" });
+          }
+          throw error;
+        }
+        finally {
+          if (isConnected(config) || config.dictionaryStack.length) await setActiveDictionaryStack(
+            config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
+          lookupCache.clear();
+          await notifyDictionaryChanged();
+          await scheduleDictionaryCheck();
+        }
+      });
       const manifest = await Promise.race([
         pending,
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 150)),
       ]);
-      // Past that window nobody is left on the channel to surface a failure, and
-      // a multi-megabyte download almost always fails later than 150ms: so the
-      // install reports its own outcome from here on, or the counter is dead.
-      void pending.then(async () => {
-        if (config.dictionaryStack.length) await setActiveDictionaryStack(
-          config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
-        lookupCache.clear();
-        await notifyDictionaryChanged();
-      }, (error) => {
-        captureException(error, "background", { request: "installDictionary" });
-        captureEvent("dictionary_install_failed", { request: "installDictionary" });
-      });
       if (manifest) return { ok: true, type: "installDictionary", manifest };
+      acknowledged = true;
       return { ok: true, type: "installDictionary" };
     }
     case "removeDictionary":
@@ -377,7 +417,10 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       await setActiveDictionaryStack(next.dictionaryStack, next.dictionaryReveal, next.dictionaryNames, next.dictionaryStackFingerprint);
       lookupCache.clear();
       await notifyDictionaryChanged();
-      if (next.dictionaryStackDirty) void traceBackgroundTask("sync dictionary stack", () => refreshAccount(true));
+      if (next.dictionaryStackDirty) void traceBackgroundTask("sync dictionary stack", async () => {
+        await refreshAccount(true);
+        await checkAndNotifyDictionary();
+      });
       return { ok: true, type: "updateDictionaryStack", synced: !next.dictionaryStackDirty };
     }
     case "status":
@@ -818,7 +861,8 @@ ext.runtime.onInstalled?.addListener((details) => {
   if (details.reason !== "install") return;
   void ready.then(async () => {
     const status = await dictionaryStatus();
-    if (!status.installed) await installDictionary(config.apiBase);
+    try { if (!status.installed) await installDictionary(config.apiBase); }
+    finally { await scheduleDictionaryCheck(); }
   }).catch(() => undefined);
 });
 
