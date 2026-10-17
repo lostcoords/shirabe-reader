@@ -2,7 +2,7 @@
 
 Shirabe Reader is the GPL-3.0 browser extension for Shirabe. Source lives here. The Rails backend lives in `lostcoords/shirabe`; API and card packages live in `lostcoords/shirabe-sdk`.
 
-Use Jujutsu when `.jj/` exists. Read the global dav-mode skill for multi-step development. Preserve other agents' work.
+Use Jujutsu when `.jj/` exists. Use dav-mode only when the user explicitly requests it. Preserve other agents' work.
 
 ## Commands
 

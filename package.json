@@ -36,7 +36,7 @@
   "dependencies": {
     "@noble/hashes": "^2.0.1",
     "@shirabe-org/api": "0.6.1",
-    "@shirabe-org/card": "0.1.5",
+    "@shirabe-org/card": "0.2.0",
     "kanji-processor": "^1.0.2"
   },
   "license": "GPL-3.0-only",

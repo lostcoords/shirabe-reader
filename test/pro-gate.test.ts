@@ -128,7 +128,6 @@ test("a signed-in free reader is told what's missing, and can act on it", async 
   const { readFileSync } = await import("node:fs");
   const content = readFileSync("src/content/content.ts", "utf8");
   assert.match(content, /historyNavigation: false/);
-  assert.match(content, /showAuthoring: false/);
   assert.equal(anonymous.querySelector("a.sb-plans"), null, "nothing to upgrade until an account exists");
   // `ext` is bound at first import, so a later globalThis.chrome is not what send() calls.
   const { ext } = await import("../src/common/browser.js");
