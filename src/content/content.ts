@@ -102,6 +102,7 @@ function boot(): void {
       theme: config.theme,
       audioAutoplay: config.audioAutoplay,
       historyNavigation: false,
+      showAuthoring: false,
       customCss: `${CARD_THEME_CSS}\n${config.customPopupCss}`,
     });
 
