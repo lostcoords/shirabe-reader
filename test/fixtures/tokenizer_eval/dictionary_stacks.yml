@@ -1,0 +1,18 @@
+- name: english
+  sources: [jmdict:en]
+  languages: [eng]
+- name: spanish
+  sources: [jmdict:es]
+  languages: [spa]
+- name: english-spanish
+  sources: [jmdict:en, jmdict:es]
+  languages: [eng, spa]
+- name: spanish-english
+  sources: [jmdict:es, jmdict:en]
+  languages: [spa, eng]
+- name: words-before-names
+  sources: [jmdict:es, jmnedict:en]
+  languages: [spa, eng]
+- name: names-before-words
+  sources: [jmnedict:en, jmdict:es]
+  languages: [eng, spa]

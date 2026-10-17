@@ -7,7 +7,7 @@
 // the frequent ones get fixed first.
 //
 //   bin/rails tokenizer_eval:export[8000]     # from the repo root: writes tmp/tokenizer_web.json
-//   node test/divergence-sweep.mjs            # from extension/: diffs and reports
+//   node test/divergence-sweep.mjs            # from the Reader root: diffs and reports
 //   node test/divergence-sweep.mjs 500        # a quicker slice
 //   node test/divergence-sweep.mjs 8000 1     # single process, no fan-out
 //
@@ -30,7 +30,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mergeShard } from "./support/sweep-merge.mjs";
 
-const WEB_EXPORT = "../tmp/tokenizer_web.json";
+const WEB_EXPORT = process.env.SHIRABE_WEB_EXPORT ?? "tmp/tokenizer_web.json";
 const LIMIT = Number(process.argv[2] ?? 0) || Infinity;
 const SHARDS = Number(process.argv[3] ?? 0) || Math.max(1, Math.min(availableParallelism() - 2, 12));
 const run = promisify(execFile);

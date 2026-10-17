@@ -39,7 +39,7 @@ let web;
 if (packDir && (!reuseProfile || process.env.FIREFOX_PARITY_WEB_OUTPUT)) {
   const output = process.env.FIREFOX_PARITY_WEB_OUTPUT ?? join(artifactsDir, "web.json");
   if (!process.env.FIREFOX_PARITY_WEB_OUTPUT) execFileSync("bin/rails", ["runner", "script/export_search_parity.rb"], {
-    cwd: "..", stdio: "inherit",
+    cwd: process.env.SHIRABE_PATH ?? "../shirabe", stdio: "inherit",
     env: { ...process.env, PARITY_PACK_DIR: packDir, PARITY_WEB_OUTPUT: output,
       PARITY_DICTIONARIES: pack.dictionaries.filter(({ slug }) => ["jmdict", "jmnedict"].includes(slug)).map(({ slug }) => slug).join(",") },
   });

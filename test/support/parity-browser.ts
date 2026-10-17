@@ -18,7 +18,7 @@ declare global {
 }
 
 export async function browserDictionary(payload: Buffer, revision: string, terms: number, bundle: string, dictionaries: string[]) {
-  const { chromium } = createRequire(resolve("../package.json"))("playwright") as { chromium: BrowserType };
+  const { chromium } = createRequire(resolve("package.json"))("playwright") as { chromium: BrowserType };
   const profile = process.env.PARITY_BROWSER_PROFILE;
   if (profile) mkdirSync(profile, { recursive: true });
   const portFile = profile && join(profile, "parity-port");

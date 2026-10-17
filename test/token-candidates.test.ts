@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { lookupEntryOffline, lookupOffline, lookupScanOffline, parseOffline, resolveParsedSpan } from "../src/common/offline-dictionary.js";
 import { installTestPack, packPayload } from "./support/pack.js";
-import contextEvidence from "../../db/reference/context_hints.json";
+import contextEvidence from "../src/common/resources/context-hints.json";
 
 // The offline half of `POST /api/v1/words/identify`.
 //

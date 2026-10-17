@@ -24,6 +24,7 @@ import { scanPointer as sdkScan } from "@shirabe-org/card/word-card/scan";
 import { toast } from "./toast.js";
 import { ensureFurigana } from "./word.js";
 import { installClientReporter } from "../common/client-reporter.js";
+import { developmentBuildLabel, readPackagedBuildId } from "../common/development-build.js";
 
 // One frame can run this content script twice: the manifest injects it on
 // <all_urls>, and the toolbar or `web-ext` can re-inject it. Each copy is its own
@@ -34,6 +35,7 @@ import { installClientReporter } from "../common/client-reporter.js";
 // lets a duplicate injection bail before wiring anything up.
 declare const __EXTENSION_VERSION__: string;
 declare const __BUILD_ID__: string;
+declare const __DEV_RELOAD__: boolean;
 
 declare global {
   interface Window {
@@ -99,6 +101,7 @@ function boot(): void {
       hideAutomatically: config.popupHideAutomatically,
       theme: config.theme,
       audioAutoplay: config.audioAutoplay,
+      historyNavigation: false,
       customCss: `${CARD_THEME_CSS}\n${config.customPopupCss}`,
     });
 
@@ -173,11 +176,14 @@ function boot(): void {
   async function sendDictionaryStatus(): Promise<void> {
     const res = await send({ type: "dictionaryStatus" });
     localDictionaryReady = res.ok && res.dictionary.installed;
+    const packaged = __DEV_RELOAD__
+      ? developmentBuildLabel(__EXTENSION_VERSION__, await readPackagedBuildId((path) => ext.runtime.getURL(path)))
+      : null;
     console.info("[Shirabe scanner] ready", {
       // build identifies the loaded bundle, not the release: during development
       // the version never moves, so this is the only way to tell a reloaded
       // extension from the copy the browser kept.
-      build: `${__EXTENSION_VERSION__}+${__BUILD_ID__}`,
+      build: packaged ?? `${__EXTENSION_VERSION__}+${__BUILD_ID__}`,
       page: location.href,
       dictionaryInstalled: localDictionaryReady,
       response: res.ok ? undefined : res.error,

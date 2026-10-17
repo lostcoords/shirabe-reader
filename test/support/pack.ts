@@ -10,11 +10,8 @@ import { installDictionary, lookupVariants, removeDictionary, type PackManifest 
 // suites and the divergence sweep. All three used to carry their own copy of
 // this, which is how the sweep ended up subsetting at a different span cap than
 // the suites without anyone noticing.
-//
-// Every path here assumes `extension/` is the cwd, the way the test runners are
-// invoked (test/run.mjs, test/divergence-sweep.mjs).
 
-const PACK_DIR = "../storage/dictionary_packs/current";
+const PACK_DIR = "tmp/dictionary-packs/current";
 
 // The span cap the asserting corpora subset at. Long enough for the longest
 // grammar expressions a case can pin.

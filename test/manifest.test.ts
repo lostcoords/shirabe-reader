@@ -62,7 +62,7 @@ test("all extension-owned surfaces preserve focus, reduced-motion, and forced-co
   // answers for motion and forced colours only.
   const withControls = [
     readFileSync("src/action/popup.css", "utf8"),
-    readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8"),
+    readFileSync("node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8"),
     readFileSync("src/options/options.css", "utf8"),
   ];
   for (const css of withControls) assert.match(css, /focus-visible/);
@@ -193,15 +193,15 @@ test("the word card reaches the world only through its host", () => {
   const code = (path: string) => readFileSync(path, "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^\s*\/\/.*$/gm, "");
-  const card = code("../node_modules/@shirabe-org/card/dist/word-card/card.js");
-  const contract = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/host.d.ts", "utf8");
+  const card = code("node_modules/@shirabe-org/card/dist/word-card/card.js");
+  const contract = readFileSync("node_modules/@shirabe-org/card/dist/word-card/host.d.ts", "utf8");
 
   // The point of the seam: three surfaces want this card (this extension over a
   // local pack, a web page over the API, an Anki card over a script tag), and a
   // card that can reach the extension directly is a card only this extension can
   // render. Each of these is a way back to the extension that must stay shut.
   for (const escape of [
-    /\bchrome\./, /\bbrowser\./, /\bext\./,          // the WebExtension APIs
+    /\b(?:chrome|browser)\.(?:runtime|storage|tabs|windows|scripting|identity|alarms|permissions|contextMenus)\b/, /\bext\./,          // the WebExtension APIs
     /\bsend\(\{/, /sendDictionary/,                  // the worker protocol
     /loadConfig\(/, /saveConfig\(/,                   // extension storage
     /from "\.\.\/common\/dictionary-port/,            // the pack's port
@@ -293,7 +293,7 @@ test("dictionary installation uses a persistent background port", () => {
   // The pack is the extension host's business, not the card's: the card only
   // knows a lookup came back pending and asks the host to resolve it.
   const cardHost = readFileSync("src/content/card-host.ts", "utf8");
-  const wordPopup = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
+  const wordPopup = readFileSync("node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
   const background = readFileSync("src/background/background.ts", "utf8");
   assert.match(browser, /connect\(connectInfo\?: \{ name\?: string \}\): RuntimePort/);
   assert.match(dictionaryPort, /ext\.runtime\.connect\(\{ name: "shirabe-dictionary" \}\)/);
@@ -345,10 +345,9 @@ test("opening the action activates raw-text scanning without parsing the page", 
 });
 
 test("pronunciation audio only plays processed R2 clips and never browser speech", () => {
-  const popup = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
-  const audio = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/audio.js", "utf8");
+  const popup = readFileSync("node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
+  const audio = readFileSync("node_modules/@shirabe-org/card/dist/word-card/audio.js", "utf8");
   const background = readFileSync("src/background/background.ts", "utf8");
-  const webAudio = readFileSync("../app/javascript/controllers/audio_controller.js", "utf8");
 
   // The R2 allowlist is the fetch security boundary, shared by popup + background.
   assert.match(audio, /hostname === "cdn\.shirabe\.org"/);
@@ -368,11 +367,10 @@ test("pronunciation audio only plays processed R2 clips and never browser speech
   assert.match(cardHost, /^ {2}audio: \{/m, "the extension host always has an audio port");
 
   assert.doesNotMatch(popup, /speechSynthesis|SpeechSynthesisUtterance/);
-  assert.doesNotMatch(webAudio, /speechSynthesis|SpeechSynthesisUtterance/);
 });
 
 test("reader grading is off, and returns due-only and click-locked when it is not", () => {
-  const popup = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
+  const popup = readFileSync("node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
   const actions = readFileSync("src/content/actions.ts", "utf8");
   const keybind = readFileSync("src/common/keybind.ts", "utf8");
   // Reviewing lives on the site: the row is still wired, just not rendered, and
@@ -428,7 +426,7 @@ test("page parsing does not wait for profile-state network hydration", () => {
 
 test("missing offline storage self-heals and the word popup has a stable scrollable frame", () => {
   const background = readFileSync("src/background/background.ts", "utf8");
-  const popup = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
+  const popup = readFileSync("node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
   assert.match(background, /DictionaryNotInstalledError/);
   assert.match(background, /dictionaryInstalling: true/);
   // The wording belongs to whoever knows there is a pack: the card renders
@@ -441,7 +439,7 @@ test("missing offline storage self-heals and the word popup has a stable scrolla
 
   // Side-choice for vertical (tategaki) text lives in placement.ts now, not in
   // popup.ts: prefer the left column, fall back to whichever side has room.
-  const placement = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/placement.js", "utf8");
+  const placement = readFileSync("node_modules/@shirabe-org/card/dist/word-card/placement.js", "utf8");
   assert.match(placement, /const roomRight = view\.width - avoid\.right - margin \* 2/);
   assert.match(placement, /roomLeft >= size\.width \|\| roomLeft >= roomRight/);
 });

@@ -1,0 +1,2410 @@
+# Shared web/online-extension/offline-extension boundary and identity expectations.
+# Targets use Ruby character offsets; consumers convert to UTF-16.
+# Multiple targetEntries explicitly allow equivalent lexical/grammatical analyses.
+---
+- family: quoted-inflections
+  sentence: 行くって言った
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 行く
+  contains:
+    - 行く
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行ったって言った
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行かないって言った
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 行く
+  contains:
+    - 行かない
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行かなかったって言った
+  target:
+    start: 0
+    end: 8
+  queries:
+    - 行く
+  contains:
+    - 行かなかった
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行きますって言った
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 行く
+  contains:
+    - 行きます
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行きましたって言った
+  target:
+    start: 0
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行きました
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行ってるって言った
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 行く
+  contains:
+    - 行ってる
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行ってたって言った
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 行く
+  contains:
+    - 行ってた
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行っとくって言った
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 行く
+  contains:
+    - 行っとく
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行っちゃったって言った
+  target:
+    start: 0
+    end: 8
+  queries:
+    - 行く
+  contains:
+    - 行っちゃった
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行くなって言った
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 行く
+  contains:
+    - 行くな
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 行けって言った
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 行く
+  contains:
+    - 行け
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quoted-inflections
+  sentence: 飲むって言った
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 飲む
+  contains:
+    - 飲む
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quoted-inflections
+  sentence: 飲んだって言った
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quoted-inflections
+  sentence: 飲まないって言った
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 飲む
+  contains:
+    - 飲まない
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quoted-inflections
+  sentence: 飲んでるって言った
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 飲む
+  contains:
+    - 飲んでる
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quoted-inflections
+  sentence: 飲んじゃったって言った
+  target:
+    start: 0
+    end: 8
+  queries:
+    - 飲む
+  contains:
+    - 飲んじゃった
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quoted-inflections
+  sentence: 食べるって言った
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 食べる
+  contains:
+    - 食べる
+    - って
+  targetEntries:
+    - jmdict:1358280
+- family: quoted-inflections
+  sentence: 食べたって言った
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 食べる
+  contains:
+    - 食べた
+    - って
+  targetEntries:
+    - jmdict:1358280
+- family: quoted-inflections
+  sentence: 食べないって言った
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 食べる
+  contains:
+    - 食べない
+    - って
+  targetEntries:
+    - jmdict:1358280
+- family: quoted-inflections
+  sentence: 食べてるって言った
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 食べる
+  contains:
+    - 食べてる
+    - って
+  targetEntries:
+    - jmdict:1358280
+- family: quoted-inflections
+  sentence: 食べちゃったって言った
+  target:
+    start: 0
+    end: 8
+  queries:
+    - 食べる
+  contains:
+    - 食べちゃった
+    - って
+  targetEntries:
+    - jmdict:1358280
+- family: quoted-inflections
+  sentence: 欲しいって言った
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 欲しい
+  contains:
+    - 欲しい
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quoted-inflections
+  sentence: 欲しかったって言った
+  target:
+    start: 0
+    end: 7
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quoted-inflections
+  sentence: 欲しくないって言った
+  target:
+    start: 0
+    end: 7
+  queries:
+    - 欲しい
+  contains:
+    - 欲しくない
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quoted-inflections
+  sentence: 欲しくなかったって言った
+  target:
+    start: 0
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しくなかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quoted-copulas
+  sentence: 彼が学生だって言った
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quoted-copulas
+  sentence: 彼が学生だったって言った
+  target:
+    start: 4
+    end: 9
+  queries:
+    - だ
+    - だった
+  contains:
+    - だった
+    - って
+  targetEntries:
+    - jmdict:2819970
+    - jmdict:2089020
+- family: quoted-copulas
+  sentence: 彼が学生ですって言った
+  target:
+    start: 4
+    end: 8
+  queries:
+    - です
+  contains:
+    - です
+    - って
+  targetEntries:
+    - jmdict:1628500
+- family: quoted-copulas
+  sentence: 彼が学生でしたって言った
+  target:
+    start: 4
+    end: 9
+  queries:
+    - です
+    - だ
+    - でした
+  contains:
+    - でした
+    - って
+  targetEntries:
+    - jmdict:1628500
+- family: quoted-copulas
+  sentence: 彼が学生じゃないって言った
+  target:
+    start: 4
+    end: 10
+  queries:
+    - だ
+    - ではない
+  contains:
+    - じゃない
+    - って
+  targetEntries:
+    - jmdict:2089020
+    - jmdict:2755350
+- family: quoted-copulas
+  sentence: 彼が学生じゃなかったって言った
+  target:
+    start: 4
+    end: 12
+  queries:
+    - だ
+    - ではない
+  contains:
+    - じゃなかった
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が行ったって言った
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって聞いた
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって知ってる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって信じてる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって昨日言った
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって昨日聞いた
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって昨日知ってる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって昨日信じてる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって彼に言った
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって彼に聞いた
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって彼に知ってる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったって彼に信じてる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったってすぐ言った
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったってすぐ聞いた
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったってすぐ知ってる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が行ったってすぐ信じてる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が飲んだって言った
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって聞いた
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって知ってる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって信じてる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって昨日言った
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって昨日聞いた
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって昨日知ってる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって昨日信じてる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって彼に言った
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって彼に聞いた
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって彼に知ってる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだって彼に信じてる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだってすぐ言った
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだってすぐ聞いた
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだってすぐ知ってる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が飲んだってすぐ信じてる
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 飲む
+  contains:
+    - 飲んだ
+    - って
+  targetEntries:
+    - jmdict:1169870
+- family: quote-clause-context
+  sentence: 彼が欲しかったって言った
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって聞いた
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって知ってる
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって信じてる
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって昨日言った
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって昨日聞いた
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって昨日知ってる
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって昨日信じてる
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって彼に言った
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって彼に聞いた
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって彼に知ってる
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったって彼に信じてる
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったってすぐ言った
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったってすぐ聞いた
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったってすぐ知ってる
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が欲しかったってすぐ信じてる
+  target:
+    start: 2
+    end: 9
+  queries:
+    - 欲しい
+  contains:
+    - 欲しかった
+    - って
+  targetEntries:
+    - jmdict:1547330
+- family: quote-clause-context
+  sentence: 彼が学生だって言った
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって聞いた
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって知ってる
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって信じてる
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって昨日言った
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって昨日聞いた
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって昨日知ってる
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって昨日信じてる
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって彼に言った
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって彼に聞いた
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって彼に知ってる
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だって彼に信じてる
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だってすぐ言った
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だってすぐ聞いた
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だってすぐ知ってる
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 彼が学生だってすぐ信じてる
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: concessives
+  sentence: 行ったって無駄だ
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 行く
+  labels:
+    - concessive (〜たって)
+  targetEntries:
+    - jmdict:1578850
+- family: concessives
+  sentence: 食べたって無駄だ
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 食べる
+  labels:
+    - concessive (〜たって)
+  targetEntries:
+    - jmdict:1358280
+- family: concessives
+  sentence: 飲んだって無駄だ
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 飲む
+  labels:
+    - concessive (〜たって)
+  targetEntries:
+    - jmdict:1169870
+- family: concessives
+  sentence: 読んだって分からない
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 読む
+  labels:
+    - concessive (〜たって)
+  targetEntries:
+    - jmdict:1456360
+- family: concessives
+  sentence: 買ったって高く売れない
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 買う
+  labels:
+    - concessive (〜たって)
+  targetEntries:
+    - jmdict:1473740
+- family: concessives
+  sentence: 欲しかったって買えない
+  target:
+    start: 0
+    end: 7
+  queries:
+    - 欲しい
+  labels:
+    - concessive (〜たって)
+  targetEntries:
+    - jmdict:1547330
+- family: additive-and-conjunction
+  sentence: だって知らない
+  target:
+    start: 0
+    end: 3
+  queries:
+    - だって
+  contains:
+    - だって
+  targetEntries:
+    - jmdict:2643970
+- family: additive-and-conjunction
+  sentence: 学生だって分かる
+  target:
+    start: 2
+    end: 5
+  queries:
+    - だって
+  contains:
+    - だって
+  targetEntries:
+    - jmdict:2643970
+- family: additive-and-conjunction
+  sentence: 猫だって生きている
+  target:
+    start: 1
+    end: 4
+  queries:
+    - だって
+  contains:
+    - だって
+  targetEntries:
+    - jmdict:2643970
+- family: additive-and-conjunction
+  sentence: 誰だって失敗する
+  target:
+    start: 1
+    end: 4
+  queries:
+    - だって
+  contains:
+    - だって
+  targetEntries:
+    - jmdict:2643970
+- family: quotation-particles
+  sentence: 行ったと言った
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - と
+  targetEntries:
+    - jmdict:1578850
+- family: quotation-particles
+  sentence: 行ったと昨日言った
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - と
+  targetEntries:
+    - jmdict:1578850
+- family: quotation-particles
+  sentence: 行ったと彼に言った
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - と
+  targetEntries:
+    - jmdict:1578850
+- family: quotation-particles
+  sentence: 行ったって言った
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quotation-particles
+  sentence: 行ったって昨日言った
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quotation-particles
+  sentence: 行ったって彼に言った
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 彼女にって言った
+  target:
+    start: 2
+    end: 5
+  queries:
+    - に
+  targetEntries:
+    - jmdict:2028990
+- family: particle-and-grammar-boundaries
+  sentence: 猫はもう帰った
+  target:
+    start: 1
+    end: 4
+  queries:
+    - は
+  targetEntries:
+    - jmdict:2028920
+- family: particle-and-grammar-boundaries
+  sentence: 静かで美しい
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 静か
+  targetEntries:
+    - jmdict:1381820
+- family: particle-and-grammar-boundaries
+  sentence: ここで食べる
+  target:
+    start: 2
+    end: 3
+  queries:
+    - で
+  targetEntries:
+    - jmdict:2028980
+- family: particle-and-grammar-boundaries
+  sentence: 猫ではなく犬だ
+  target:
+    start: 1
+    end: 5
+  queries:
+    - ではない
+    - だ
+  targetEntries:
+    - jmdict:2823770
+- family: particle-and-grammar-boundaries
+  sentence: 猫じゃなく犬だ
+  target:
+    start: 1
+    end: 5
+  queries:
+    - ではない
+    - だ
+  targetEntries:
+    - jmdict:2089020
+    - jmdict:2755350
+- family: particle-and-grammar-boundaries
+  sentence: 学校に行かなきゃならない
+  target:
+    start: 3
+    end: 12
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 学校に行かなくちゃいけない
+  target:
+    start: 3
+    end: 13
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 学校に行かないといけない
+  target:
+    start: 3
+    end: 12
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: ここで食べちゃいけない
+  target:
+    start: 3
+    end: 11
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: ここで食べてはいけない
+  target:
+    start: 3
+    end: 11
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 家に帰らねばならない
+  target:
+    start: 2
+    end: 10
+  queries:
+    - 帰る
+  targetEntries:
+    - jmdict:1221270
+- family: particle-and-grammar-boundaries
+  sentence: 学校に行くと雨が降る
+  target:
+    start: 3
+    end: 5
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 学校に行けば分かる
+  target:
+    start: 3
+    end: 6
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 学校に行ったら分かる
+  target:
+    start: 3
+    end: 7
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 行かなくてもいい
+  target:
+    start: 0
+    end: 8
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 食べてもいい
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 帰るしかない
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 帰る
+  targetEntries:
+    - jmdict:1221270
+- family: particle-and-grammar-boundaries
+  sentence: 帰ったわけじゃない
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 帰る
+  targetEntries:
+    - jmdict:1221270
+- family: auxiliary-contractions
+  sentence: 食べてる
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: auxiliary-contractions
+  sentence: 読んでる
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 読む
+  targetEntries:
+    - jmdict:1456360
+- family: auxiliary-contractions
+  sentence: 食べとく
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: auxiliary-contractions
+  sentence: 読んどく
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 読む
+  targetEntries:
+    - jmdict:1456360
+- family: auxiliary-contractions
+  sentence: 食べちゃった
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: auxiliary-contractions
+  sentence: 飲んじゃった
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 飲む
+  targetEntries:
+    - jmdict:1169870
+- family: auxiliary-contractions
+  sentence: 食べちまった
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: auxiliary-contractions
+  sentence: 飲んじまった
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 飲む
+  targetEntries:
+    - jmdict:1169870
+- family: auxiliary-contractions
+  sentence: 家に帰ってく
+  target:
+    start: 2
+    end: 6
+  queries:
+    - 帰る
+  targetEntries:
+    - jmdict:1221270
+- family: auxiliary-contractions
+  sentence: 家に帰ってった
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 帰る
+  targetEntries:
+    - jmdict:1221270
+- family: particle-and-grammar-boundaries
+  sentence: 食べねえ
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 食べん
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 食べずに帰った
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 行くなよ
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 来るなって言った
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 来る
+  targetEntries:
+    - jmdict:1547720
+- family: particle-and-grammar-boundaries
+  sentence: 行きな
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 紙に字を書ける
+  target:
+    start: 4
+    end: 7
+  queries:
+    - 書く
+  targetEntries:
+    - jmdict:1343950
+- family: particle-and-grammar-boundaries
+  sentence: 食べられる
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 食べれる
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 初めて会った
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 初めて
+  targetEntries:
+    - jmdict:1342550
+- family: particle-and-grammar-boundaries
+  sentence: 知っている人
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 知る
+  targetEntries:
+    - jmdict:1420470
+- family: particle-and-grammar-boundaries
+  sentence: 買って待っていて
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 買う
+  targetEntries:
+    - jmdict:1473740
+- family: particle-and-grammar-boundaries
+  sentence: 取っておいて
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 取る
+    - 取っておく
+  targetEntries:
+    - jmdict:2122420
+    - jmdict:1326980
+- family: particle-and-grammar-boundaries
+  sentence: 猫っていう動物
+  target:
+    start: 0
+    end: 1
+  queries:
+    - 猫
+  targetEntries:
+    - jmdict:1467640
+- family: particle-and-grammar-boundaries
+  sentence: 行くってことだ
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: ambiguity
+  sentence: 食べられる
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 食べる
+  ambiguity:
+    Potential and passive share this surface; the sentence does not decide
+    which.
+  targetEntries:
+    - jmdict:1358280
+- family: ambiguity
+  sentence: 学生だって言った
+  target:
+    start: 2
+    end: 5
+  queries:
+    - だ
+    - だって
+  ambiguity: Can quote being a student or mean even a student said it; preserve alternatives.
+  targetEntries:
+    - jmdict:2089020
+    - jmdict:2643970
+- family: ambiguity
+  sentence: 行ったって
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 行く
+  ambiguity: Past plus an omitted quotation predicate and concessive are both possible.
+  targetEntries:
+    - jmdict:1578850
+- family: ambiguity
+  sentence: 猫好きになった
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 猫好き
+    - 猫
+  ambiguity: A dictionary expression and a compositional reading can both fit.
+  targetEntries:
+    - jmdict:2250890
+    - jmdict:1467640
+- family: ambiguity
+  sentence: いった
+  target:
+    start: 0
+    end: 3
+  queries:
+    - いく
+    - いう
+  ambiguity: A kana spelling alone cannot decide between going, saying and needing.
+  alternatives:
+    - 行く
+    - 言う
+    - 要る
+  targetEntries:
+    - jmdict:1578850
+    - jmdict:1587040
+    - jmdict:1546640
+- family: nominal-auxiliary-boundaries
+  sentence: めがねなくても大丈夫
+  target:
+    start: 0
+    end: 3
+  queries:
+    - めがね
+    - 眼鏡
+  contains:
+    - めがね
+  targetEntries:
+    - jmdict:1577670
+- family: nominal-auxiliary-boundaries
+  sentence: 実験台ごときで恐れる
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 実験台
+  contains:
+    - 実験台
+  targetEntries:
+    - jmdict:1635000
+- family: nominal-auxiliary-boundaries
+  sentence: 無為なれば孤独を避けよ
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 無為
+  contains:
+    - 無為
+  targetEntries:
+    - jmdict:1529620
+- family: nominal-auxiliary-boundaries
+  sentence: 浪費なければ欠乏なし
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 浪費
+  contains:
+    - 浪費
+  targetEntries:
+    - jmdict:1560800
+- family: nominal-auxiliary-boundaries
+  sentence: かつてないほど大量だ
+  target:
+    start: 0
+    end: 5
+  queries:
+    - かつてない
+  contains:
+    - かつてない
+    - ほど
+  targetEntries:
+    - jmdict:2829785
+- family: clause-boundary-controls
+  sentence: 彼が行ったって無駄だと言った
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行ったって
+  targetEntries:
+    - jmdict:1578850
+- family: clause-boundary-controls
+  sentence: 彼が学生だって勉強しないと言った
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だって
+  contains:
+    - だって
+  targetEntries:
+    - jmdict:2643970
+- family: unicode-and-layout
+  sentence: "\U0001F600彼が行ったって昨日言った"
+  target:
+    start: 3
+    end: 8
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: unicode-and-layout
+  sentence: 彼が食べたって昨日言った
+  target:
+    start: 2
+    end: 8
+  queries:
+    - 食べる
+  contains:
+    - 食べた
+    - って
+  targetEntries:
+    - jmdict:1358280
+- family: unicode-and-layout
+  sentence: 彼が学生だって 言った
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: unicode-and-layout
+  sentence: 彼が行ったって 昨日 言った
+  target:
+    start: 2
+    end: 7
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: unicode-and-layout
+  sentence: |-
+    彼が学生だって
+    言った
+  target:
+    start: 4
+    end: 7
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: particle-and-grammar-boundaries
+  sentence: 走るだけ
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 走る
+  contains:
+    - 走る
+    - だけ
+  targetEntries:
+    - jmdict:1402540
+- family: particle-and-grammar-boundaries
+  sentence: 待つまで
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 待つ
+  contains:
+    - 待つ
+    - まで
+  targetEntries:
+    - jmdict:1410590
+- family: particle-and-grammar-boundaries
+  sentence: 欲しいほど
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 欲しい
+  contains:
+    - 欲しい
+    - ほど
+  targetEntries:
+    - jmdict:1547330
+- family: particle-and-grammar-boundaries
+  sentence: 走るなんて
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 走る
+  contains:
+    - 走る
+    - なんて
+  targetEntries:
+    - jmdict:1402540
+- family: particle-and-grammar-boundaries
+  sentence: 走るし
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 走る
+  contains:
+    - 走る
+    - し
+  targetEntries:
+    - jmdict:1402540
+- family: particle-and-grammar-boundaries
+  sentence: 行くから帰る
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 行くけど帰る
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 行くのに帰る
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 行くので帰る
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 行く
+  targetEntries:
+    - jmdict:1578850
+- family: particle-and-grammar-boundaries
+  sentence: 食べながら話す
+  target:
+    start: 0
+    end: 5
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 食べても大丈夫
+  target:
+    start: 0
+    end: 4
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 食べるかもしれない
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 帰るそうだ
+  target:
+    start: 0
+    end: 2
+  queries:
+    - 帰る
+  targetEntries:
+    - jmdict:1221270
+- family: particle-and-grammar-boundaries
+  sentence: 食べたばかりだ
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: particle-and-grammar-boundaries
+  sentence: 食べるつもりだ
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 食べる
+  targetEntries:
+    - jmdict:1358280
+- family: inflected-expressions
+  sentence: 文句を言うな
+  target:
+    start: 0
+    end: 6
+  queries:
+    - 文句を言う
+  contains:
+    - 文句を言うな
+  targetEntries:
+    - jmdict:2831372
+- family: inflected-expressions
+  sentence: そうだったりする
+  target:
+    start: 0
+    end: 6
+  queries:
+    - そうだ
+  contains:
+    - そうだったり
+  targetEntries:
+    - jmdict:1006650
+- family: quote-clause-context
+  sentence: 行ったって話した
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって話した
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって書いた
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって書いた
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって伝えた
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって伝えた
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって答えた
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって答えた
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって教えた
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって教えた
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって考えた
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって考えた
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって感じた
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって感じた
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって報告した
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって報告した
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって説明した
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって説明した
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって主張した
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって主張した
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって理解した
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって理解した
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020
+- family: quote-clause-context
+  sentence: 行ったって認識した
+  target:
+    start: 0
+    end: 3
+  queries:
+    - 行く
+  contains:
+    - 行った
+    - って
+  targetEntries:
+    - jmdict:1578850
+- family: quote-clause-context
+  sentence: 彼が学生だって認識した
+  target:
+    start: 4
+    end: 5
+  queries:
+    - だ
+  contains:
+    - だ
+    - って
+  targetEntries:
+    - jmdict:2089020

@@ -40,7 +40,7 @@ test("needs-Pro is recognised by code or bare status, and nothing else is", asyn
 
 test("the popup offers plans on a refusal instead of colouring it as an error", async () => {
   const { readFileSync } = await import("node:fs");
-  const popup = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
+  const popup = readFileSync("node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
   const actions = readFileSync("src/content/actions.ts", "utf8");
 
   assert.match(actions, /proRequired: true/, "the write actions flag the refusal");
@@ -63,7 +63,7 @@ test("every upgrade entry point tags itself, so none of them lands as organic tr
   // funnel can't attribute (the web app tags the same way: pricing_path(source:)).
   // The word card builds its own link; the toolbar popup and the settings page
   // share one account card and declare the tag they mount it with.
-  const wordCard = readFileSync("../node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
+  const wordCard = readFileSync("node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
   assert.match(wordCard, /pricingUrl\?\.\("extension"\)/, "the word card must tag its upgrade link");
   const accountPanel = readFileSync("src/common/account-panel.ts", "utf8");
   assert.match(accountPanel, /pricingUrl\(apiBase, hooks\.pricingSource\)/, "the shared card must tag through its mount");
@@ -73,7 +73,7 @@ test("every upgrade entry point tags itself, so none of them lands as organic tr
   ] as const) {
     assert.match(readFileSync(file, "utf8"), new RegExp(`pricingSource: "${source}"`), `${file} must declare its source`);
   }
-  for (const file of ["../node_modules/@shirabe-org/card/dist/word-card/card.js", "src/action/popup.ts", "src/options/options.ts", "src/common/account-panel.ts"]) {
+  for (const file of ["node_modules/@shirabe-org/card/dist/word-card/card.js", "src/action/popup.ts", "src/options/options.ts", "src/common/account-panel.ts"]) {
     assert.doesNotMatch(readFileSync(file, "utf8"), /\+ "\/pricing"/, `${file} must not hand-build an untagged pricing URL`);
   }
 });
@@ -121,6 +121,27 @@ test("a signed-in free reader is told what's missing, and can act on it", async 
   setWriteState({ canWrite: false, connected: false });
   const anonymous = studyUnavailable();
   assert.ok(anonymous);
-  assert.match(anonymous.textContent ?? "", /Offline lookup/);
-  assert.equal(anonymous.querySelector("a.sb-plans"), null);
+  const connect = anonymous.querySelector("button.sb-connect") as HTMLButtonElement | null;
+  assert.equal(connect?.textContent, "Connect your account");
+  assert.equal(anonymous.textContent, "Connect your account to see your dictionaries and save words");
+  assert.equal(anonymous.querySelector(".sb-offline-mode"), null, "offline mode is named only for an offline lookup");
+  const { readFileSync } = await import("node:fs");
+  assert.match(readFileSync("src/content/content.ts", "utf8"), /historyNavigation: false/);
+  assert.equal(anonymous.querySelector("a.sb-plans"), null, "nothing to upgrade until an account exists");
+  // `ext` is bound at first import, so a later globalThis.chrome is not what send() calls.
+  const { ext } = await import("../src/common/browser.js");
+  const original = ext.runtime.sendMessage;
+  const sent: unknown[] = [];
+  ext.runtime.sendMessage = async (message: unknown) => {
+    sent.push(message);
+    return { ok: true };
+  };
+  try {
+    connect?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(sent, [{ type: "connect" }]);
+    assert.equal(connect?.hidden, true);
+  } finally {
+    ext.runtime.sendMessage = original;
+  }
 });

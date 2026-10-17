@@ -150,6 +150,10 @@ export const extensionHost: WordCardHost = {
     }
   },
 
+  async connectAccount() {
+    const res = await send({ type: "connect" });
+    if (!res.ok) throw new Error(res.error);
+  },
   candidatesFor: (word) => candidatesFor(word),
   rememberOrigin: (word, origin) => setScanOrigin(word, origin),
   // The card's own events, into the same stream as everything else this

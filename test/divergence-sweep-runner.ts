@@ -19,7 +19,7 @@ const shard = Number(process.argv[3] ?? -1);
 const shardCount = Number(process.argv[4] ?? 0);
 const shardOut = process.env.SHARD_OUT;
 
-const rows = (JSON.parse(readFileSync("../tmp/tokenizer_web.json", "utf8")) as WebRow[])
+const rows = (JSON.parse(readFileSync(process.env.SHIRABE_WEB_EXPORT ?? "tmp/tokenizer_web.json", "utf8")) as WebRow[])
   .filter((row) => row.tokens?.length)
   .slice(0, Number.isFinite(limit) ? limit : undefined)
   .filter((_row, index) => shardCount <= 0 || index % shardCount === shard);

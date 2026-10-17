@@ -13,16 +13,16 @@ const revision = process.env.PARITY_OFFLINE_REV;
 const snapshot = revision ? [{
   name: "offline-revision",
   setup(builder) {
-    builder.onLoad({ filter: /\/extension\/src\/common\// }, ({ path }) => ({
-      contents: execFileSync("jj", ["file", "show", "-r", revision, relative(resolve(".."), path)], { cwd: "..", encoding: "utf8" }),
+    builder.onLoad({ filter: /\/src\/common\// }, ({ path }) => ({
+      contents: execFileSync("jj", ["file", "show", "-r", revision, relative(resolve("."), path)], { cwd: ".", encoding: "utf8" }),
       loader: path.endsWith(".json") ? "json" : "ts", resolveDir: dirname(path),
     }));
   },
 }] : [];
-if (revision) execFileSync("jj", ["root"], { cwd: "..", stdio: "ignore" });
+if (revision) execFileSync("jj", ["root"], { cwd: ".", stdio: "ignore" });
 try {
   execFileSync("bin/rails", ["runner", "script/export_search_parity.rb"], {
-    cwd: "..", stdio: "inherit",
+    cwd: process.env.SHIRABE_PATH ?? "../shirabe", stdio: "inherit",
     env: { ...process.env, PARITY_PACK_DIR: resolve(packDir), PARITY_WEB_OUTPUT: webOutput },
   });
   const outfile = join(dir, "parity.cjs");

@@ -9,10 +9,12 @@ import { send } from "../common/messages.js";
 import { installClientReporter } from "../common/client-reporter.js";
 import { canReportErrors, ERROR_REPORTS_PERMISSION, ext, usesPromiseMessageResponses } from "../common/browser.js";
 import { GLOSS_LABELS, glossLanguagesFrom, uiLanguagesFrom } from "@shirabe-org/card/word-card/languages";
+import { installDevelopmentBuildStamp } from "../common/development-build.js";
 
 installClientReporter("options");
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+installDevelopmentBuildStamp($("devBuild"), (path) => ext.runtime.getURL(path));
 
 // ── Section nav ──────────────────────────────────────────────────────────────
 const SECTION_IDS = ["account", "reading", "dictionary", "advanced"] as const;

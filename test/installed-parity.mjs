@@ -11,7 +11,7 @@ import { verifyPopupLayout } from "./support/popup-layout.mjs";
 import { verifyCardTheme } from "./support/card-theme.mjs";
 import { verifyPageControls } from "./support/page-controls.mjs";
 
-const { chromium } = createRequire(resolve("../package.json"))("playwright");
+const { chromium } = createRequire(resolve("package.json"))("playwright");
 const extension = resolve("dist/verify/chrome");
 execFileSync(process.execPath, ["build.mjs", "chrome", "--outdir=dist/verify/chrome"], { stdio: "inherit" });
 const profile = mkdtempSync(join(tmpdir(), "shirabe-installed-parity-"));

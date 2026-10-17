@@ -8,6 +8,7 @@ import { cancelDictionaryInstall, checkDictionaryUpdate, clearLocalDictionarySta
 import type { Deck, Failure, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
 import type { Definition, ParsedToken, WordState } from "../common/types.js";
 import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers, setTelemetryEnabled } from "./telemetry.js";
+import { developmentBuildLabel, readPackagedBuildId, shouldReloadDevelopmentBuild } from "../common/development-build.js";
 
 // Single API client + our own copy of the config (the client hides it). Both
 // stay in sync with stored settings.
@@ -15,6 +16,38 @@ let config: Config = DEFAULTS;
 let api: ShirabeApi;
 let dictionaryConnectionEpoch = 0;
 installBackgroundErrorHandlers();
+declare const __DEV_RELOAD__: boolean;
+declare const __DEV_RELOAD_URL__: string;
+declare const __EXTENSION_VERSION__: string;
+if (__DEV_RELOAD__) void installDevelopmentReload();
+
+const DEV_RELOAD_ALARM = "shirabe-dev-reload";
+async function installDevelopmentReload(): Promise<void> {
+  const loadedId = await readPackagedBuildId((path) => ext.runtime.getURL(path));
+  const label = developmentBuildLabel(__EXTENSION_VERSION__, loadedId);
+  if (label) await ext.action?.setTitle({ title: `Shirabe Reader ${label}` });
+  const check = async () => {
+    try {
+      const response = await fetch(`${__DEV_RELOAD_URL__}?t=${Date.now()}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const announced = (await response.json() as { id?: unknown }).id;
+      if (shouldReloadDevelopmentBuild(loadedId, announced)) ext.runtime.reload?.();
+    } catch {
+      return;
+    }
+  };
+  await check();
+  setInterval(() => { void check(); }, 1000);
+  if (!ext.alarms) return;
+  try {
+    await ext.alarms.create(DEV_RELOAD_ALARM, { periodInMinutes: 1 / 60 });
+  } catch {
+    await ext.alarms.create(DEV_RELOAD_ALARM, { periodInMinutes: 0.5 }).catch(() => undefined);
+  }
+  ext.alarms.onAlarm.addListener(({ name }) => {
+    if (name === DEV_RELOAD_ALARM) void check();
+  });
+}
 
 // Installs and upgrades, which is the one number a store dashboard reports and
 // nothing else can: how many people took a given version, and how quickly. It

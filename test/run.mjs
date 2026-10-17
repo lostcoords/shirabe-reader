@@ -22,6 +22,7 @@ const suites = [
   { name: "dictionary-panel.test.ts", entry: "test/dictionary-panel.test.ts", outfile: join(dir, "dictionary-panel.cjs") },
   { name: "dictionary-sync.test.ts", entry: "test/dictionary-sync.test.ts", outfile: join(dir, "dictionary-sync.cjs") },
   { name: "click-positions.test.ts", entry: "test/click-positions.test.ts", outfile: join(dir, "click-positions.cjs") },
+  { name: "development-build.test.ts", entry: "test/development-build.test.ts", outfile: join(dir, "development-build.cjs") },
   { name: "telemetry-permission.test.ts", entry: "test/telemetry-permission.test.ts", outfile: join(dir, "telemetry-permission.cjs") },
   { name: "background-parity.test.ts", entry: "test/background-parity.test.ts", outfile: join(dir, "background-parity.cjs") },
   { name: "background-private-startup.test.ts", entry: "test/background-private-startup.test.ts", outfile: join(dir, "background-private-startup.cjs") },
@@ -31,7 +32,7 @@ const suites = [
 
 const requested = process.argv.slice(2);
 if (!requested.length || requested.includes("all.test.ts")) {
-  execFileSync(process.execPath, ["--test", "test/watch-build.test.mjs"], { stdio: "inherit" });
+  execFileSync(process.execPath, ["--test", "test/watch-build.test.mjs", "test/development-reload-server.test.mjs"], { stdio: "inherit" });
 }
 const selectedSuites = requested.length ? suites.filter((suite) => requested.includes(suite.name)) : suites;
 if (requested.some((name) => !suites.some((suite) => suite.name === name))) throw new Error("Unknown extension test suite");
@@ -52,6 +53,9 @@ try {
         __POSTHOG_HOST__: JSON.stringify("https://posthog.test"),
         __POSTHOG_TOKEN__: JSON.stringify("phc_test"),
         __TELEMETRY_ENV__: JSON.stringify("test"),
+        __BUILD_ID__: JSON.stringify("test"),
+        __DEV_RELOAD__: "false",
+        __DEV_RELOAD_URL__: JSON.stringify(""),
       },
     });
   }

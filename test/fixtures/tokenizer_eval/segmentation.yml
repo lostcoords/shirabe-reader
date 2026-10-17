@@ -1,0 +1,326 @@
+# Segmentation corpus: the ratchet for the extension's offline parser.
+#
+#   cd extension && npm test        # the gate
+#
+# `dictionary_words:` pins the words the parser resolves against the dictionary,
+# in order, as `surface[=lemma]`. `=lemma` is checked only when given, so a case
+# can pin the boundary without over-pinning the dictionary form. `tokens:`
+# optionally pins EVERY token surface, for cases where the boundary of a
+# non-content run is the whole point. It records what the parser does TODAY, so
+# any change shows up as a failure.
+#
+# The field is NOT called `expect` or `content`, because the two engines mean
+# different things by a content word: the web excludes particles and auxiliaries
+# by part of speech (Tokenizer::Chip#content?), while the extension counts
+# anything that resolved to a dictionary entry: which is why だった and か belong
+# in a row here and would be wrong in a web expectation. Only `merges:`,
+# `splits:` and `lemmas:` mean the same thing to both engines; those are what
+# cross_engine.yml asks of each.
+#
+# These rows have not been adjudicated against the web tokenizer. Pointing it at
+# this file wholesale produces a wall of red; each case is its own decision, and
+# a genuine difference belongs in cross_engine.yml as a `divergence: true` row.
+#
+# It runs against the real dictionary pack when one is built locally
+# (storage/dictionary_packs/current, or $SHIRABE_PACK), which is the only way a
+# JMdict refresh can be caught. Every expectation below is the REAL-pack answer.
+#
+# Without a pack, only the rows marked `pack: fixture` run, against a bundled
+# 12-entry dictionary; the rest report as skipped by name. Saying nothing means a
+# row needs the real dictionary, because that is the safe direction: a row that
+# forgets the marker is skipped rather than judged against a field it cannot lose
+# in. Mark a row `fixture` only once you have checked it is still meaningful there.
+
+- name: itsu-datta-not-itsudatsu
+  sentence: いつだったか
+  merges: [いつ]
+  splits: [いつだった]
+  pack: fixture
+  why: >
+    いつだった must not collapse into the noun/suru-verb 逸脱 via the godan past
+    rule った→つ. Guarded by the part-of-speech gate on deinflected candidates.
+    Pinned as a boundary rather than a full expectation so it runs against the
+    bundled fixture too, 逸脱 and 何時 are in there precisely for this trap, and
+    the fixture has no copula or question particle to finish the sentence with.
+
+- name: itsu-datta-full-segmentation
+  sentence: いつだったか
+  dictionary_words: [いつ, だった, か]
+  why: >
+    The whole-sentence answer for the 逸脱 trap above. Needs the real pack: the
+    fixture cannot produce だった or か at all, so on the fixture this is skipped
+    rather than quietly asserting a smaller competitive field.
+
+- name: emphasis-katakana
+  sentence: スゴイ
+  dictionary_words: [スゴイ]
+  pack: fixture
+  why: >
+    Emphasis katakana reaches the usually-kana entry. Against the real pack JMdict
+    already lists スゴイ as its own spelling, so this exercises the katakana fold
+    only in fixture mode; the fold itself is unit-tested separately.
+
+- name: stretched-kana-sokuon
+  sentence: すっごい
+  dictionary_words: [すっごい]
+  pack: fixture
+  why: Interior っ collapses (Yomitan collapseEmphaticSequences); JMdict also lists すっごい.
+
+- name: stretched-kana-prolonged
+  sentence: すごーい
+  dictionary_words: [すごーい=すごい]
+  pack: fixture
+  why: >
+    The prolonged mark collapses across the FULL span. Regression guard: the
+    variant probe must not be deduped away by the verbatim one (they resolve to
+    the same term), or the span is lost and the word shreds into す + ごーい.
+
+- name: stretched-kana-both
+  sentence: すっっごーい
+  dictionary_words: [すっっごーい=すごい]
+  pack: fixture
+  why: Repeated mixed elongation collapses across the full span.
+
+- name: unknown-katakana-run
+  sentence: ミュンヘンに
+  tokens: [ミュンヘン, に]
+  merges: [ミュンヘン]
+  pack: fixture
+  why: >
+    A katakana run stays ONE token rather than shredding, a lone mora must never
+    fold (ミ → み → 見る), which is what used to shred it. Pinned as a boundary
+    because the *content-word* answer legitimately differs by pack, which the
+    full-segmentation case below asserts instead.
+
+- name: unknown-katakana-run-full
+  sentence: ミュンヘンに
+  dictionary_words: [ミュンヘン, に]
+  why: >
+    Against the real pack ミュンヘン is a JMnedict name and therefore a content
+    word. In fixture mode it is unknown and coalesces as a non-content run, so
+    this expectation is only meaningful with the real dictionary.
+
+- name: kuru-irregular-past
+  sentence: 来た
+  dictionary_words: [来た=来る]
+  pack: fixture
+  why: >
+    来た deinflects to 来る by both the generic ichidan rule (v1) and the kuru
+    rule (vk); conditions must OR so the POS gate does not reject the vk entry.
+
+- name: kuru-irregular-te
+  sentence: 来て
+  dictionary_words: [来て=来る]
+  pack: fixture
+  why: Same kuru path via the te-form.
+
+- name: usually-kana-expression
+  sentence: 猫について
+  dictionary_words: [猫, について]
+  pack: fixture
+  why: >
+    について is one usually-kana expression. JMdict lists the kana as a real
+    expression, so demoting every uk spelling shredded it into に + つい + て;
+    only a uk word's KANJI spellings may be demoted (the web tokenizer's
+    `script != "kana"` rule).
+
+- name: godan-polite-past
+  sentence: 読みませんでした
+  dictionary_words: [読みませんでした=読む]
+  pack: fixture
+  why: Deinflection must reach 読む, not stop at the shorter noun 読み.
+
+- name: i-adjective-negative-past
+  sentence: 高くなかった
+  dictionary_words: [高くなかった=高い]
+  pack: fixture
+  why: An i-adjective chain must not be treated as a verb, nor stop at 高.
+
+- name: fullwidth-headword
+  sentence: Ｔシャツを買った
+  merges: [Ｔシャツ]
+  pack: fixture
+  why: >
+    NFKC-normalised full-width headwords stay reachable. Pinned as a boundary so
+    it runs against the fixture too; the rest of the sentence needs 買う, which
+    only the real pack has.
+
+- name: fullwidth-headword-full
+  sentence: Ｔシャツを買った
+  dictionary_words: [Ｔシャツ, を, 買った=買う]
+  why: The whole-sentence answer, including the 買った→買う deinflection.
+
+- name: yoji-expression
+  sentence: 一石二鳥は便利だ
+  merges: [一石二鳥]
+  splits: [一石]
+  pack: fixture
+  why: >
+    A yoji/idiom entry merges rather than splitting into 一石 + 二鳥. Pinned as a
+    boundary so it runs against the fixture too; 便利 and the copula are real-pack
+    only.
+
+- name: yoji-expression-full
+  sentence: 一石二鳥は便利だ
+  dictionary_words: [一石二鳥, は, 便利, だ]
+  why: The whole-sentence answer around the yoji entry.
+
+# --- Real dictionary only (not in the small test fixture) -------------------
+# Drawn from the YouTube captions this parser is built for.
+
+- name: kangxi-old-kanji
+  sentence: 學校
+  dictionary_words: [學校=学校]
+  why: >
+    Old-form kanji standardise across the whole span (學校 → 学校). JMdict lists
+    學校 itself as a rare spelling, so the verbatim probe is demoted, the
+    standardised variant must survive dedup to carry the span.
+
+- name: polite-form-over-spurious-exact
+  sentence: ここに本があります。
+  merges: [あります]
+  splits: [あり, ます]
+  why: >
+    あります must deinflect to ある. It nearly cannot: 有益 is a name entry read
+    あります, so an exact match covered the span and suppressed deinflection of it,
+    leaving あり + ます. Only a CONTEXTUALLY CONFIDENT exact match may suppress
+    deinflection of its own span, a spurious one must not.
+
+- name: te-progressive-vs-auxiliary
+  sentence: 手紙を書いている。
+  merges: [書いている]
+  why: >
+    ている is an inflection and stays merged, the guard that the te-auxiliary
+    lookahead (which splits 授けて + いただく) does not over-fire here.
+
+- name: lexical-counter-keeps-its-entry
+  sentence: バナナが七本あります。
+  merges: [七本]
+  why: >
+    An attested lexical counting word keeps its dictionary entry, as on the
+    website. Splitting every numeral-led word also destroyed 一人 meaning alone.
+
+- name: counter-splits-multi-digit
+  sentence: 三十本のバナナ
+  merges: [三十, 本]
+  splits: [三十本]
+  why: A multi-digit numeral stays whole (三十), only the counter separates.
+
+- name: non-counter-compound-intact
+  sentence: 一石二鳥は便利だ
+  merges: [一石二鳥]
+  why: >
+    The counter split must not fire on a numeral-led word that is not a counter
+    compound, 一石二鳥 stays one yoji expression.
+
+- name: old-kanji-rescue
+  sentence: 鐵道
+  dictionary_words: [鐵道=鉄道]
+  why: >
+    The case that justifies the kanji-processor dependency: 鐵道 (old form of
+    鉄道, railway) is NOT a JMdict spelling, so only standardising the kanji
+    reaches the entry. Most old forms (學校, 國家, 會社…) ARE listed by JMdict and
+    need no rescue, this one measures the part that actually pays.
+
+- name: caption-line-kangaeta
+  sentence: いつだったか考えたことがある。
+  dictionary_words: [いつ, だった, か, 考えた=考える, ことがある]
+  why: >
+    The caption line that exposed the 逸脱 mis-parse. ことがある now merges as the
+    single grammar expression JMdict records, rather than こと + が + ある.
+
+- name: caption-line-chikara
+  sentence: この力も結果も果たして
+  dictionary_words: [この, 力, も, 結果, も, 果たして]
+  why: Second line of the same cue. Parses correctly end to end.
+
+- name: caption-sazukete
+  sentence: 目を授けていただく
+  dictionary_words: [目, を, 授けていただく=授ける]
+  why: >
+    Greedy longest-match alone reads the valid-but-wrong 授けていた (授ける + ている +
+    た) and strands だく. One step of lookahead fixes it: the match ended STRICTLY
+    INSIDE the following te-auxiliary いただく, so the shorter reading that leaves
+    the auxiliary whole wins.
+
+    Changed 2026-08-03: this used to pin 授けて | いただく, and cross_engine.yml
+    carried a `humble-auxiliary` divergence saying the web merged the predicate
+    where the extension could not. daidai 0.2.4 added 〜ていただく, so the extension
+    now merges it too and lemmas it to 授ける, exactly as the web does. The
+    divergence is retired rather than re-recorded: there is nothing left to differ
+    about. The guard that mattered is unchanged and still pinned in
+    cross_engine.yml as te-auxiliary-not-bitten: nothing may strand 授けていた + だく.
+
+- name: de-particle-eaten-by-dearu
+  sentence: お風呂であったまる
+  dictionary_words: [お風呂, で, あったまる=あったまる]
+  why: >
+    Greedy longest-match at the で takes であった (である + past, 4 chars) over
+    で + あったまる and shreds the verb. Fixed by path scoring (2026-07-27): the two
+    readings are priced by corpus rank over the span they explain, and
+    である(186) + まる(11,270) is a more expensive sentence than で(7) +
+    あったまる(18,919). This is the case that motivated it, the pack has to carry
+    あったまる's rank for the comparison to be possible at all (recipe 7).
+
+# The three failures the plan listed as the path-scoring gap, all of the same
+# shape: a longer span that IS a word, made of two words that are far commoner.
+- name: path-hato-vs-totemo
+  sentence: 本はとても面白い
+  dictionary_words: [本, は, とても, 面白い]
+  why: >
+    はと (鳩, rank 23,198) + ても (14,045) explains the same four characters as
+    は (2) + とても (443). Coverage cannot separate them, which is why the earlier
+    coverage-based attempt was reverted, but cost can.
+
+- name: path-gai-vs-imasu
+  sentence: 兄がいます
+  dictionary_words: [兄, が, います]
+  why: がい (8,722) + ます beats nothing; が (5) + います (いる, 38) is the sentence.
+
+- name: path-gataku-vs-takusan
+  sentence: 友達がたくさんいる
+  dictionary_words: [友達, が, たくさん, いる]
+  why: >
+    がたく and さんい have no corpus rank at all, the unranked case, which is
+    exactly what a greedy match hallucinates out of two neighbouring words.
+
+# JMdict lists inflected forms as entries in their own right, and a form entry is
+# itself conjugable: so the promotion that lemmas 知らない to 知る has to survive
+# the form arriving inflected.
+- name: form-entry-inflected-loses-to-its-verb
+  sentence: 町の様子が変わっていた。
+  dictionary_words: [町, の, 様子, が, 変わっていた=変わる]
+  why: >
+    変わっていた is the past of the entry 変わっている ("to be eccentric", rank 9,576)
+    in one step, and 変わる (rank 233) in three, so the fewer-steps sort led with
+    the form entry, and the promotion behind 知らない → 知る skipped it for having an
+    INFLECTED leader. Rarity alone could not save it either: 5.35 bits apart, just
+    inside MUCH_COMMONER. The rival is the same reading carried further (its chain
+    walks the leader's, then keeps going), which is what the rule now asks for.
+    Bare 変わっている already lemma'd to 変わる, so this is the parser agreeing with
+    itself, and with Sudachi, which reads 変わっていた as 変わる too.
+
+- name: form-entry-inflected-negative
+  sentence: 彼は変わっていない。
+  dictionary_words: [彼, は, 変わっていない=変わる]
+  why: >
+    The same promotion through a longer chain (negative + progressive + te-form).
+    Both readings are real Japanese, "he hasn't changed" and "he isn't eccentric",
+    and no context in the span separates them; the card front follows the verb,
+    and the sources modal offers the swap (docs/specs/anki.md §1).
+
+- name: form-entry-vs-te-auxiliary
+  sentence: 街がどんどん変わっていった
+  dictionary_words: [街, が, どんどん, 変わっていった=変わる]
+  why: >
+    The boundary guard for the two rules above. いった is a form of いく, which the
+    te-auxiliary lookahead has to recognise through its own inflection, otherwise
+    変わってい takes the span as 変わっている and strands った.
+
+    Changed 2026-08-03: this used to pin 変わって | いった, because the parser had no
+    〜ていく rule and a split was the only answer that did not strand a fragment.
+    daidai 0.2.3 added one, so the whole predicate now resolves to 変わる in one
+    token: which is what the web tokenizer has always answered here, so the change
+    closes a divergence rather than opening one. The guard that mattered still
+    holds, and cross_engine.yml's inflected-te-auxiliary-not-bitten still pins it:
+    nothing may strand 変わってい + っ.

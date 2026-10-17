@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { createServer } from "node:http";
 import { appendFile, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -10,12 +11,24 @@ import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(new URL("../build.mjs", import.meta.url)));
 
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
+
 test("everyday Brave has one development command and no browser launcher", async () => {
   const { scripts } = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   assert.deepEqual(Object.keys(scripts).filter((name) => /^(dev|watch)(:|$)/.test(name)), ["watch:chrome"]);
   assert.equal(scripts["watch:chrome"], "node build.mjs chrome --watch");
   const builder = await readFile(join(root, "build.mjs"), "utf8");
-  assert.doesNotMatch(builder, /spawn\(|node:http|WebSocket|--serve|--cdp|Extensions\.loadUnpacked/);
+  assert.match(builder, /startDevelopmentReloadServer/);
+  assert.doesNotMatch(builder, /spawn\(|WebSocket|--cdp|Extensions\.loadUnpacked|web-ext run|osascript|open -a/);
 });
 
 test("the everyday Brave watcher rebuilds scripts and static assets in place", { timeout: 30_000 }, async () => {
@@ -38,14 +51,14 @@ test("the everyday Brave watcher rebuilds scripts and static assets in place", {
 
   try {
     await mkdir(fixture);
-    await symlink(join(dirname(root), "db"), join(workspace, "db"), "dir");
-    for (const path of ["build.mjs", "manifest.base.json", "src", "LICENSE", "NOTICE"]) {
+    for (const path of ["build.mjs", "dev-reload-server.mjs", "manifest.base.json", "src", "LICENSE", "NOTICE"]) {
       await cp(join(root, path), join(fixture, path), { recursive: true });
     }
-    await symlink(join(dirname(root), "node_modules"), join(workspace, "node_modules"), "dir");
     await symlink(join(root, "node_modules"), join(fixture, "node_modules"), "dir");
+    const port = await freePort();
     watcher = spawn(process.execPath, ["build.mjs", "chrome", "--watch"], {
       cwd: fixture,
+      env: { ...process.env, SHIRABE_DEV_RELOAD_PORT: String(port) },
       stdio: ["ignore", "pipe", "pipe"],
     });
     exit = once(watcher, "exit");
@@ -62,9 +75,18 @@ test("the everyday Brave watcher rebuilds scripts and static assets in place", {
     assert.deepEqual(manifest.background, { service_worker: "background.js" });
     assert.ok(manifest.host_permissions.includes("https://shirabe.localhost/*"));
     assert.ok(!manifest.host_permissions.some((host) => host.includes("127.0.0.1")));
+    assert.equal(manifest.externally_connectable, undefined);
+    assert.match(await built("background.js"), new RegExp(`http://127\\.0\\.0\\.1:${port}/build.json`));
+    await eventually(async () => /^\d{8}T\d{9}-[0-9a-f]{2}$/.test(JSON.parse(await built("build.json")).id));
+    const first = await fetch(`http://127.0.0.1:${port}/build.json`).then((response) => response.json());
+    assert.equal(first.id, JSON.parse(await built("build.json")).id);
 
     await appendFile(join(fixture, "src/action/popup.ts"), '\nconsole.log("watch-script-probe");\n');
     await eventually(async () => (await built("action/popup.js")).includes('console.log("watch-script-probe")'));
+    await eventually(async () => {
+      const published = await fetch(`http://127.0.0.1:${port}/build.json`).then((response) => response.json());
+      return published.id !== first.id && published.id === JSON.parse(await built("build.json")).id;
+    });
 
     await appendFile(join(fixture, "src/action/popup.css"), '\n.watch-style-probe { display: block; }\n');
     await appendFile(join(fixture, "src/action/popup.html"), '\n<span id="watch-markup-probe"></span>\n');

@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  POSTHOG_PROJECT_TOKEN: ${{ vars.POSTHOG_PROJECT_TOKEN }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build:firefox
+      - run: npm run build:chrome
+      - run: npm run lint:firefox
+      - run: npm run package:firefox
+      - run: npm run package:chrome
+      - run: npx playwright install --with-deps chromium
+      - run: npm run verify:installed:chrome
+      - uses: actions/upload-artifact@v6
+        with:
+          name: browser-packages
+          path: artifacts/*/*.zip
+          if-no-files-found: error

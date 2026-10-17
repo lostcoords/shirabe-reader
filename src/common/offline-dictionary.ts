@@ -2,7 +2,7 @@ import { convertVariants } from "kanji-processor";
 import { deinflect, displayInflections, inflectionLabel, matchesPos, posConditionFlags, type Deinflection } from "./deinflect.js";
 import { searchReadings } from "./romaji.js";
 import { chooseContextHint, contextCounts } from "./context-hints.js";
-import listingCategoryData from "../../../db/reference/listing_categories.json";
+import listingCategoryData from "./resources/listing-categories.json";
 import { posChips, tagChips } from "./jmdict-tags.js";
 import { GLOSS_TAGS, glossLanguagesFrom, uiLanguagesFrom, withEnglishFallback, type GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import type { Definition, GlossRow, ParsedToken, Sense, SenseChip, SenseScope, SenseXref, SourceHeadword, SourceTag, TokenCandidate } from "./types.js";

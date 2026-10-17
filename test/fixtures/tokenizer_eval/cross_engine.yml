@@ -1,0 +1,793 @@
+# ── grammar expressions: one clickable unit in both ──
+- name: about-expression
+  sentence: 猫について
+  merges: [について]
+
+- name: koto-ga-aru
+  sentence: いつだったか考えたことがある。
+  merges: [ことがある, 考えた]
+  lemmas: { 考えた: 考える }
+
+# A pronoun wearing a topic particle is the pronoun, marked: それ is what the
+# reader is pointing at and は is what the sentence does with it. This row used to
+# pin the opposite, because JMdict lists これは and それは as entries (the
+# interjection "my goodness!" and the adverbial "that is") and the merge pass
+# re-fuses anything the dictionary calls one `exp`, so exactly the two
+# demonstratives with an entry fused while あれは and 私は, identical in shape,
+# stayed apart. That is coverage deciding segmentation, and a learner reading
+# それは本です wants それ and は.
+#
+# `は最近` stays on the row: refusing this merge must not send the particle
+# forward into the next word instead.
+- name: a-pronoun-keeps-its-topic-particle-apart
+  sentence: それは最近の写真？
+  splits: [それは, は最近]
+# SudachiDict's full edition lexicalizes 俺の as one 固有名詞 -- the restaurant chain
+# 俺の株式会社, which Wikipedia lists and 精選版 lists again as おらがの, a dialect form
+# from a 1770 senryū. Being a headword used to veto the re-cut outright, so every
+# 俺 followed by の came back as a proper noun with 俺 unreachable inside it. The
+# veto now stands down for a name whose split is one content word plus nothing but
+# grammar; see Tokenizer#splittable_name?.
+- name: a-pronoun-keeps-its-case-particle-apart
+  sentence: 俺の前に現れた。
+  splits: [俺の]
+
+# The other half of the rule above, and the half that got it wrong first: the veto
+# is for は alone. も is the same part of speech in the same shape, but the words it
+# forms are real entries a reader wants whole, so vetoing the particle CLASS
+# shattered all three of these (shipped in 0.6.1, caught by a どっちも report).
+- name: a-pronoun-keeps-its-mo-compound-whole
+  sentence: どっちも好きだが誰も何も知らない。
+  merges: [どっちも, 誰も, 何も]
+
+# The same lesson one POS tag over. JMdict files these as plain `adv`, and the web
+# only let an adverb take a head plus a particle CLUSTER (いつ + で + も), which a
+# COMPOUND adverb can never be: なんだかんだ carries a second content word, so it read
+# as なん + だ + かん + だ, "what" + copula twice, while the extension answered it
+# whole. Requiring that second content word is also what leaves すぐ + に alone.
+- name: a-compound-adverb-is-one-unit
+  sentence: なんだかんだ言って忙しい。
+  merges: [なんだかんだ]
+  entries: { なんだかんだ: "jmdict:1188360" }
+- name: compound-adverbs-across-the-shapes
+  sentence: いつの間にか二度と会えなくなっていた。
+  merges: [いつの間にか, 二度と]
+# This was a recorded DIVERGENCE until 2026-08-16: the web split すぐ + に and the
+# extension took the listed adverb whole. The web was wrong, and re-measuring said
+# so by seven to one. Allowing an adverb a single-particle tail changes 540 of
+# 12,000 sentences and makes 551 merges, of which 本当に 77, 何か 42, すぐに 35,
+# 一緒に 25, 必ずしも 15, どこか 13, 共に, 常に, 実に, 少しずつ, 徐々に, ついでに and
+# 絶対に are words a learner meets whole. The dictionary listing 本当に IS the
+# evidence, which is the rule everywhere else in this file.
+#
+# One loss in all 551, and it is hardcoded rather than ruled away
+# (`COMPOSITIONAL_ADVERBS`): こと is a formal noun, so そのことに気づいた is こと + に
+# and not the adverb ことに. That costs the reading where ことに really is the
+# adverb, which is the rarer one.
+- name: an-adverb-takes-a-single-particle-when-the-dictionary-says-so
+  sentence: すぐに来る。何か食べたい。本当にありがとう。
+  merges: [すぐに, 何か, 本当に]
+- name: a-formal-noun-plus-a-particle-is-two-words
+  sentence: そのことに気づいた。
+  splits: [ことに]
+
+# An interjection Sudachi can only ever hand over in pieces: the predicate copula
+# opens its own chip in every position, so 何だ arrives as なん + だ and no other pass
+# reaches it. The extension matched なんだ whole from the start, which is how the
+# split showed up as a divergence rather than as a bug report.
+- name: an-interjection-closed-by-the-copula
+  sentence: なんだ、啓太か。
+  merges: [なんだ]
+- name: which-nanda-it-is
+  sentence: なんだ、啓太か。
+  entries: { なんだ: "jmdict:2119750" }
+- name: an-interjection-with-a-particle-tail-does-not-fuse
+  sentence: 今日は寒い。
+  splits: [今日は]
+  why: >-
+    JMdict files 今日は (こんにちは) and 何の as interjections too, so the rule above
+    is held to a copula tail: a particle tail would greet the reader here instead
+    of describing the weather.
+
+# The principle the row above used to carry, on a phrase that really is one unit:
+# frequency prices grammar badly (について is rarer than に + つい + て), and neither
+# engine lets frequency have a vote against a listed `exp` entry.
+- name: grammar-expressions-refuse-to-shatter
+  sentence: それについて話す
+  merges: [について]
+
+- name: polite-but-conjunction
+  sentence: 同性愛者ですが何か？
+  merges: [ですが]
+
+# JMdict has では (rank 80) and には (rank 30) as entries, but で in 本では binds
+# the noun in front of it: the reader is looking at で + は. Both engines decline
+# the merge for a bare particle run led by a case particle, and both still merge
+# one that carries a content word (ではない, について).
+- name: case-particle-runs-stay-apart
+  sentence: 日本では車は左側を走る。
+  splits: [では]
+
+- name: particle-run-with-a-content-word-still-merges
+  sentence: それは本ではない。
+  merges: [ではない]
+
+# ...and both merge it when nothing in front of the run can take the case, so で
+# cannot be marking anything: the run opens the clause, or another particle
+# already holds the slot. SudachiDict carries no でも morpheme at all (only
+# single-character で) and tags that で 格助詞 wherever it lands, so this position
+# test is the whole signal. What is left over (本でも "a book or something" vs
+# 日本でも "in Japan too") reads the same to every rule and stays apart.
+- name: clause-initial-demo-is-the-connective
+  sentence: でも学校に行く。
+  merges: [でも]
+
+- name: demo-after-a-particle-is-the-connective
+  sentence: 一日だけでもいい。
+  merges: [でも]
+
+- name: demo-after-a-noun-stays-apart
+  sentence: 本でも読む。
+  splits: [でも]
+
+# SudachiDict holds words JMdict does not, and its cost model sometimes prefers
+# one: はしっぽ (端っぽ) beat は + しっぽ here, so the web ate the topic particle and
+# しっぽ was never a word on the page. The extension looks words up in JMdict, so
+# it never had the morpheme to be tempted by: this pins the web to its answer.
+- name: a-morpheme-that-ate-the-particle-is-re-cut
+  sentence: 私の犬はしっぽが長い。
+  merges: [しっぽ]
+  splits: [はしっぽ]
+
+# である is JMdict `cop`, not `exp`, so the web's merge pass used to walk past it
+# and the site was the only place that read 潔白である as で + ある. The extension,
+# the dictionary and every learner read it as one word.
+- name: formal-copula-is-one-word
+  sentence: 彼は学生である。
+  merges: [である]
+
+# JMdict lists a phrase in its dictionary form only, so matching a run's literal
+# surface fuses ことがある and can never fuse 気に入った: which is how the web came
+# to shred a real verb into 気 + に + 入る while the extension, which deinflects
+# the span first, read it whole. The web now probes the run with its last group
+# in dictionary form too (Sudachi hands it over already), so both engines fuse an
+# inflected phrase and lemma it by the entry.
+- name: an-inflected-phrase-is-still-the-phrase
+  sentence: この本が気に入った。
+  merges: [気に入った]
+  lemmas: { 気に入った: 気に入る }
+
+- name: you-ni-naru-is-one-unit
+  sentence: 取れるようになった。
+  merges: [ようになった]
+  lemmas: { ようになった: ようになる }
+
+# An idiom whose headword IS a negative inflects on its ない, and reducing the
+# run to its head's dictionary form throws that ない away: 仕方がなかった lemmas
+# back to 仕方がある, which no dictionary lists. The extension deinflects the whole
+# span and lands on the entry; the web also probes the run cut back at the
+# auxiliary's own lemma. A card fronted 仕方がない only lights up in its example
+# sentences because both reach the same headword.
+- name: a-negative-idiom-inflects-on-its-nai
+  sentence: それは仕方がなかった。
+  merges: [仕方がなかった]
+  lemmas: { 仕方がなかった: 仕方がない }
+
+# ── inflection must resolve to the same dictionary form in both ──
+- name: godan-past
+  sentence: Ｔシャツを買った
+  merges: [買った]
+  lemmas: { 買った: 買う }
+
+# A potential form is not a dictionary entry, so the lemma has to be the verb it
+# comes from or the card is filed under a word JMdict has never heard of and
+# arrives with no back. Sudachi answers 学べる here and the guard in
+# `Entry.cardable_form` is what turns it into 学ぶ, which is what the extension
+# already reached by deinflecting against a pack that does not carry 学べる.
+- name: potential-form-resolves-to-its-verb
+  sentence: 日本語が学べる。
+  lemmas: { 学べる: 学ぶ }
+
+- name: potential-form-of-a-godan-verb
+  sentence: 時間はいくらでも作れる。
+  lemmas: { 作れる: 作る }
+
+- name: a-derived-potential-resolves-to-its-common-base
+  sentence: この魚は食べられる。
+  merges: [食べられる]
+  lemmas: { 食べられる: 食べる }
+  entries: { 食べられる: "jmdict:1358280" }
+
+- name: kuru-irregular
+  sentence: 来た
+  merges: [来た]
+  lemmas: { 来た: 来る }
+
+- name: ichidan-past
+  sentence: 考えた
+  merges: [考えた]
+  lemmas: { 考えた: 考える }
+
+- name: progressive-te-iru
+  sentence: 目を授けている
+  merges: [授けている]
+  lemmas: { 授けている: 授ける }
+
+# The te-auxiliary pair the extension's lookahead has to balance. The engines
+# disagree on the CHIP (web merges the whole predicate, extension keeps 授けて +
+# いただく: see the humble-auxiliary divergence), but they agree on what must
+# NEVER appear: a span that bit into the auxiliary and stranded its tail.
+- name: te-auxiliary-not-bitten
+  sentence: 目を授けていただく
+  splits: [授けていた, だく]
+
+# Same guard, with the auxiliary inflected (ていった = て + いく in the past). The
+# trap is that 変わっている IS a JMdict entry ("to be eccentric"), so a greedy
+# match happily reads it out of 変わってい and leaves った behind: which is how a
+# mined card came back fronted 変わっている instead of 変わる.
+- name: inflected-te-auxiliary-not-bitten
+  sentence: 街がどんどん変わっていった。
+  splits: [変わってい, っ]
+
+- name: te-progressive-stays-merged
+  sentence: 手紙を書いている
+  merges: [書いている]
+  splits: [書いて]
+  lemmas: { 書いている: 書く }
+
+# A colloquial kana spelling of a common word (温まる → あったまる, 暖かい → あったかい).
+# Neither is tagged `common`, so both engines can only trust them through their
+# corpus rank: and the pack has to CARRY that rank (it is filed under the
+# variant reading, not the entry's primary one). Without it the extension folded
+# the sokuon away and read 頭 out of あったま.
+- name: colloquial-kana-verb
+  sentence: 部屋があったまらない
+  merges: [あったまらない]
+  splits: [あったま]
+  lemmas: { あったまらない: あったまる }
+
+- name: colloquial-kana-adjective
+  sentence: 部屋があったかい
+  merges: [あったかい]
+  splits: [あった]
+  lemmas: { あったかい: あったかい }
+
+# A noun that verbs with する (JMdict `vs`) followed by a form of する. Left to
+# greed the extension read 下 (below) or 舌 (tongue) out of した: an exact common
+# noun outranks a deinflected verb of the same length: so both engines have to
+# agree that this is する, or one of them mines a tongue.
+- name: suru-noun-past
+  sentence: 日焼けしたから
+  merges: [日焼け, した]
+  lemmas: { した: する }
+
+- name: suru-noun-polite
+  sentence: 明日電話します
+  merges: [電話, します]
+  lemmas: { します: する }
+
+# A word JMdict marks "usually kana" (`uk`), written in kanji anyway: and the
+# kanji spelling is itself flagged common. Demoting it left the extension with
+# no confident reading of its own span, first handing 全く to 全い (a rare
+# adjective it is the ku-form of) and then shattering it into 全 + く.
+- name: usually-kana-word-written-in-kanji
+  sentence: それは全く違う
+  merges: [全く]
+  splits: [全]
+  lemmas: { 全く: 全く }
+
+# The potential of する is suppletive: spelled できる, which JMdict carries as its
+# own entry: so the suru-noun rule above must not drag it to する.
+- name: suru-noun-potential-is-dekiru
+  sentence: 長居できない
+  merges: [できない]
+  lemmas: { できない: できる }
+
+# A grammatical compound both engines carry as one JMdict entry. The extension
+# priced の + で as cheaper than ので: two of the commonest particles there are,
+# judged per character: until a path was made to explain the same span and each
+# token made to cost something. のです, ですが, だから and それは all went the same way.
+- name: compound-particle-stays-whole
+  sentence: 疲れていたので昼寝した
+  merges: [ので]
+  splits: [の]
+  lemmas: { ので: ので }
+
+# An archaic homograph must not outrank the everyday reading of the same span:
+# います is an exact hit on 在す (rank 40,743) and was beating いる (rank 38),
+# because an exact match costs no deinflection step and nothing asked how rare it is.
+- name: common-reading-beats-archaic-homograph
+  sentence: 兄がいます
+  merges: [います]
+  lemmas: { います: いる }
+
+# A compound noun a greedy match can cut in half, where the SECOND half is also
+# a word: 時 + 間がない (rank 32,510) explains as much text as 時間 + が. Pricing
+# only the next token got this wrong in both directions: the fix is to price
+# the cheapest way to explain the whole window, not the next step.
+- name: compound-noun-not-cut-in-half
+  sentence: 時間がなくなった
+  merges: [時間, なくなった]
+  splits: [間がなく]
+  lemmas: { なくなった: なくなる }
+
+# JMdict lists ように/確かに/そんなに as entries; Sudachi reads them as the head plus
+# the adverbial copula. Both engines keep the phrase whole and BOTH name the head
+#:a card for 確かに and a card for 確か are two cards for one word.
+- name: adverbial-copula-lemmatises-to-the-head
+  sentence: 確かにそんなに難しくない。
+  lemmas: { 確かに: 確か, そんなに: そんな }
+
+- name: you-ni-lemmatises-to-you
+  sentence: 私は彼にもう一枚送ってくれるように頼んだ。
+  lemmas: { ように: よう, 頼んだ: 頼む }
+
+# JMdict lists 知らない as an adjective and した as a noun, so an exact match on
+# either beats the deinflection that reaches the verb: for the sole reason that
+# it took no steps to get there. The verb is what a card wants on its front.
+- name: an-inflected-form-is-lemmad-by-its-verb
+  sentence: 知らないってどういうこと？
+  lemmas: { 知らない: 知る }
+
+# …and a deinflection rule firing on a common word is not evidence either. それ
+# is the imperative of 剃る, これ of 凝る, たくさん the negative of 託す: all real
+# rules, all on the commonest words there are. A form beats its own dictionary
+# entry only when the word behind it is the one people actually write.
+- name: pronouns-are-not-verbs-in-disguise
+  sentence: それをするためにはこれが要る。
+  lemmas: { それ: それ, これ: これ }
+
+# …but a rule that makes a noun out of a verb is not an inflection to undo: 帰り
+# is the continuative of 帰る and also the word the sentence means.
+- name: a-nominalised-verb-stays-a-noun
+  sentence: 帰りに本を買った。
+  lemmas: { 帰り: 帰り, 買った: 買う }
+
+# ── compounds / expressions that must not shatter ──
+- name: yoji
+  sentence: 一石二鳥は便利だ
+  merges: [一石二鳥]
+  splits: [鳥は]
+
+- name: fullwidth-headword
+  sentence: Ｔシャツを買った
+  merges: [Ｔシャツ]
+
+# A compound is lemma'd by the entry it merged into, never by its first part:
+# 心筋梗塞 lemma'd 心筋 sent the reader (and the SRS card) to the wrong word.
+- name: compound-lemmas-itself
+  sentence: 心筋梗塞で倒れた
+  merges: [心筋梗塞]
+  lemmas: { 心筋梗塞: 心筋梗塞 }
+
+# ── over-merge guards: these must stay separate words ──
+- name: noun-plus-particle
+  sentence: 猫を見た
+  splits: [猫を]
+  lemmas: { 見た: 見る }
+
+- name: two-sentences
+  sentence: これは一。これは二。
+  splits: [一これ, 。これ]
+
+# JMdict lists 変わっている ("to be eccentric") as an entry of its own, so an
+# inflected form of it: 変わっていた: is reachable in ONE deinflection step where
+# the verb behind it takes three. The extension led with the form entry and sent
+# 変わっている as the lemma; Sudachi has always read it as 変わる, and a lemma the
+# two engines disagree on is a second SRS card for one word. Both now answer the
+# verb, as they already did for the bare 変わっている.
+#
+# Not a claim that the eccentric reading is wrong: 彼はちょっと変わっていた really
+# is "he was a bit odd", and nothing in the span says which. The card front
+# follows the verb and the sources modal offers the swap (docs/specs/anki.md §1).
+- name: form-entry-inflected-lemmas-to-its-verb
+  sentence: 町の様子が変わっていた。
+  lemmas: { 変わっていた: 変わる }
+
+- name: form-entry-negative-lemmas-to-its-verb
+  sentence: 彼は変わっていない。
+  lemmas: { 変わっていない: 変わる }
+
+# 御 is productive but JMdict only lists what it happened to collect: ご連絡 and
+# お名前 are entries, ご配慮 and ご検討 are not. Left to coverage, each engine
+# split the same construction at random: the web on whether Sudachi held the
+# form, the extension on whether longest-match found it. So ご連絡 was one
+# clickable word and ご配慮 was the bare prefix plus a noun. Both now bind the
+# prefix and answer the plain word, so the honorific never decides whether the
+# reader gets a lookup.
+- name: honorific-prefix-unlisted
+  sentence: ご配慮ありがとうございます。
+  merges: [ご配慮]
+  lemmas: { ご配慮: 配慮 }
+
+# The other half of the same rule: お茶 is not "honorific 茶", it is its own
+# dictionary word, so the whole form stays the lemma and the card front reads
+# お茶. Only a prefix the dictionary does NOT list heads on the plain noun.
+- name: honorific-prefix-listed
+  sentence: お茶を飲みました。
+  merges: [お茶]
+  lemmas: { お茶: お茶 }
+
+# Known, accepted differences. Recorded so they are a decision, not a surprise :
+# NOT asserted. Move a row into `cases:` once both engines agree.
+
+- name: predicate-granularity
+  sentence: 読みませんでした
+  merges: [読みませんでした]
+  lemmas: { 読みませんでした: 読む }
+  entries: { 読みませんでした: "jmdict:1456360" }
+
+# The humble-auxiliary divergence was retired on 2026-08-03. It recorded that the
+# web merged 授けていただく into one predicate chip while the extension kept 授けて +
+# いただく, "because いただく is a separate verb its deinflector cannot absorb", and
+# said closing it needed predicate grouping in the extension. It did not: daidai
+# 0.2.4 added 〜ていただく as a deinflection rule, so the extension now merges the
+# predicate and lemmas it to 授ける, the same answer the web has always given. Both
+# sides are pinned in segmentation.yml (caption-sazukete) and by
+# te-auxiliary-not-bitten above.
+- name: humble-auxiliary-merges-in-both
+  sentence: 目を授けていただく
+  merges: [授けていただく]
+  lemmas: { 授けていただく: 授ける }
+
+- name: copula-before-an-expression
+  sentence: 残念ながらそれは本当なのです。
+  merges: [本当, なのです]
+  entries: { なのです: "jmdict:2683060" }
+
+- name: old-form-kanji
+  sentence: 學校
+  merges: [學校]
+  entries: { 學校: "jmdict:1206730" }
+
+- name: number-plus-counter
+  sentence: バナナが七本あります。
+  merges: [七本]
+  entries: { 七本: "jmdict:2005510" }
+
+- name: an-idiom-jmdict-forgot-to-conjugate
+  sentence: このままでは借金で首が回らなくなりそうだ。
+  merges: [首が回らなく]
+  lemmas: { 首が回らなく: 首が回らない }
+  entries: { 首が回らなく: "jmdict:2839755" }
+
+- name: must-construction-granularity
+  sentence: 学校に行かなければならない
+  merges: [行かなければならない]
+  lemmas: { 行かなければならない: 行く }
+  entries: { 行かなければならない: "jmdict:1578850" }
+
+- name: potential-form-lemma
+  sentence: 時間はいくらでも作れる。
+  lemmas: { 作れる: 作る }
+  entries: { 作れる: "jmdict:1597890" }
+
+# The provisional-ba divergence was retired on 2026-08-03. It recorded that the
+# web left 食べれ + ば apart because "nothing re-fuses them" while the extension
+# deinflected the whole span. Something does now: merge_ba_predicate runs in :word
+# mode as well as :phrase, so both engines answer 食べれば and lemma it to 食べる.
+# Splitting was not merely coarser, it was wrong: the bare 仮定形 reached the hint
+# layer as a string and deinflected to the IMPERATIVE.
+- name: provisional-ba-merges-in-both
+  sentence: 食べれば美味しい
+  merges: [食べれば]
+  lemmas: { 食べれば: 食べる }
+
+# ── the entry, not the lemma (2026-08-06) ───────────────────────────────
+# `lemmas` was the strongest cross-engine claim available until both engines
+# could name an ENTRY. Now they can: the pack ships `id: "jmdict:1009470"` on
+# every term, the extension carries it on each parsed token, and the web resolves
+# the same handle through `WordIds` (`dictionary` + `source_id`), which is also
+# what `/api/v1/parse` answers with and what `/api/v1/srs/saves` takes. So these rows pin
+# the one thing that means the same in all three places.
+#
+# Opt-in per row on purpose. The engines resolve differently by design, and a
+# required `entries:` everywhere would only re-record the divergences below as
+# failures.
+- name: entry-copula-nara
+  sentence: 彼が学生ならいいのに
+  entries: { なら: "jmdict:1009470" }
+  lemmas: { なら: だ }
+- name: entry-copula-janai
+  sentence: それは本じゃない
+  entries: { じゃない: "jmdict:2755350" }
+- name: entry-copula-datta
+  sentence: 昨日は静かだった
+  entries: { だった: "jmdict:2819970" }
+# して is deliberately absent, though it is the sharpest case of the rule (it is a
+# JMdict particle in its own right, "by, indicating means of action", and every
+# occurrence in real text is the te-form of する). It only stands alone on the web
+# after a suru-noun the extension merges instead (勉強して), so there is no sentence
+# where both engines emit it as its own token: not a disagreement about the word,
+# just about where the chip ends. Pinned web-side in test/models/word_ids_test.rb.
+- name: entry-counted-digit
+  sentence: 魔法は3つの要素で構成されている
+  merges: [3つ]
+  lemmas: { 3つ: 三つ }
+  entries: { 3つ: "jmdict:1299740" }
+- name: entry-past-of-kuru
+  sentence: 友達が来た
+  entries: { 来た: "jmdict:1547720" }
+  why: >-
+    来た is also an interjection ("all right") and 来る has a second, archaic
+    reading (きたる). Both engines must answer the ordinary くる.
+- name: entry-usually-kana-verb
+  sentence: 机の上に本がある
+  entries: { ある: "jmdict:1296400" }
+  why: JMdict files it under 有る; both engines answer the kana verb a reader sees.
+- name: entry-katakana-run-is-not-cut
+  sentence: カレーを食べた
+  merges: [カレー]
+  entries: { カレー: "jmdict:1039140" }
+  why: >-
+    Found by this axis on the day it was added. カレ folds to かれ and so matches
+    彼, one of the commonest words in the language, and the extension's path
+    scorer bought カレ + ー over カレー: hovering curry answered "he". Fixed by
+    refusing any cut that leaves a long-vowel mark or a small kana opening the
+    next token, which is illegal whatever the path costs say. ラーメン was never
+    at risk only because ラーメ spells nothing.
+- name: entry-katakana-word-is-never-cut-in-half
+  sentence: チョコレートとカレンダーを買った
+  merges: [チョコレート, カレンダー]
+  entries: { チョコレート: "jmdict:1078270", カレンダー: "jmdict:1039220" }
+  why: >-
+    The class the カレー row's fix only half-covered. Japanese does not write two
+    katakana words against each other without a separator, so a cut with katakana
+    on both sides is inside a word: but the extension's cost model does not know
+    that, and cheap short readings kept winning. チョコレート went to チョ + コレ
+    (此れ) + ー + ト, カレンダー to カレ (彼) + ンダ + ー, セミナー to セ + ミナ +
+    ー. A sweep of the 1,002 common katakana words whose prefix also spells a
+    common word found 71 shredded this way; the rule fixed all of them and the
+    four it missed at first (バラバラ, バランス, ナミビア, バラエティ) were the
+    same rule needing to apply to the winning candidate and not only to the
+    alternatives it is priced against.
+
+# ── boundary and lemma differences found by the divergence sweep (2026-08-14) ──
+#
+# Recorded rather than asserted: the two engines answer these differently and
+# both answers are defensible, so what matters is that the difference is a
+# decision on file instead of a surprise the next reader has to re-derive.
+
+- name: a-na-adjective-and-its-copula
+  sentence: 英語が上手に話せない。
+  merges: [上手に]
+  lemmas: { 上手に: 上手 }
+  entries: { 上手に: "jmdict:1353320" }
+
+# These two are NOT a difference of opinion: the site's lemma is a word the
+# learner never met, and a card minted from the site is filed under it. Neither
+# is caught by `Entry.cardable_form`, whose guard is "is this lemma fileable":
+# 済む and 人 are both perfectly real entries, just not this word.
+# Was a divergence, now a contract. Sudachi lemmatised this fixed expression
+# through to 済む ("to finish"), so mining an apology carded a word the learner
+# never met, while the extension answered すみません from the dictionary. The web
+# now declines to lemmatise through a surface that is its own filed entry AND the
+# commoner of the two (すみません 498 against すむ 806), which is the ordering
+# `copulaHead` already applies on the extension side.
+- name: a-fixed-expression-is-not-lemmatised-through
+  sentence: すみません、卵はどこにありますか。
+  lemmas: { すみません: すみません }
+  entries: { すみません: "jmdict:1295060" }
+- name: a-counter-word-the-site-reads-as-its-first-half
+  sentence: そうしたらひとつ問題があった。
+  merges: [そうしたら, ひとつ]
+  lemmas: { ひとつ: 一つ }
+  entries: { ひとつ: "jmdict:1160820" }
+
+# ── entry identity for the words this plan moved (2026-08-14) ──
+#
+# `entries` is the claim that matters and the one this corpus had least of: 47
+# merge claims and 9 entry ones when the count was taken. A boundary difference
+# costs a highlight, an ENTRY difference forks the card, and every word below is
+# one whose identity changed while closing the mining path, so each is exactly
+# where a regression would be expensive and invisible.
+- name: entry-a-potential-form-lands-on-its-verb
+  sentence: 日本語が学べる。
+  entries: { 学べる: "jmdict:1206530" }
+  why: >-
+    学べる is not an entry, so before this the site filed a card under it and the
+    card had no back at all. Both engines now land on 学ぶ.
+- name: entry-a-counter-word-the-dictionary-lists
+  sentence: みんなでひとつになる。
+  entries: { ひとつ: "jmdict:1160820" }
+  why: >-
+    Read as a numeral plus a counter, ひとつ was offered as ひと + つ and its first
+    half searched 人. The dictionary lists the pair, so it is one word.
+- name: entry-a-past-form-lands-on-its-verb
+  sentence: 昨日寿司を食べた。
+  entries: { 食べた: "jmdict:1358280" }
+  why: >-
+    Plain inflection, which is where the guard must NOT step in: 食べる is the
+    fileable lemma already, so the entry has to stay the verb's.
+
+    Asserted on 食べた rather than 読みません because a claim needs a surface BOTH
+    engines produce, and the extension folds 読みませんでした into one token where
+    the web splits the copula off. Granularity differs by design; entry identity
+    is the claim that survives it.
+
+# The granularity difference the sweep runner names as THE example, measured on
+# both sides at last. It is benign, and this row exists to say why rather than to
+# leave the reader to re-derive it: every shared word lands on the same entry,
+# so a card minted from either engine is the same card.
+#
+#   web  本(1522150) | を(2029010) | 読みません(1456360) | でした(1628500) | 。
+#   ext  本(1522150) | を(2029010) | 読みませんでした(1456360)          | 。
+#
+# What actually differs is what is STUDIABLE: the web offers でした as a word of
+# its own (jmdict:1628500, です), the extension folds it into the verb. Neither
+# is wrong; a reader wanting the copula finds it on the site, and a reader
+# hovering the verb gets the whole polite past either way.
+#
+# It also shows why a claim needs a surface BOTH engines produce: there is no
+# 読みません token in the extension's answer to hang an `entries` claim on, which
+# is why the asserted row for this shape uses 食べた.
+# Was a divergence for about an hour, then stopped being one. The site merged
+# 読みました and the seven morphemes of 食べさせられたくなかった but broke the polite
+# NEGATIVE past at でし, so one conjugation of 読む arrived as a verb plus a
+# copula. です after the negative auxiliary ん is not a predicate; after a noun it
+# is, and 学生でした is asserted separately to keep that half honest.
+- name: a-polite-past-negative-is-one-conjugation
+  sentence: 本を読みませんでした。
+  merges: [読みませんでした]
+  lemmas: { 読みませんでした: 読む }
+  entries: { 読みませんでした: "jmdict:1456360" }
+
+# 〜くある: how an i-adjective builds its polite forms. The site read the polite
+# past negative as 高く + ありません + でした, so a sentence about 高い offered
+# ある, a verb the reader is not reading. Both engines now answer 高い, and the
+# entry claim is what makes that binding: a boundary can move, an entry cannot.
+- name: an-adjectives-polite-forms-are-the-adjective
+  sentence: この本は高くありませんでした。
+  merges: [高くありませんでした]
+  lemmas: { 高くありませんでした: 高い }
+  entries: { 高くありませんでした: "jmdict:1283190" }
+
+# JMnedict entries carry no part of speech, so `WordIds#plausible?` has nothing
+# to object with and an exact reading match handed them the word: Sudachi reads
+# 明日 as アス, "tomorrow" leads with アシタ, and only the given name Asu leads
+# with アス. A reader clicking 明日 in 明日は雨だ was shown a person.
+#
+# Asserted on the entry rather than the lemma because the lemma was never wrong:
+# both engines say 明日. Only the word behind it differed, which is exactly the
+# axis this file says matters and the one a card forks on.
+- name: entry-a-name-does-not-outrank-a-word
+  sentence: 明日帰ったら電話します。
+  entries: { 明日: "jmdict:1584660" }
+
+# ── the 2026-08-15 sweep: four resolution bugs, all found by divergence ──
+# Every row here was ranked by occurrences over 12,000 sentences, and every one
+# was invisible to the ratchets: the LEMMA was right in all four cases and only
+# the word behind it was wrong. That is the argument for the entries axis.
+
+# "Is this a proper name" cannot be answered by asking which dictionary the row
+# came from. JMdict carries ~7,300 JMnedict rows under its OWN slug, tagged with
+# the name types as `misc` codes: jmdict:5747047 IS jmnedict:5747047, とき, "Toki
+# (regular Jōetsu-line Shinkansen)". The slug test read `jmdict` and waved it
+# through, 89 times in the sweep.
+#
+# 時 also has to beat the crested ibis 鴇, whose kana form JMdict lists, so this
+# row pins both halves of とき at once: a name never outranks a word, and a
+# spelling's own words do not get to be rare AND win.
+- name: entry-toki-is-the-time-not-a-bird-or-a-train
+  sentence: 誰かが亡くなったときは悲しいものだよ。
+  entries: { とき: "jmdict:1315840" }
+
+# An inflected surface is a form of something that CONJUGATES, and proper names
+# do not. あります is filed under no real word at all, so the surname 有益
+# ("Arimasu") answered it unopposed: 107 times, with します, しました, なった,
+# ありません and したら behind it for ~490 in total. The verb is under the LEMMA.
+- name: entry-an-inflected-surface-is-not-a-surname
+  sentence: すみません、卵はどこにありますか？
+  entries: { あります: "jmdict:1296400" }
+
+# An all-kanji surface spells no reading, so what arrives is UniDic's DEFAULT for
+# those characters. UniDic reads 私 as ワタクシ, and the rule that says "nothing
+# outranks the reading the sentence used" believed it 705 times: the single
+# largest disagreement in the sweep, and on one of the first words anyone learns.
+- name: entry-watashi-is-not-watakushi
+  sentence: 私は眠らなければなりません。
+  entries: { 私: "jmdict:1311110" }
+
+# The extension's own, and the largest thing it got wrong: 事 is filed under こと
+# (JMdict lists the kana form, `uk`) and 琴 merely READS こと. They tie on every
+# key the path scorer prices, they share a corpus rank because rank is keyed on
+# spelling, and the comparison fell through to comparing ids: jmdict:1241450
+# sorts before jmdict:1313580, so a reader got a zither 645 times.
+- name: entry-koto-is-the-thing-not-the-zither
+  sentence: 驚くことではないね。
+  entries: { こと: "jmdict:1313580" }
+
+# 「信じたいものだ」 is the nominalizer, which JMdict files as a `prt`, and the
+# class gate refused a particle entry for a chip UniDic calls a 名詞: it fell
+# through to the words the spelling merely CARRIES and answered 者, a person, 162
+# times in the v8 sweep. UniDic names the SHAPE and JMdict names the JOB, and for
+# the 形式名詞 (もの, こと, ところ, わけ, はず) both describe the same word. The
+# extension answers it through the filed rung instead, which is why this row is
+# worth asserting on both: two routes, one answer.
+- name: entry-mono-is-the-nominaliser-not-a-person
+  sentence: 誰しも、夢はかなうと信じたいものだ。
+  entries: { もの: "jmdict:2780660" }
+
+# The particle rule, stated once and held to on both engines: a head plus a
+# particle is ONE chip when the dictionary lists that exact string as a word, and
+# two when it does not. Nothing else decides it: not the shape (実際は and 君は are
+# the same shape), not whether the head could stand alone, not frequency.
+#
+# The merged side. Every one of these is a JMdict entry, so a learner meets the
+# word the dictionary has rather than its parts.
+- name: a-particle-the-dictionary-lists-is-part-of-the-word
+  sentence: 実は時には実際は難しい。
+  merges: [実は, 時には, 実際は]
+
+# The split side. None of these is an entry, and the engines must not invent one
+# out of a head that happens to be common.
+- name: a-particle-the-dictionary-does-not-list-stays-its-own-chip
+  sentence: 君は学生で私は先生だ。
+  splits: [君は, 私は]
+
+# And the one exception, which both engines make on purpose. これは and それは ARE
+# entries, but they are different words wearing the same spelling: それは is an
+# adverb glossed "very" (それは美しい) and これは an interjection, and neither is the
+# これ + は of これは本です. Merging on the entry's existence would be coverage
+# deciding segmentation, and it fired on exactly the two demonstratives JMdict
+# happens to carry while あれは and 私は, identical in shape, stayed apart.
+#
+# それは is pinned separately above (`a-pronoun-keeps-its-topic-particle-apart`);
+# this is its other half, and `Tokenizer#topic_marked_pronoun?` and the extension's
+# `grammarEntry` are the two implementations it holds together.
+- name: a-demonstrative-wearing-wa-is-the-demonstrative
+  sentence: これは本です。
+  splits: [これは]
+
+# A particle swallowed by longest-match, which is the extension's version of the
+# re-cut the web does to Sudachi's output in `unswallow_particles`. はもう
+# deinflects to はむ (食む, an archaic "to eat") and is longer than は, so 彼はもう
+# came out as 彼 | はもう and the topic particle vanished into a verb nobody reads.
+# 30 occurrences in a 12,000-sentence sweep, found by separating SWALLOWED from
+# SHATTERED in the harness: they were one number before, and it hid this.
+#
+# 長居できない is the counter-case, and it is why the rule compares rarity rather
+# than asking whether the tail is a word: きない IS an entry (rank 137,415), so
+# that test would have cut できる in half. The particle only comes off when what
+# is left is much commoner than the reading that swallowed it.
+- name: a-particle-is-not-swallowed-by-an-archaic-verb
+  sentence: 彼はもう帰った。長居できない。
+  splits: [はもう]
+  merges: [できない]
+
+# Emphatic elongation, which subtitles and chat are full of and JMdict files
+# only in its plain form. The extension has collapsed it since it shipped
+# (`collapseEmphatic`, pinned in test/tokenizer_eval/segmentation.yml as
+# すごーい=すごい); the web had no equivalent, so すごーい carried ITSELF as a lemma
+# (a spelling JMdict has never heard of, so the card files under a non-word) and
+# すっっごーい shredded into すっ + っ + ご + ー + い. `Tokenizer::Merges#merge_elongated`
+# is the port, and these rows are what hold the two ports together.
+- name: stretched-kana-files-under-the-plain-word
+  sentence: すごーい
+  merges: [すごーい]
+  lemmas: { すごーい: すごい }
+
+- name: stretched-kana-collapses-across-repeated-marks
+  sentence: すっっごーい
+  merges: [すっっごーい]
+  lemmas: { すっっごーい: すごい }
+
+# The counter-case, and the reason the pass asks the verbatim spelling first:
+# すっごい IS a JMdict entry, so it keeps its own lemma instead of being rewritten
+# to すごい. Same rule as the extension, where a verbatim probe costs 0 and
+# outranks the collapsed one.
+- name: a-listed-stretched-spelling-keeps-its-own-lemma
+  sentence: すっごい
+  merges: [すっごい]
+  lemmas: { すっごい: すっごい }
+
+# The BOUNDARY of the pass, pinned so widening it has to be deliberate. Only
+# INTERIOR marks collapse: a trailing ー is left alone in both engines, because
+# collapsing it is not a spelling question but a guess about which word was
+# meant. やめろー is やめろ stretched (imperative), while 泳ごー is 泳ごう with its
+# う spelled ー (volitional): delete the mark and the second becomes 泳ご, which
+# is not a word at all. Neither engine handles these yet, and the fix is vowel
+# EXPANSION rather than collapse. If that lands, this row moves on purpose.
+- name: trailing-elongation-is-not-collapsed
+  sentence: やめろー
+  splits: [やめろー]

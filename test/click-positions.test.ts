@@ -7,7 +7,7 @@ import { Window } from "happy-dom";
 import { lookupGroupOffline, lookupScanOffline, parseOffline, resolveParsedSpan, setActiveDictionaryStack } from "../src/common/offline-dictionary.js";
 import { installTestPack, packPayload, realPackPath, subsetPack } from "./support/pack.js";
 
-const cases = (parseYaml(readFileSync("../test/tokenizer_eval/click_positions.yml", "utf8")) as
+const cases = (parseYaml(readFileSync("test/fixtures/tokenizer_eval/click_positions.yml", "utf8")) as
   Array<{ sentence: string; surface: string; entry: string }>).map((row) => ({ ...row, text: row.sentence }));
 
 test("pointer positions preserve whole-word identity across inline nodes and ruby", async (context) => {

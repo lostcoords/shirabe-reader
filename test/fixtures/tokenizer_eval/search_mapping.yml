@@ -1,0 +1,40 @@
+- name: adverbial-negative-copula
+  sentence: 貧しい人ではなく欲のありすぎる人である。
+  merges: [ではなく, ありすぎる]
+  lemmas: { ではなく: ではない, ありすぎる: ある }
+  entries: { ではなく: "jmdict:2823770", ありすぎる: "jmdict:1296400" }
+
+- name: a-rare-plant-eats-an-adverb
+  sentence: そんな中、一人静かに冷たい目で
+  splits: [一人静]
+  merges: [一人, 静かに]
+  entries: { 一人: "jmdict:1576150", 静かに: "jmdict:2119870" }
+
+- name: compound-crossing-a-lexicalized-expression
+  sentence: 腕毛が生えた
+  tokens: [腕毛, が, 生えた]
+  entries:
+    腕毛: jmdict:2807020
+    が: jmdict:2028930
+    生えた: jmdict:1378490
+  clickable: [が]
+
+- name: compound-before-a-progressive-without-a-lexicalized-expression
+  sentence: 腕毛が生えています
+  tokens: [腕毛, が, 生えています]
+  entries:
+    腕毛: jmdict:2807020
+    が: jmdict:2028930
+    生えています: jmdict:1378490
+  clickable: [が]
+
+- name: recovered-topic-particle-before-an-adverb
+  sentence: 彼はもう帰った。
+  merges: [は, もう, 帰った]
+  splits: [はもう]
+  clickable: [は]
+
+- name: recovered-topic-particle-before-a-progressive
+  sentence: 猫はもう寝ています
+  merges: [は, もう, 寝ています]
+  clickable: [は]

@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { rmSync, watch as watchFiles } from "node:fs";
 import { copyFile, cp, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { developmentBuildId, DEVELOPMENT_RELOAD_PORT, startDevelopmentReloadServer } from "./dev-reload-server.mjs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +16,10 @@ const nobleHashesRoot = dirname(fileURLToPath(import.meta.resolve("@noble/hashes
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 const target = process.argv[2] ?? "firefox";
 const watch = process.argv.includes("--watch");
+const devReloadPort = Number(process.env.SHIRABE_DEV_RELOAD_PORT || DEVELOPMENT_RELOAD_PORT);
+if (watch && (!Number.isInteger(devReloadPort) || devReloadPort < 1 || devReloadPort > 65535)) {
+  throw new Error(`SHIRABE_DEV_RELOAD_PORT must be a TCP port, got ${process.env.SHIRABE_DEV_RELOAD_PORT}`);
+}
 const baseManifest = JSON.parse(await readFile(join(root, "manifest.base.json"), "utf8"));
 
 if (isMain && !["firefox", "chrome"].includes(target)) {
@@ -75,6 +80,8 @@ const buildOptions = {
     // Release list only, so production zips never embed a localhost host pattern.
     __SHIRABE_OFF_HOSTS__: JSON.stringify(watch ? DEV_OFF_HOSTS : RELEASE_OFF_HOSTS),
     __EXTENSION_VERSION__: JSON.stringify(baseManifest.version),
+    __DEV_RELOAD__: watch ? "true" : "false",
+    __DEV_RELOAD_URL__: JSON.stringify(watch ? `http://127.0.0.1:${devReloadPort}/build.json` : ""),
     // Which build is actually loaded. The version alone can't answer that during
     // development: it doesn't move between rebuilds, so a stale copy of the
     // extension looks identical to a fresh one in the console.
@@ -152,9 +159,39 @@ async function copyStatic() {
 
 let scriptContext;
 let watchedVersion = baseManifest.version;
+let reloadServer;
+let publishTimer;
+function scheduleDevelopmentPublish() {
+  if (!watch || !reloadServer) return;
+  clearTimeout(publishTimer);
+  publishTimer = setTimeout(() => {
+    void publishDevelopmentBuild().catch((error) => console.error("✗ development reload publish failed", error));
+  }, 250);
+}
+async function publishDevelopmentBuild() {
+  if (!reloadServer) return;
+  const id = developmentBuildId();
+  const destination = join(outdir, "build.json");
+  const temporary = `${destination}.${process.pid}.tmp`;
+  await writeFile(temporary, `${JSON.stringify({ id })}\n`);
+  await rename(temporary, destination);
+  reloadServer.publish(id);
+  console.log(`↻ development build ${id}`);
+}
+function developmentReloadPlugin() {
+  return {
+    name: "development-reload",
+    setup(build) {
+      build.onEnd((result) => {
+        if (result.errors.length === 0) scheduleDevelopmentPublish();
+      });
+    },
+  };
+}
 async function watchScripts(version) {
   await scriptContext?.dispose();
   scriptContext = await esbuild.context({ ...buildOptions,
+    plugins: [developmentReloadPlugin()],
     define: { ...buildOptions.define, __EXTENSION_VERSION__: JSON.stringify(version) },
   });
   await scriptContext.watch();
@@ -162,7 +199,11 @@ async function watchScripts(version) {
 }
 
 async function buildAll() {
-  if (watch) await acquireWatchLock();
+  if (watch) {
+    await acquireWatchLock();
+    reloadServer = startDevelopmentReloadServer({ port: devReloadPort });
+    await reloadServer.ready;
+  }
   if (!watch) await rm(outdir, { recursive: true, force: true });
   await mkdir(join(outdir, "action"), { recursive: true });
   await mkdir(join(outdir, "options"), { recursive: true });
@@ -176,7 +217,10 @@ async function buildAll() {
 
   await manifest();
   await copyStatic();
-  if (watch) watchStatic();
+  if (watch) {
+    watchStatic();
+    scheduleDevelopmentPublish();
+  }
   console.log(`✓ ${target} build → ${outdir}${watch ? " (watching)" : ""}`);
 }
 
@@ -223,6 +267,7 @@ function watchStatic() {
         if (latest.version !== watchedVersion) await watchScripts(latest.version);
         await manifest();
         await copyStatic();
+        scheduleDevelopmentPublish();
         console.log("↻ synced static assets + manifest");
       }).catch((error) => {
         console.error("✗ static asset sync failed", error);

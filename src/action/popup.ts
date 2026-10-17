@@ -7,10 +7,12 @@ import { sendDictionary } from "../common/dictionary-port.js";
 import { loadHostRules, matchUrl, normalizePattern, resolveHostMode, siteScopeFor, type HostRule } from "../common/host-rules.js";
 import { send } from "../common/messages.js";
 import { installClientReporter } from "../common/client-reporter.js";
+import { installDevelopmentBuildStamp } from "../common/development-build.js";
 
 installClientReporter("popup");
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+installDevelopmentBuildStamp($("devBuild"), (path) => ext.runtime.getURL(path));
 
 let config: Config;
 let rules: HostRule[] = [];

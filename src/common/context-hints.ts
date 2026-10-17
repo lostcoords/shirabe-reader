@@ -1,4 +1,4 @@
-import corpus from "../../../db/reference/context_hints.json";
+import corpus from "./resources/context-hints.json";
 
 const contexts: Readonly<Record<string, Readonly<Record<string, number>>>> = corpus.counts;
 

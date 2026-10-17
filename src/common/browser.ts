@@ -29,6 +29,7 @@ type WebExt = {
   action?: {
     setBadgeText(details: { text: string; tabId?: number }): Promise<void>;
     setBadgeBackgroundColor(details: { color: string; tabId?: number }): Promise<void>;
+    setTitle(details: { title: string; tabId?: number }): Promise<void>;
   };
   runtime: {
     sendMessage(message: unknown): Promise<unknown>;
@@ -42,6 +43,7 @@ type WebExt = {
     onInstalled?: { addListener(fn: (details: { reason: "install" | "update" | "chrome_update" | "shared_module_update" }) => void): void };
     openOptionsPage?(): Promise<void>;
     getURL(path: string): string;
+    reload?(): void;
     // Used as a light keep-alive ping while a long dictionary install runs without
     // an open popup (MV3 service workers otherwise suspend and drop in-memory state).
     getPlatformInfo?(): Promise<unknown>;

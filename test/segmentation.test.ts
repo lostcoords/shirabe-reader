@@ -9,12 +9,6 @@ import type { ParsedToken } from "../src/common/types.js";
 import { lookupGroupOffline, parseOffline, resolveParsedSpan, setActiveDictionaryStack } from "../src/common/offline-dictionary.js";
 import { installTestPack, packPayload, realPackPath, subsetPack } from "./support/pack.js";
 
-// The extension's segmentation ratchet: every corpus in test/tokenizer_eval/ that
-// this engine answers, in one suite. The corpora live outside the extension so one
-// directory holds every case either engine answers, and the web reads the same
-// files from lib/tasks/tokenizer_eval.rake with its own corpus list. Two lists,
-// one shape, one directory: a case is never hidden inside the engine reading it.
-//
 // One suite rather than one per corpus, because each installs a pack and a pack
 // install owns the offline-dictionary module singleton and fake-indexeddb: two
 // suites in two processes meant scanning the 58 MB pack twice to build subsets
@@ -26,7 +20,7 @@ import { installTestPack, packPayload, realPackPath, subsetPack } from "./suppor
 // never come back without turning this test red.
 
 type StackVariant = { name: string; sources: string[]; languages: Array<"eng" | "spa"> };
-const STACKS = parseYaml(readFileSync("../test/tokenizer_eval/dictionary_stacks.yml", "utf8")) as StackVariant[];
+const STACKS = parseYaml(readFileSync("test/fixtures/tokenizer_eval/dictionary_stacks.yml", "utf8")) as StackVariant[];
 
 const CORPORA = ["cross_engine", "segmentation", "search_mapping", "contextual_boundaries"] as const;
 
@@ -71,7 +65,7 @@ type SegmentationCase = {
 
 /** Every row, tagged with the corpus it came from so failures name their source. */
 const allRows: Array<SegmentationCase & { corpus: string }> = CORPORA.flatMap((name) => {
-  const rows = parseYaml(readFileSync(`../test/tokenizer_eval/${name}.yml`, "utf8")) as SegmentationCase[];
+  const rows = parseYaml(readFileSync(`test/fixtures/tokenizer_eval/${name}.yml`, "utf8")) as SegmentationCase[];
   return (name === "contextual_boundaries" ? STACKS : [STACKS[0]!]).flatMap((stack) => rows.map((row) => ({
     ...row, stack: stack.name,
     name: `${stack.name}/${row.name ?? (row.family ? `${row.family}/${row.sentence}` : row.sentence)}`,
@@ -169,15 +163,15 @@ test("segmentation corpus", async (context) => {
     context.diagnostic("segmentation corpus: no local dictionary pack: running fixture cases only");
   }
 
-  const webPath = "../tmp/contextual-boundaries-audit.json";
+  const webPath = process.env.SHIRABE_WEB_AUDIT ?? "tmp/contextual-boundaries-audit.json";
   const requireWeb = process.env.SHIRABE_REQUIRE_CONTEXTUAL_WEB === "1";
   assert.ok(!requireWeb || usingRealPack, "combined audit requires a real dictionary pack");
   assert.ok(!requireWeb || existsSync(webPath), "run the backend contextual boundary audit first");
   const webTokens = new Map<string, ParsedToken[]>();
   if (existsSync(webPath)) {
     const report = JSON.parse(readFileSync(webPath, "utf8"));
-    const digest = createHash("sha256").update(readFileSync("../test/tokenizer_eval/contextual_boundaries.yml")).digest("hex");
-    if (report.corpusDigest === digest && report.stackDigest === createHash("sha256").update(readFileSync("../test/tokenizer_eval/dictionary_stacks.yml")).digest("hex")) {
+    const digest = createHash("sha256").update(readFileSync("test/fixtures/tokenizer_eval/contextual_boundaries.yml")).digest("hex");
+    if (report.corpusDigest === digest && report.stackDigest === createHash("sha256").update(readFileSync("test/fixtures/tokenizer_eval/dictionary_stacks.yml")).digest("hex")) {
       const expectedCases = corpus.filter((row) => row.corpus === "contextual_boundaries").length;
       assert.equal(report.cases * STACKS.length, expectedCases, "backend report must cover the whole shared corpus");
       assert.equal(report.results.length, expectedCases, "backend report must retain every case");
