@@ -5,3 +5,6 @@ artifacts/
 tmp/
 .env
 .DS_Store
+
+# Built Ruby pack writer archives
+tools/pack-builder/*.gem

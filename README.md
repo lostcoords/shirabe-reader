@@ -85,3 +85,5 @@ Upload the corresponding zip from `artifacts/<browser>/`. [Store listing copy](S
 ## License
 
 [GPL-3.0](LICENSE). [NOTICE](NOTICE) lists Yomitan and daidai attribution. Downloaded dictionary packs carry their own licenses, separately from the extension.
+
+The portable dictionary pack writer lives in [`tools/pack-builder`](tools/pack-builder). Rails supplies authorized dictionary records; this library owns Reader’s offline archive format.

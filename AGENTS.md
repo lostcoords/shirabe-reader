@@ -25,3 +25,5 @@ A real dictionary pack is optional for the default fixture suite. Set `SHIRABE_P
 ## Shared desktop
 
 Prefer APIs, CLIs, and headless tests. Do not activate native apps or send system-wide input without explicit permission. Preserve the user's clipboard and do not play test audio. Use the configured browser skill for visible browser work and stay in its owned session.
+
+`tools/pack-builder` owns the Ruby offline pack writer. Run its standalone tests with `BUNDLE_GEMFILE=tools/pack-builder/Gemfile bundle exec ruby -Itools/pack-builder/lib tools/pack-builder/test/builder_test.rb`. Rails owns source queries and permissions; this library must not import Rails or ActiveRecord.
