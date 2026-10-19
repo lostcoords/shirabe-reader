@@ -44,8 +44,9 @@ test("localhost access follows the API actually baked in, not merely --watch", (
   // extension code is tested against the live server. The dev origin has to
   // follow the host that was baked in, or a prod-pointed watch build would ask
   // for a localhost permission it never uses.
-  assert.match(builder, /if \(watch && localApi\) base\.host_permissions\.push\("https:\/\/shirabe\.localhost\/\*"\)/);
-  assert.match(builder, /const localApi = apiBase\.includes\("shirabe\.localhost"\)/);
+  assert.match(builder, /if \(watch && localApi\) base\.host_permissions\.push\(`https:\/\/\$\{apiHost\}\/\*`\)/);
+  // A Shirabe worktree under Parcela is `<name>-shirabe.localhost`, and production never matches.
+  assert.match(builder, /const localApi = apiHost === "shirabe\.localhost" \|\| apiHost\.endsWith\("-shirabe\.localhost"\)/);
   // And a one-shot build is still production by default: the flag opens a door
   // for the watcher without moving where a package points.
   assert.match(builder, /: \(watch \? "https:\/\/shirabe\.localhost" : "https:\/\/shirabe\.org"\)/);

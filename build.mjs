@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { rmSync, watch as watchFiles } from "node:fs";
 import { copyFile, cp, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { developmentBuildId, DEVELOPMENT_RELOAD_PORT, startDevelopmentReloadServer } from "./dev-reload-server.mjs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -45,13 +45,19 @@ const apiArg = process.argv.find((arg) => arg.startsWith("--api="));
 const apiBase = apiArg
   ? apiArg.slice("--api=".length).replace(/\/$/, "")
   : (watch ? "https://shirabe.localhost" : "https://shirabe.org");
-const localApi = apiBase.includes("shirabe.localhost");
+const apiHost = new URL(apiBase).hostname;
+// The local server, including a worktree's own name such as `signup-shirabe.localhost`.
+const localApi = apiHost === "shirabe.localhost" || apiHost.endsWith("-shirabe.localhost");
+const devOffHosts = localApi && apiHost !== "shirabe.localhost" ? [...DEV_OFF_HOSTS, `*://${apiHost}/*`] : DEV_OFF_HOSTS;
 
 const outputArg = process.argv.find((arg) => arg.startsWith("--outdir="));
 const outdir = outputArg
-  ? join(root, outputArg.slice("--outdir=".length))
+  ? resolve(root, outputArg.slice("--outdir=".length))
   : join(root, "dist", target);
-const watchLock = join(root, ".web-ext-profile", `${target}.watch.lock`);
+// One watcher per output directory, so each Shirabe worktree can run its own.
+const watchLock = outputArg
+  ? join(dirname(outdir), `${basename(outdir)}.watch.lock`)
+  : join(root, ".web-ext-profile", `${target}.watch.lock`);
 
 // Each entry becomes a standalone classic (IIFE) bundle. Content scripts and
 // MV3 background workers can't be ES modules across both browsers, so we let
@@ -78,7 +84,7 @@ const buildOptions = {
   define: {
     __DEFAULT_API_BASE__: JSON.stringify(apiBase),
     // Release list only, so production zips never embed a localhost host pattern.
-    __SHIRABE_OFF_HOSTS__: JSON.stringify(watch ? DEV_OFF_HOSTS : RELEASE_OFF_HOSTS),
+    __SHIRABE_OFF_HOSTS__: JSON.stringify(watch ? devOffHosts : RELEASE_OFF_HOSTS),
     __EXTENSION_VERSION__: JSON.stringify(baseManifest.version),
     __DEV_RELOAD__: watch ? "true" : "false",
     __DEV_RELOAD_URL__: JSON.stringify(watch ? `http://127.0.0.1:${devReloadPort}/build.json` : ""),
@@ -109,7 +115,7 @@ async function manifest() {
 
   // Store packages must never request a development origin. Watch builds add
   // the local Rails host because their baked-in API default points there.
-  if (watch && localApi) base.host_permissions.push("https://shirabe.localhost/*");
+  if (watch && localApi) base.host_permissions.push(`https://${apiHost}/*`);
 
   if (target === "firefox") {
     base.background = { scripts: ["background.js"] };
