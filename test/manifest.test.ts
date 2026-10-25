@@ -417,7 +417,7 @@ test("page parsing does not wait for profile-state network hydration", () => {
   assert.match(parser, /applyStateEverywhere\(lemma, state\)/);
   assert.match(parser, /const DISCOVERY_SLICE_NODES = 300/);
   assert.match(parser, /scheduleIdle\(work\)/);
-  assert.match(parser, /texts: blocks\.map\(\(item\) => item\.text\)/);
+  assert.match(parser, /requestMarks\(blocks\.map\(\(item\) => item\.text\)/);
   assert.match(parser, /recordPerformance\("parse-render"/);
   const dictionary = readFileSync("src/common/offline-dictionary.ts", "utf8");
   assert.match(dictionary, /publicGenerationCache/);

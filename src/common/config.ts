@@ -68,6 +68,7 @@ export type Config = {
   scanModifier: ScanModifier; // which key (if any) opens the hover popup
   keybinds: Record<KeybindAction, Keybind>; // rebindable shortcuts (parse + grade/save/known)
   disabledHosts: string[]; // domains/patterns where the reader is turned off entirely
+  markHosts: string[]; // the reader's own sites to mark without being asked
   preferredDeckId: number | null; // connected mining target; null uses the server default
   posColoring: PosColoring;
   stateColoring: StateColoring;
@@ -139,6 +140,7 @@ export const DEFAULTS: Config = {
   scanModifier: "shift",
   keybinds: DEFAULT_KEYBINDS,
   disabledHosts: [],
+  markHosts: [],
   preferredDeckId: null,
   posColoring: "off",
   stateColoring: "underline",
@@ -202,6 +204,11 @@ export const pricingUrl = (apiBase: string, source: string): string =>
 // *and* SRS entitlement (Pro or school): matching require_srs_pro! on the API.
 // A free account still gets dictionary lookup and word coloring.
 export const isConnected = (config: Config): boolean => config.refreshToken.length > 0;
+// Marks are the account's half of the reader: the page's text goes to Shirabe to
+// be cut, so a signed-out reader, or one who kept page text on this device, sends
+// nothing and looks words up from the local dictionary alone.
+export const canMarkWords = (config: Config): boolean =>
+  isConnected(config) && config.scopes.includes("user:dictionary:read") && !config.localOnlyAnalysis;
 export const canWriteSrs = (config: Config): boolean =>
   config.scopes.includes("user:study:write") && config.entitled;
 

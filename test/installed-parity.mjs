@@ -186,9 +186,8 @@ try {
   assert.equal(parsed.tokens[0][0].entry, "jmdict:banana");
   assert.equal(parsed.tokens[0][0].surface, "ﾊﾞﾅﾅ");
   assert.equal(parsed.tokens[0][1].start, 4);
-  const enhanced = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatchOnline", texts: ["ﾊﾞﾅﾅ。"] }));
-  assert.equal(enhanced.accepted, true, JSON.stringify(enhanced));
-  assert.equal(enhanced.tokens[0][0].entry, "jmdict:banana");
+  const signedOut = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatchOnline", texts: ["バナナ。"] }));
+  assert.equal(signedOut.accepted, false, JSON.stringify(signedOut));
   const contextual = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatch",
     texts: ["学校にいった。", "先生にいった。", "「行く」と学校にいった。"] }));
   assert.equal(contextual.ok, true, JSON.stringify(contextual));
@@ -214,37 +213,13 @@ try {
   await article.waitForFunction(() => document.documentElement.hasAttribute("data-sb-marked"));
   await article.waitForTimeout(750);
   assert.equal(await article.locator("p .sb-word").count(), 0, "opening a page leaves its text untouched until explicitly parsed");
+  // Signed out: asking to mark a page offers an account, sends no page text, and
+  // leaves the text alone. Lookup is unaffected.
+  const beforeSignedOut = onlineParseRequests;
   await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "parsePage" }), tab.id);
-  try {
-    await article.locator(".sb-word[data-entry='jmdict:banana']").waitFor({ timeout: 15000 });
-  } catch (error) {
-    console.error(await article.content());
-    throw error;
-  }
-  const annotated = await article.locator(".sb-word").evaluate((word) => ({
-    surface: word.dataset.surface, lemma: word.dataset.lemma, entry: word.dataset.entry,
-  }));
-  assert.deepEqual(annotated, { surface: "ﾊﾞﾅﾅ", lemma: "バナナ", entry: "jmdict:banana" });
-  assert.equal(await article.locator("p").evaluate((element) => {
-    const clone = element.cloneNode(true);
-    clone.querySelectorAll("rt, rp").forEach((ruby) => ruby.remove());
-    return clone.textContent;
-  }), "ﾊﾞﾅﾅ。");
-  const word = article.locator(".sb-word");
-  await word.hover();
-  await article.locator(".sb-host .sb-visible").waitFor({ timeout: 15000 });
-  assert.equal(await word.getAttribute("data-entry"), "jmdict:banana");
-  assert.equal(await word.getAttribute("data-lemma"), "バナナ");
-  await verifyCardTheme(article, page);
-  parsePackRevision = "stale-pack";
-  const stale = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatchOnline", texts: ["ﾊﾞﾅﾅ。"] }));
-  assert.equal(stale.accepted, false);
-  assert.equal(await word.getAttribute("data-entry"), "jmdict:banana");
-  parsePackRevision = manifest.contentRevision;
-  const pickedWord = await word.evaluate((element) => ({
-    lemma: element.dataset.lemma, surface: element.dataset.surface, reading: element.dataset.reading, entry: element.dataset.entry,
-  }));
-  await verifyPageControls(context, id, article, tab.id, page);
+  await article.waitForTimeout(500);
+  assert.equal(await article.locator(".sb-word").count(), 0, "a signed-out page parse marks nothing");
+  assert.equal(onlineParseRequests, beforeSignedOut, `a signed-out reader sends no page text: ${JSON.stringify(onlineParseTexts)}`);
   await article.goto(`${origin.replace("127.0.0.1", "localhost")}/adverb`);
   await article.waitForFunction(() => document.documentElement.hasAttribute("data-sb-marked"));
   const rawWord = await article.locator("p").boundingBox();
@@ -253,13 +228,6 @@ try {
   await article.locator(".sb-host .sb-visible").waitFor({ timeout: 15000 });
   assert.equal(await article.locator(".sb-word").count(), 0, "hover lookup leaves the rest of the page untouched");
   await article.keyboard.press("Escape");
-  await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "parsePage" }), tab.id);
-  const adverbWord = article.locator(".sb-word[data-entry='jmdict:well']");
-  await adverbWord.waitFor({ timeout: 15000 });
-  assert.equal(await adverbWord.getAttribute("data-lemma"), "上手い");
-  assert.equal(await adverbWord.getAttribute("data-surface"), "上手く");
-  await adverbWord.hover();
-  await article.locator(".sb-host .sb-gloss-row:visible", { hasText: "well" }).waitFor({ timeout: 15000 });
 
   const beforeSubtitle = onlineParseRequests;
   await article.goto(`${origin.replace("127.0.0.1", "localhost")}/subtitle`);
@@ -268,10 +236,6 @@ try {
   await article.locator(".asbplayer-offscreen .sb-word[data-entry='jmdict:well']").waitFor({ timeout: 15000 });
   assert.equal(onlineParseRequests, beforeSubtitle, `live subtitle cues stay local: ${JSON.stringify(onlineParseTexts)}`);
 
-  await article.goto(`${origin.replace("127.0.0.1", "localhost")}/article`);
-  await article.waitForFunction(() => document.documentElement.hasAttribute("data-sb-marked"));
-  await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "parsePage" }), tab.id);
-  await article.locator(".sb-word[data-entry='jmdict:banana']").waitFor({ timeout: 15000 });
   const [subtitlePage] = await Promise.all([
     context.waitForEvent("page"),
     page.evaluate((url) => chrome.tabs.create({ url }), `${origin.replace("127.0.0.1", "localhost")}/subtitle`),
@@ -296,8 +260,59 @@ try {
   assert.equal(privateDownloadAuthorized, true);
   const personalParse = await page.evaluate(() => chrome.runtime.sendMessage({ type: "parseBatch", texts: ["ﾊﾞﾅﾅ。"] }));
   assert.equal(personalParse.tokens[0][0].entry, "my-kokugo:banana");
-  await article.locator(".sb-word[data-entry='my-kokugo:banana']").waitFor({ timeout: 15000 });
-  assert.equal(await article.locator(".sb-word[data-entry='jmdict:banana']").count(), 0);
+  // Signed in: the same command marks the page from the server's cut, and the card
+  // finds its entry in the local dictionary when it opens.
+  const beforeMarks = onlineParseRequests;
+  await article.goto(`${origin.replace("127.0.0.1", "localhost")}/article`);
+  await article.waitForFunction(() => document.documentElement.hasAttribute("data-sb-marked"));
+  await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "parsePage" }), tab.id);
+  const word = article.locator(".sb-word");
+  try {
+    await word.waitFor({ timeout: 15000 });
+  } catch (error) {
+    console.error(await article.content());
+    throw error;
+  }
+  assert.equal(onlineParseRequests, beforeMarks + 1, "the page went to the server once");
+  const annotated = await word.evaluate((element) => ({ surface: element.dataset.surface, lemma: element.dataset.lemma }));
+  assert.deepEqual(annotated, { surface: "ﾊﾞﾅﾅ", lemma: "バナナ" });
+  assert.equal(await article.locator("p").evaluate((element) => {
+    const clone = element.cloneNode(true);
+    clone.querySelectorAll("rt, rp").forEach((ruby) => ruby.remove());
+    return clone.textContent;
+  }), "ﾊﾞﾅﾅ。");
+  await word.hover();
+  await article.locator(".sb-host .sb-visible").waitFor({ timeout: 15000 });
+  assert.equal(await word.getAttribute("data-lemma"), "バナナ");
+  await verifyCardTheme(article, page);
+  const pickedWord = await word.evaluate((element) => ({
+    lemma: element.dataset.lemma, surface: element.dataset.surface, reading: element.dataset.reading, entry: element.dataset.entry,
+  }));
+  await article.keyboard.press("Escape");
+  await article.mouse.move(0, 0);
+
+  await verifyPageControls(context, id, article, tab.id, page);
+
+  // The card for a marked word finds its entry, and holding the second key scans
+  // the character under the pointer instead of opening the word it was cut into.
+  await article.goto(`${origin.replace("127.0.0.1", "localhost")}/adverb`);
+  await article.waitForFunction(() => document.documentElement.hasAttribute("data-sb-marked"));
+  await page.evaluate((tabId) => chrome.tabs.sendMessage(tabId, { command: "parsePage" }), tab.id);
+  const adverbWord = article.locator(".sb-word[data-lemma='上手い']");
+  await adverbWord.waitFor({ timeout: 15000 });
+  await adverbWord.hover();
+  await article.locator(".sb-host .sb-gloss-row:visible", { hasText: "well" }).waitFor({ timeout: 15000 });
+  await article.keyboard.press("Escape");
+  await article.mouse.move(0, 0);
+  const insideWord = await article.locator("p .sb-word").first().boundingBox();
+  assert.ok(insideWord);
+  await article.keyboard.down("Alt");
+  await article.mouse.move(insideWord.x + 2, insideWord.y + insideWord.height / 2);
+  await article.locator(".sb-host .sb-visible").waitFor({ timeout: 15000 });
+  await article.keyboard.up("Alt");
+  await article.keyboard.press("Escape");
+  await article.mouse.move(0, 0);
+
   await subtitlePage.locator(".asbplayer-offscreen .sb-word[data-entry='my-kokugo:banana']").waitFor({ timeout: 15000 });
   if (process.env.PARITY_SAVE_API) {
     const saveApi = new URL(process.env.PARITY_SAVE_API);

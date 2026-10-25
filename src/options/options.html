@@ -85,7 +85,7 @@
               <label class="frequency-field">Popup closes after (ms)<input id="popupHideDelay" type="number" min="0" max="5000" step="50" /></label>
               <div class="check-stack">
                 <label class="check-row"><input id="popupHideAutomatically" type="checkbox" /><span>Close the popup when the pointer leaves it (off keeps it open until you click away or press Escape)</span></label>
-                <label class="check-row"><input id="localOnlyAnalysis" type="checkbox" /><span>Keep page text on this device for parsing</span></label>
+                <label class="check-row"><input id="localOnlyAnalysis" type="checkbox" /><span>Keep page text on this device. Lookup still works, but words are not marked by what you know</span></label>
               </div>
 
               <h3 class="prefs-heading"><svg aria-hidden="true"><use href="#icon-volume" /></svg>Display and sound</h3>
@@ -186,6 +186,10 @@
               <label class="stacked">Sites that stay plain
                 <span class="field-hint">One host or pattern per line. Lookup keeps working; the page keeps its own ink.</span>
                 <textarea id="plainHosts" rows="3" spellcheck="false"></textarea>
+              </label>
+              <label class="stacked">Sites to mark without asking
+                <span class="field-hint">One host or pattern per line. Needs your Shirabe account: their text is sent to Shirabe to mark the words you know.</span>
+                <textarea id="markHosts" rows="3" spellcheck="false"></textarea>
               </label>
               <label class="stacked">Your CSS for words on the page
                 <span class="field-hint">Applied after ours. <code>.sb-word</code> is a word, <code>.sb-new</code> / <code>.sb-due</code> / <code>.sb-retired</code> its state.</span>

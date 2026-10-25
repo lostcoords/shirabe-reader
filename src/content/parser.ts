@@ -1,5 +1,6 @@
 import { send } from "../common/messages.js";
 import type { ParsedToken } from "../common/types.js";
+import { toast } from "./toast.js";
 import { applyStateEverywhere, rememberShownCut, renderToken } from "./word.js";
 
 // Keep in sync with offline-dictionary's Japanese character set so caption
@@ -20,7 +21,11 @@ let paused = false;
 
 // One background message covers many text nodes at once. The background returns
 // one token list per input, preserving offsets and keeping message overhead bounded.
-const BATCH_CHARS = 1900;
+const LOCAL_BATCH_CHARS = 1900;
+const MARK_REQUEST_CHARS = 500;
+const SCROLL_SETTLE_MS = 150;
+const MARKS_UNAVAILABLE = "Word marks are unavailable right now. Lookup still works.";
+const MARK_FAILURES_BEFORE_GIVING_UP = 3;
 const DISCOVERY_SLICE_NODES = 300;
 
 // Per-site options carried by a matched host rule.
@@ -56,13 +61,13 @@ function parseableTextNode(node: Node, filter?: string, caption = false): number
 }
 
 // Group nodes into batches whose combined text stays under the char cap.
-function batchNodes(nodes: Text[]): Text[][] {
+function batchNodes(nodes: Text[], limit: number): Text[][] {
   const batches: Text[][] = [];
   let current: Text[] = [];
   let length = 0;
   for (const node of nodes) {
     const size = (node.nodeValue ?? "").length + 1; // +1 rough per-element overhead
-    if (current.length && length + size > BATCH_CHARS) {
+    if (current.length && length + size > limit) {
       batches.push(current);
       current = [];
       length = 0;
@@ -84,57 +89,96 @@ async function parseBatch(nodes: Text[], showFurigana: boolean): Promise<void> {
   if (res.dictionaryInstalling) throw new Error("The offline dictionary is still installing.");
   if (paused || generation !== renderGeneration) return;
 
-  const rendered: Array<HTMLElement | null> = [];
-  res.tokens.forEach((tokens, i) => {
-    const node = nodes[i];
-    if (!node?.parentNode || node.nodeValue !== texts[i]) {
-      rendered[i] = null;
-      return;
-    }
-    const wrapper = buildWrapper(texts[i]!, tokens, showFurigana);
-    node.parentNode.replaceChild(wrapper, node);
-    rendered[i] = wrapper;
-  });
-  queueStateRefresh(res.tokens.flat());
-  void requestOnlineParse(texts).then((online) => {
-    if (!online || generation !== renderGeneration || paused) return;
-    online.forEach((tokens, index) => {
-      const wrapper = rendered[index];
-      if (!wrapper || !canReplaceOnline(wrapper, texts[index]!) || sameTokens(tokens, res.tokens[index] ?? [])) return;
-      wrapper.replaceWith(buildWrapper(texts[index]!, tokens, showFurigana));
-      queueStateRefresh(tokens);
-    });
-  });
+  renderNodes(nodes, texts, res.tokens, showFurigana);
 }
 
-async function requestOnlineParse(texts: string[]): Promise<ParsedToken[][] | null> {
-  if (!texts.length || texts.join("\n").length > 2_000) return null;
-  try {
-    const result = await send({ type: "parseBatchOnline", texts });
-    return result.ok && result.accepted ? result.tokens : null;
-  } catch {
-    return null;
+function renderNodes(nodes: Text[], texts: string[], tokens: ParsedToken[][], showFurigana: boolean): void {
+  tokens.forEach((list, i) => {
+    const node = nodes[i];
+    if (!node?.parentNode || node.nodeValue !== texts[i]) return;
+    node.parentNode.replaceChild(buildWrapper(texts[i]!, list, showFurigana), node);
+  });
+  queueStateRefresh(tokens.flat());
+}
+
+// Thrown when Shirabe will not cut this text now. `retryAfter` is its own answer
+// to "when?", in seconds; without one the reader is offline or the server failed.
+class MarksUnavailable extends Error {
+  constructor(readonly retryAfter?: number) {
+    super("Word marks are unavailable.");
   }
 }
 
-export function canReplaceOnline(wrapper: HTMLElement, source: string): boolean {
-  if (!wrapper.isConnected || sourceText(wrapper) !== source) return false;
-  if (wrapper.querySelector(".sb-word[data-sb-entry-picked]")) return false;
-  if (wrapper.querySelector(".sb-word:hover, .sb-word:focus")) return false;
-  return !document.querySelector<HTMLElement>(".sb-host")?.shadowRoot?.querySelector(".sb-popup.sb-visible");
+// Cut at sentence ends, so a long paragraph stays under the size Shirabe answers
+// straight away. The pieces rebuild the text exactly.
+export function splitForMarks(text: string, limit = MARK_REQUEST_CHARS): string[] {
+  const pieces: string[] = [];
+  let start = 0;
+  while (text.length - start > limit) {
+    let end = start + limit;
+    for (let at = end - 1; at > start; at -= 1) {
+      if (SENTENCE_BOUNDARY.test(text[at]!)) {
+        end = at + 1;
+        break;
+      }
+    }
+    const low = text.charCodeAt(end);
+    if (end === start + limit && low >= 0xdc00 && low <= 0xdfff) end -= 1; // never halve a surrogate pair
+    pieces.push(text.slice(start, end));
+    start = end;
+  }
+  pieces.push(text.slice(start));
+  return pieces;
 }
 
-function sameTokens(a: ParsedToken[], b: ParsedToken[]): boolean {
-  return a.length === b.length && a.every((token, index) => {
-    const local = b[index];
-    return local && token.start === local.start && token.length === local.length && token.entry === local.entry &&
-      token.lemma === local.lemma && token.reading === local.reading && token.pos === local.pos &&
-      token.kind === local.kind && JSON.stringify(token.inflection ?? []) === JSON.stringify(local.inflection ?? []) &&
-      token.inflectionBase === local.inflectionBase &&
-      JSON.stringify(token.groups ?? []) === JSON.stringify(local.groups ?? []);
+let markRequests: Promise<unknown> = Promise.resolve();
+
+// One request at a time per tab, so a long page waits its turn instead of holding
+// several of Shirabe's workers. Returns null when nothing on screen wants the
+// answer any more: the rest is never sent, and scrolling back asks again.
+export async function requestMarks(texts: string[], wanted: () => boolean = () => true): Promise<ParsedToken[][] | null> {
+  const pieces = texts.flatMap((text, textIndex) => {
+    let offset = 0;
+    return splitForMarks(text).map((piece) => {
+      const located = { piece, textIndex, offset };
+      offset += piece.length;
+      return located;
+    });
   });
+  const requests: Array<typeof pieces> = [];
+  let chars = 0;
+  for (const piece of pieces) {
+    if (!requests.length || chars + piece.piece.length > MARK_REQUEST_CHARS) {
+      requests.push([]);
+      chars = 0;
+    }
+    requests.at(-1)!.push(piece);
+    chars += piece.piece.length;
+  }
+
+  const results: ParsedToken[][] = texts.map(() => []);
+  for (const request of requests) {
+    const turn = markRequests.then(async () => {
+      if (!wanted()) return null;
+      return send({ type: "parseBatchOnline", texts: request.map((item) => item.piece) });
+    });
+    markRequests = turn.catch(() => undefined);
+    const response = await turn;
+    if (response === null) return null;
+    if (!response.ok || !response.accepted) throw new MarksUnavailable(response.ok ? response.retryAfter : undefined);
+    request.forEach((item, index) => {
+      results[item.textIndex]!.push(...(response.tokens[index] ?? []).map((token) => shiftToken(token, item.offset)));
+    });
+  }
+  return results;
 }
 
+function shiftToken(token: ParsedToken, offset: number): ParsedToken {
+  if (!offset) return token;
+  return { ...token, start: token.start + offset,
+    ...(token.components ? { components: token.components.map((part) => ({
+      ...part, start: part.start + offset, end: part.end + offset })) } : {}) };
+}
 
 // The cut ONE sentence carried, as the page drew it, memoised per sentence so a
 // twenty-word line builds one array rather than twenty. Sliced out of the token
@@ -254,7 +298,7 @@ export async function parse(root: Node, showFurigana: boolean, opts: ParseOption
   const nodes = collectTextNodes(root, opts.filter);
   // Sequential outer batches keep request size and rendered memory bounded. A
   // failed batch doesn't sink the rest.
-  for (const batch of batchNodes(nodes)) {
+  for (const batch of batchNodes(nodes, LOCAL_BATCH_CHARS)) {
     try {
       await parseBatch(batch, showFurigana);
     } catch (err) {
@@ -262,6 +306,20 @@ export async function parse(root: Node, showFurigana: boolean, opts: ParseOption
     }
   }
   return nodes.length;
+}
+
+// A selection the reader asked to mark, now. A failure leaves the text as it was.
+export async function markSelection(root: Node, showFurigana: boolean, opts: ParseOptions = {}): Promise<void> {
+  if (paused) return;
+  const generation = renderGeneration;
+  const nodes = collectTextNodes(root, opts.filter);
+  const texts = nodes.map((node) => node.nodeValue ?? "");
+  try {
+    const tokens = await requestMarks(texts);
+    if (tokens && !paused && generation === renderGeneration) renderNodes(nodes, texts, tokens, showFurigana);
+  } catch {
+    toast(MARKS_UNAVAILABLE, false);
+  }
 }
 
 // The active <video>'s current time in milliseconds, or null when the frame has
@@ -381,11 +439,8 @@ const pendingBlocks = new Set<HTMLElement>();
 const visibleBlocks = new Set<HTMLElement>();
 // In-flight lazy batches, so a block that scrolls out of view can cancel the
 // background lookups for its batch once none of the batch's blocks are visible.
-let parseRequestSeq = 0;
-const batchBlocks = new Map<number, Set<HTMLElement>>(); // requestId → the batch's blocks
-const blockRequest = new Map<HTMLElement, number>(); // block → its in-flight requestId
-const cancelledRequests = new Set<number>(); // requestIds we've told the worker to drop
-let blockFlushFrame = 0;
+let blockFlushTimer = 0;
+let markFailures = 0;
 const pendingStateLemmas = new Set<string>();
 let stateRefreshFrame = 0;
 let renderGeneration = 0;
@@ -486,21 +541,13 @@ function onIntersect(entries: IntersectionObserverEntry[]): void {
 function enterBlock(block: HTMLElement): void {
   if (paused || block.dataset[LAZY_BLOCK_FLAG] || pendingBlocks.has(block) || queuedBlocks.has(block)) return;
   queuedBlocks.add(block);
-  if (!blockFlushFrame) blockFlushFrame = requestAnimationFrame(() => void flushQueuedBlocks());
+  // Wait for the scroll to settle: blocks passed on the way are never sent.
+  window.clearTimeout(blockFlushTimer);
+  blockFlushTimer = window.setTimeout(() => void flushQueuedBlocks(), SCROLL_SETTLE_MS);
 }
 
 function exitBlock(block: HTMLElement): void {
   queuedBlocks.delete(block);
-  // If the block's batch is still in flight and none of its blocks are visible
-  // any more, cancel the remaining background lookups: nothing on screen needs
-  // them, and they'll re-parse if the reader scrolls back.
-  const requestId = blockRequest.get(block);
-  if (requestId === undefined || cancelledRequests.has(requestId)) return;
-  const members = batchBlocks.get(requestId);
-  if (members && ![...members].some((member) => visibleBlocks.has(member))) {
-    cancelledRequests.add(requestId);
-    void send({ type: "cancelParse", requestId }).catch(() => undefined);
-  }
 }
 
 export function setParsingPaused(value: boolean): void {
@@ -511,8 +558,7 @@ export function setParsingPaused(value: boolean): void {
     return;
   }
   queuedBlocks.clear();
-  cancelAnimationFrame(blockFlushFrame);
-  blockFlushFrame = 0;
+  window.clearTimeout(blockFlushTimer);
 }
 
 export function resetParsedPage(root: Document | Element = document): void {
@@ -547,7 +593,6 @@ function prepareBlock(block: HTMLElement): PreparedBlock | null {
 }
 
 async function flushQueuedBlocks(): Promise<void> {
-  blockFlushFrame = 0;
   const prepared = [...queuedBlocks]
     .filter((block) => block.isConnected && visibleBlocks.has(block) && !block.dataset[LAZY_BLOCK_FLAG])
     .map(prepareBlock)
@@ -557,7 +602,7 @@ async function flushQueuedBlocks(): Promise<void> {
   let batch: PreparedBlock[] = [];
   let chars = 0;
   for (const block of prepared) {
-    if (batch.length && chars + block.text.length > BATCH_CHARS) {
+    if (batch.length && chars + block.text.length > MARK_REQUEST_CHARS) {
       runBlockBatch(batch);
       batch = [];
       chars = 0;
@@ -570,8 +615,14 @@ async function flushQueuedBlocks(): Promise<void> {
 
 function runBlockBatch(blocks: PreparedBlock[]): void {
   void parseBlockBatch(blocks).catch((error) => {
-    console.warn("[Shirabe] lazy parse failed:", error);
-    scheduleBlockRetry(blocks, 250);
+    const retryAfter = error instanceof MarksUnavailable ? error.retryAfter : undefined;
+    if (retryAfter) return scheduleBlockRetry(blocks, retryAfter * 1000);
+
+    // Offline or failing: the page stays readable and lookup stays local, so stop
+    // asking after a few tries rather than retrying for as long as it stays open.
+    markFailures += 1;
+    if (markFailures === 1) toast(MARKS_UNAVAILABLE, false);
+    if (markFailures < MARK_FAILURES_BEFORE_GIVING_UP) scheduleBlockRetry(blocks, markFailures * 15_000);
   });
 }
 
@@ -584,71 +635,33 @@ function scheduleBlockRetry(blocks: PreparedBlock[], delay: number): void {
 }
 
 async function parseBlockBatch(blocks: PreparedBlock[]): Promise<void> {
-  const requestId = ++parseRequestSeq;
-  batchBlocks.set(requestId, new Set(blocks.map((item) => item.block)));
-  for (const item of blocks) {
-    pendingBlocks.add(item.block);
-    blockRequest.set(item.block, requestId);
-  }
+  for (const item of blocks) pendingBlocks.add(item.block);
   const startedAt = performance.now();
   const generation = renderGeneration;
   try {
-    const response = await send({ type: "parseBatch", texts: blocks.map((item) => item.text), requestId });
-    if (!response.ok) throw new Error(response.error);
-    if (response.dictionaryInstalling) {
-      scheduleBlockRetry(blocks, 2_000);
-      return;
-    }
-    // Reverted (full page revert) or fully cancelled (whole batch scrolled off).
-    if (generation !== renderGeneration || cancelledRequests.has(requestId)) return;
-    const rendered = new Map<PreparedBlock, HTMLElement[]>();
+    const tokens = await requestMarks(blocks.map((item) => item.text),
+      () => blocks.some((item) => visibleBlocks.has(item.block)));
+    if (!tokens || paused || generation !== renderGeneration) return;
+    markFailures = 0;
     blocks.forEach((item, blockIndex) => {
       // A block that scrolled out of view mid-flight is left observed (not flagged
       // parsed) so it re-parses if the reader scrolls back: no wasted render now.
       if (!item.block.isConnected || !visibleBlocks.has(item.block)) return;
-      const tokens = response.tokens[blockIndex] ?? [];
+      const blockTokens = tokens[blockIndex] ?? [];
       const replacements = item.nodes.map((node, index) =>
-        mappedWrapper(node.nodeValue ?? "", item.starts[index], item.text, tokens, lazyShowFurigana));
+        mappedWrapper(node.nodeValue ?? "", item.starts[index], item.text, blockTokens, lazyShowFurigana));
       item.nodes.forEach((node, index) => {
         if (node.parentNode) node.parentNode.replaceChild(replacements[index], node);
       });
-      rendered.set(item, replacements);
       item.block.dataset[LAZY_BLOCK_FLAG] = "1";
       io?.unobserve(item.block);
-      queueStateRefresh(tokens);
-    });
-    void requestOnlineParse(blocks.map((item) => item.text)).then((online) => {
-      if (!online || generation !== renderGeneration || paused) return;
-      blocks.forEach((item, blockIndex) => {
-        const wrappers = rendered.get(item);
-        const tokens = online[blockIndex] ?? [];
-        if (!wrappers || !item.block.isConnected || !visibleBlocks.has(item.block) ||
-            sameTokens(tokens, response.tokens[blockIndex] ?? [])) return;
-        if (!wrappers.every((wrapper, index) => canReplaceOnline(wrapper, item.nodes[index]?.nodeValue ?? ""))) return;
-        wrappers.forEach((wrapper, index) => wrapper.replaceWith(mappedWrapper(
-          item.nodes[index]?.nodeValue ?? "", item.starts[index]!, item.text, tokens, lazyShowFurigana)));
-        queueStateRefresh(tokens);
-      });
+      queueStateRefresh(blockTokens);
     });
     recordPerformance("parse-render", startedAt, {
       blocks: blocks.length, chars: blocks.reduce((sum, item) => sum + item.text.length, 0),
     });
   } finally {
-    for (const item of blocks) {
-      pendingBlocks.delete(item.block);
-      blockRequest.delete(item.block);
-    }
-    batchBlocks.delete(requestId);
-    cancelledRequests.delete(requestId);
-    // A block can scroll back into view while its batch is still in flight: the
-    // intersection fires, but `enterBlock` ignores it because the block is still
-    // pending. Once the batch settles (cancelled, reverted, or a block that was
-    // off-screen at render time) nothing re-queues it, and IntersectionObserver
-    // will not fire again for a block that is already intersecting: the paragraph
-    // stays blank until the reader scrolls it out and back. Re-queue here instead.
-    for (const item of blocks) {
-      if (visibleBlocks.has(item.block) && !item.block.dataset[LAZY_BLOCK_FLAG]) enterBlock(item.block);
-    }
+    for (const item of blocks) pendingBlocks.delete(item.block);
   }
 }
 

@@ -1,6 +1,6 @@
-import { ApiError, ShirabeApi, type Tokens } from "../common/api.js";
+import { ApiError, ParseRefused, ShirabeApi, type Tokens } from "../common/api.js";
 import { ext, usesPromiseMessageResponses } from "../common/browser.js";
-import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config } from "../common/config.js";
+import { canMarkWords, canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config } from "../common/config.js";
 import { glossLanguagesFrom } from "@shirabe-org/card/word-card/languages";
 import { isR2AudioUrl } from "@shirabe-org/card/word-card/audio";
 import { refreshRemoteHostRules } from "../common/host-rules.js";
@@ -247,25 +247,19 @@ ext.tabs.onRemoved.addListener((tabId) => tabMetrics.delete(tabId));
 async function handle(request: Request, senderTabId?: number, senderWindowId?: number): Promise<Response> {
   await ready;
   switch (request.type) {
-    case "cancelParse":
-      cancelLocalParse(request.requestId);
-      return { ok: true, type: "cancelParse" };
     case "parseBatch": {
-      const control = { cancelled: false };
-      if (request.requestId != null) activeParses.set(request.requestId, control);
       try {
-        const tokens = await parseBatchLocal(request.texts, control);
+        const tokens = await parseBatchLocal(request.texts);
         return { ok: true, type: "parseBatch", tokens };
       } catch (error) {
         captureMeasurement("parse_failed", 1);
         throw error;
-      } finally {
-        if (request.requestId != null) activeParses.delete(request.requestId);
       }
     }
     case "parseBatchOnline": {
-      const tokens = await parseBatchOnline(request.texts);
-      return { ok: true, type: "parseBatchOnline", accepted: tokens !== null, tokens: tokens ?? [] };
+      const { tokens, retryAfter } = await parseBatchOnline(request.texts);
+      return { ok: true, type: "parseBatchOnline", accepted: tokens !== null, tokens: tokens ?? [],
+        ...(retryAfter ? { retryAfter } : {}) };
     }
     case "lookup": {
       try {
@@ -461,55 +455,29 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
   }
 }
 
-// Live parse controls keyed by the content script's requestId, so a `cancelParse`
-// message can stop the worker between text nodes. Only holds in-flight requests :
-// each entry is removed the moment its parse settles, so a late cancel is a no-op
-// and nothing leaks.
-const activeParses = new Map<number, { cancelled: boolean }>();
-
-export function cancelLocalParse(requestId: number): void {
-  const control = activeParses.get(requestId);
-  if (control) control.cancelled = true;
-}
-
-async function parseBatchOnline(texts: string[]): Promise<ParsedToken[][] | null> {
-  if (config.localOnlyAnalysis || !texts.length || texts.join("\n").length > 2_000) return null;
+// The word's entry is found when its card opens (`lookupSpan`), from the local
+// dictionary, so a pack older than the server's dictionary still gets its marks.
+async function parseBatchOnline(texts: string[]): Promise<{ tokens: ParsedToken[][] | null; retryAfter?: number }> {
+  if (!canMarkWords(config) || !texts.length) return { tokens: null };
   const startedAt = performance.now();
-  let parsed: Awaited<ReturnType<ShirabeApi["parseWithProvenance"]>>;
   try {
-    const installed = await dictionaryStatus();
-    parsed = await api.parseWithProvenance(texts, installed.activeSources);
-  } catch {
-    return null;
+    const { tokens } = await api.parseWithProvenance(texts);
+    recordBackgroundPerformance("online-parse", startedAt, {
+      texts: texts.length,
+      chars: texts.reduce((sum, text) => sum + text.length, 0),
+      tokens: tokens.reduce((sum, list) => sum + list.length, 0),
+    });
+    return { tokens };
+  } catch (error) {
+    return { tokens: null, retryAfter: error instanceof ParseRefused ? error.retryAfter : undefined };
   }
-  const installed = await dictionaryStatus();
-  if (!matchingOnlineParse(parsed, installed)) return null;
-  const lists = await Promise.all(parsed.tokens.map(async (tokens, index) => Promise.all(tokens.map(async (token, tokenIndex) => {
-    const resolved = await resolveParsedSpan(texts[index]!, token, tokens[tokenIndex - 1]);
-    return { ...token, entry: resolved.entry, groups: resolved.groups,
-      ...(resolved.candidates.length > 1 ? { candidates: resolved.candidates } : {}) };
-  }))));
-  if (!matchingOnlineParse(parsed, await dictionaryStatus())) return null;
-  recordBackgroundPerformance("online-parse", startedAt, {
-    texts: texts.length,
-    chars: texts.reduce((sum, text) => sum + text.length, 0),
-    tokens: lists.reduce((sum, list) => sum + list.length, 0),
-  });
-  return lists;
 }
 
-function matchingOnlineParse(parsed: { packRevision: string; sources: string[]; stackFingerprint: string },
-  installed: Awaited<ReturnType<typeof dictionaryStatus>>): boolean {
-  return parsed.packRevision === installed.publicRevision &&
-    JSON.stringify(parsed.sources) === JSON.stringify(installed.activeSources) &&
-    (!isConnected(config) || parsed.stackFingerprint === installed.stackFingerprint);
-}
-
-async function parseBatchLocal(texts: string[], control?: { cancelled: boolean }): Promise<ParsedToken[][]> {
+async function parseBatchLocal(texts: string[]): Promise<ParsedToken[][]> {
   const startedAt = performance.now();
   const lists: ParsedToken[][] = [];
   for (const text of texts) {
-    lists.push(control?.cancelled ? [] : await parseOffline(text, config.languages, config.apiBase));
+    lists.push(await parseOffline(text, config.languages, config.apiBase));
   }
   recordBackgroundPerformance("local-parse", startedAt, {
     texts: texts.length,

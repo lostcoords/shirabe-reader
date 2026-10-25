@@ -62,6 +62,7 @@ const prefs = {
 
 const advanced = {
   plainHosts: $<HTMLTextAreaElement>("plainHosts"),
+  markHosts: $<HTMLTextAreaElement>("markHosts"),
   customWordCss: $<HTMLTextAreaElement>("customWordCss"),
   customPopupCss: $<HTMLTextAreaElement>("customPopupCss"),
 };
@@ -107,6 +108,7 @@ loadConfig().then((loaded) => {
   prefs.markFrequent.checked = config.markFrequent;
   prefs.markFrequentMax.value = String(config.markFrequentMax);
   advanced.plainHosts.value = config.plainHosts.join("\n");
+  advanced.markHosts.value = config.markHosts.join("\n");
   advanced.customWordCss.value = config.customWordCss;
   advanced.customPopupCss.value = config.customPopupCss;
   prefs.mineSentenceAudio.checked = config.mineSentenceAudio;
@@ -459,6 +461,7 @@ $<HTMLFormElement>("advancedPrefs").addEventListener("change", async (event) => 
   await patch({
     errorReports: prefs.errorReports.checked,
     plainHosts: advanced.plainHosts.value.split("\n").map((line) => line.trim()).filter(Boolean),
+    markHosts: advanced.markHosts.value.split("\n").map((line) => line.trim()).filter(Boolean),
     customWordCss: advanced.customWordCss.value,
     customPopupCss: advanced.customPopupCss.value,
   });

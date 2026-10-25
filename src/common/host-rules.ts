@@ -14,6 +14,7 @@ export type HostRule = {
   allFrames?: boolean; // parse sub-frames (video/iframe overlays)
   collapseWhitespace?: boolean; // fold newlines for OCR/manga readers
   custom?: "youtube" | "netflix" | "mokuro"; // dedicated dynamic surfaces
+  marks?: boolean; // a reading app: mark it for a registered reader without asking
 };
 
 // How the current page should behave. `rule` carries site-specific selectors
@@ -35,10 +36,10 @@ export const BUILTIN_RULES: HostRule[] = [
   { host: __SHIRABE_OFF_HOSTS__, mode: "off" },
   // ── Dedicated reader apps (reading JP is the whole point) ──
   { host: ["*://reader.mokuro.app/*", "*://*.mokuro.app/*"], custom: "mokuro", collapseWhitespace: true }, // Mokuro manga OCR
-  { host: "*://app.readwok.com/*" },
-  { host: "*://app.yatsu.moe/*" },
-  { host: "*://*.satorireader.com/articles/*" },
-  { host: "*://*.aozora.gr.jp/*", parse: ".main_text" }, // Aozora Bunko
+  { host: "*://app.readwok.com/*", marks: true },
+  { host: "*://app.yatsu.moe/*", marks: true },
+  { host: "*://*.satorireader.com/articles/*", marks: true },
+  { host: "*://*.aozora.gr.jp/*", parse: ".main_text", marks: true }, // Aozora Bunko
   { host: "*://bunpro.jp/*" },
   // ── Common Japanese sites ──
   { host: ["*://ja.wikipedia.org/*", "*://ja.m.wikipedia.org/*"], parse: "#mw-content-text", filter: ".navbox, .reference, .mw-editsection" },
@@ -137,6 +138,10 @@ export function resolveHostMode(
   if (autoRule) return { mode: "auto", rule: autoRule };
 
   return { mode: "auto" };
+}
+
+export function marksWithoutAsking(url: string, rule: HostRule | undefined, markHosts: string[]): boolean {
+  return !!rule?.marks || markHosts.some((pattern) => matchUrl(normalizePattern(pattern), url));
 }
 
 function sameOrigin(a: string, b: string): boolean {

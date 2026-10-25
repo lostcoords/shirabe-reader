@@ -71,9 +71,8 @@ export type Status = {
 export type Request =
   // `requestId` lets the content script cancel a batch whose blocks all scrolled
   // out of view before the online parse finished.
-  | { type: "parseBatch"; texts: string[]; requestId?: number }
+  | { type: "parseBatch"; texts: string[] }
   | { type: "parseBatchOnline"; texts: string[] }
-  | { type: "cancelParse"; requestId: number }
   // Words and kanji are separate corpora, as on the web: a word search never
   // answers with a kanji. `kind: "kanji"` is the explicit kanji-breakdown path.
   | { type: "lookup"; query: string; kind?: "word" | "kanji" }
@@ -132,8 +131,7 @@ export type Request =
 
 export type Response =
   | { ok: true; type: "parseBatch"; tokens: ParsedToken[][]; dictionaryInstalling?: boolean }
-  | { ok: true; type: "parseBatchOnline"; accepted: boolean; tokens: ParsedToken[][] }
-  | { ok: true; type: "cancelParse" }
+  | { ok: true; type: "parseBatchOnline"; accepted: boolean; tokens: ParsedToken[][]; retryAfter?: number }
   | { ok: true; type: "lookup"; definition: Definition | null; dictionaryInstalling?: boolean }
   | { ok: true; type: "lookupEntry"; definition: Definition | null }
   | { ok: true; type: "lookupParsed"; definition: Definition | null; alternatives: Definition[] }

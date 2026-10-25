@@ -188,15 +188,15 @@ test("segmentation corpus", async (context) => {
         for (const stack of STACKS) {
           const results = report.results.filter((row: { stack: string }) => row.stack === stack.name);
           assert.equal(results.length, report.cases, `backend report must cover ${stack.name}`);
-          globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-            assert.deepEqual((await new Request(_input, init).json()).sources, stack.sources, "online extension must request the active stack");
+          globalThis.fetch = (async () => {
             return Response.json({
               packRevision: "b".repeat(16), stackFingerprint: "a".repeat(16), sources: stack.sources,
               results: results.map((row: { text: string; tokens: unknown[] }) => ({ text: row.text, tokens: row.tokens })),
             });
           }) as typeof fetch;
-          const parsed = await new ShirabeApi({ ...DEFAULTS, languages: stack.languages, apiBase: "https://shirabe.test" })
-            .parseWithProvenance(results.map((row: { text: string }) => row.text), stack.sources);
+          const parsed = await new ShirabeApi({ ...DEFAULTS, languages: stack.languages, apiBase: "https://shirabe.test", accessToken: "access", refreshToken: "refresh",
+            accessTokenExpiresAt: "2999-01-01T00:00:00Z", scopes: ["user:dictionary:read"] })
+            .parseWithProvenance(results.map((row: { text: string }) => row.text));
           results.forEach((row: { text: string }, index: number) => webTokens.set(`${stack.name}\0${row.text}`, parsed.tokens[index]!));
         }
       } finally {

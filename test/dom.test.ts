@@ -39,17 +39,6 @@ test("page scanning sends Japanese widths unchanged without scanning Latin-only 
   }
 });
 
-test("an online parse does not replace a word whose alternative the reader chose", async () => {
-  const window = installDom("<p id='line'></p>");
-  const { buildWrapper, canReplaceOnline } = await import("../src/content/parser.js");
-  const wrapper = buildWrapper("あめ", [{ start: 0, length: 2, surface: "あめ", lemma: "あめ",
-    reading: "あめ", entry: "jmdict:rain", pos: "noun", content: true, state: "none" }], false);
-  window.document.getElementById("line")!.append(wrapper);
-  assert.equal(canReplaceOnline(wrapper, "あめ"), true);
-  (wrapper.querySelector(".sb-word") as HTMLElement).dataset.sbEntryPicked = "1";
-  assert.equal(canReplaceOnline(wrapper, "あめ"), false);
-});
-
 test("a caption that grows word by word keeps the moment it first appeared", async () => {
   // Auto-generated captions roll a line in one word at a time, and every added
   // word is another parse. Re-stamping each time walks the line's start forward
@@ -301,6 +290,8 @@ test("a block that scrolls back mid-flight still parses once its batch settles",
       await tick();
       while (frames.length) { const run = frames.shift(); run?.(); await tick(); }
     }
+    await new Promise((resolve) => { setTimeout(resolve, 200); }); // past the wait for scrolling to settle
+    await tick();
   };
 
   const { ext } = await import("../src/common/browser.js");
@@ -308,14 +299,14 @@ test("a block that scrolls back mid-flight still parses once its batch settles",
   let release: (() => void) | null = null;
   let held = false;
   ext.runtime.sendMessage = async (message: { type: string; texts?: string[] }) => {
-    if (message.type !== "parseBatch") return { ok: true, states: {} };
+    if (message.type !== "parseBatchOnline") return { ok: true, states: {} };
     // Hold only the FIRST batch open, so the test can scroll away and back while
     // it is in flight. The re-queued batch must be free to complete.
     if (!held) {
       held = true;
       await new Promise<void>((resolve) => { release = resolve; });
     }
-    return { ok: true, tokens: (message.texts ?? []).map(() => []) };
+    return { ok: true, accepted: true, tokens: (message.texts ?? []).map(() => []) };
   };
 
   try {

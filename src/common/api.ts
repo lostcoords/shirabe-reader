@@ -1,11 +1,17 @@
-import { isConnected, type Config } from "./config.js";
-import { createShirabeClient, ShirabePublicClient, ShirabePublicApiError, type PublicAuthorization, type PublicCredentials, type ShirabeScope, type WordStateEntry } from "@shirabe-org/api";
+import type { Config } from "./config.js";
+import { ShirabePublicClient, ShirabePublicApiError, type PublicAuthorization, type PublicCredentials, type ShirabeScope, type WordStateEntry } from "@shirabe-org/api";
 import { glossLanguagesFrom, type GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import { cardWordState } from "@shirabe-org/card/word-card/types";
 import type { ParsedToken, WordState } from "./types.js";
 import type { Deck, GradeResult, IntervalPreviews, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
 
 export { ShirabePublicApiError as ApiError };
+
+export class ParseRefused extends Error {
+  constructor(readonly retryAfter: number) {
+    super(`Shirabe asked to wait ${retryAfter}s before the next parse.`);
+  }
+}
 const ApiError = ShirabePublicApiError;
 
 // Dictionary lookup is public and local, so connecting must never ask for it.
@@ -42,13 +48,11 @@ function entryHandle(entry?: string): { dictionarySlug: string; sourceId: string
 
 export class ShirabeApi {
   private oauth: ShirabePublicClient;
-  private config: Config;
 
   constructor(
     config: Config,
     hooks: { onTokens?: (tokens: Tokens) => Promise<void>; onSignedOut?: () => Promise<void> } = {},
   ) {
-    this.config = config;
     this.oauth = new ShirabePublicClient({
       baseUrl: config.apiBase,
       clientId: OAUTH_CLIENT_ID,
@@ -60,7 +64,6 @@ export class ShirabeApi {
   }
 
   update(config: Config): void {
-    this.config = config;
     this.oauth.update(config.apiBase, config);
   }
 
@@ -124,12 +127,16 @@ export class ShirabeApi {
     return (await this.parseWithProvenance(texts)).tokens;
   }
 
-  async parseWithProvenance(texts: string[], sources: string[] = []): Promise<{ tokens: ParsedToken[][]; packRevision: string; stackFingerprint: string; sources: string[] }> {
-    const connected = isConnected(this.config) && this.config.scopes.includes("user:dictionary:read");
-    const body = { texts, ...(!connected && sources.length ? { sources } : {}) };
-    const response = connected
-      ? await this.oauth.request((client) => client.parse(body))
-      : await this.publicParse(body);
+  async parseWithProvenance(texts: string[]): Promise<{ tokens: ParsedToken[][]; packRevision: string; stackFingerprint: string; sources: string[] }> {
+    let retryAfter = 0;
+    const response = await this.oauth.request(async (client) => {
+      const result = await client.parse({ texts });
+      retryAfter = Number(result.response?.headers.get("retry-after")) || 0;
+      return result;
+    }).catch((error: unknown) => {
+      if (retryAfter > 0) throw new ParseRefused(retryAfter);
+      throw error;
+    });
     if (!("results" in response)) throw new ApiError("Shirabe queued this parse instead of returning it.", 202);
     const tokens = response.results.map(({ tokens }) => tokens.map((token) => ({
       start: token.startOffset,
@@ -147,13 +154,6 @@ export class ShirabeApi {
       state: cardWordState(token.study?.state),
     })));
     return { tokens, packRevision: response.packRevision, stackFingerprint: response.stackFingerprint, sources: response.sources };
-  }
-
-  private async publicParse(body: { texts: string[]; sources?: string[] }) {
-    const client = createShirabeClient({ baseUrl: this.config.apiBase });
-    const { data, error, response } = await client.parse(body);
-    if (!data) throw new ApiError(error instanceof Error ? error.message : "The parser failed.", response?.status ?? 0);
-    return data;
   }
 
   // Set a word's state directly: "retired" parks it as learned, "reviewing" brings

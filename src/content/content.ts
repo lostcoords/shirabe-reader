@@ -1,6 +1,6 @@
 import { ext } from "../common/browser.js";
-import { canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config, type ScanModifier } from "../common/config.js";
-import { loadHostRules, matchUrl, normalizePattern, resolveHostMode, type HostRule } from "../common/host-rules.js";
+import { canMarkWords, canWriteSrs, DEFAULTS, isConnected, loadConfig, onConfigChanged, saveConfig, type Config, type ScanModifier } from "../common/config.js";
+import { loadHostRules, marksWithoutAsking, matchUrl, normalizePattern, resolveHostMode, type HostRule } from "../common/host-rules.js";
 import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
 
 // The actions that need a word under the pointer, which is every one that is not
@@ -8,7 +8,7 @@ import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
 type WordAction = Exclude<KeybindAction, "parse" | "highlighting">;
 import { send } from "../common/messages.js";
 import { grade, markKnown, REVIEW_IN_READER, save, type Outcome } from "./actions.js";
-import { observeLazy, parse, resetParsedPage, setParsingPaused } from "./parser.js";
+import { markSelection, observeLazy, resetParsedPage, setParsingPaused } from "./parser.js";
 import { refreshMetrics, setMetricsOptions, startMetrics, stopMetrics } from "./metrics-reporter.js";
 import { setSentenceAudioEnabled } from "./sentence-audio.js";
 import { forgetOpenCue, setCueSource } from "./cues.js";
@@ -150,6 +150,7 @@ function boot(): void {
     }
 
     if (mode === "auto" && !parsed && rule?.custom) startCustomParser(rule.custom);
+    else if (mode === "auto" && !parsed && canMarkWords(config) && marksWithoutAsking(location.href, rule, config.markHosts)) parsePage();
   }
 
   function startCustomParser(custom: NonNullable<HostRule["custom"]>): void {
@@ -217,12 +218,19 @@ function boot(): void {
     }
   }
 
+  // The way out of a wrong cut: with a second key held, the scan starts at the
+  // character under the pointer and ignores the word the page was cut into.
+  const SCAN_SKIP_INSIDE_WORD = ".sb-host, input, textarea, select, [contenteditable='true']";
+  function scanInsideWord(e: Mods): boolean {
+    return wantPopup(e) && (scanModifier === "alt" ? e.shiftKey : e.altKey);
+  }
+
   document.addEventListener("mouseover", (e) => {
     if (mode === "off") return;
     const word = (e.target as Element | null)?.closest?.(".sb-word");
     if (word instanceof HTMLElement) {
       hovered = word;
-      if (wantPopup(e)) {
+      if (wantPopup(e) && !scanInsideWord(e)) {
         if (scanModifier === "none") scheduleShow(word);
         else showNow(word);
       }
@@ -257,7 +265,8 @@ function boot(): void {
   // dictionary can answer, and not unless the reader's scan modifier is held.
   function scanPointer(event: MouseEvent, force = false): void {
     if (mode === "off" || !localDictionaryReady || (!force && !wantPopup(event))) return;
-    sdkScan(event, undefined, undefined, undefined, undefined, { immediate: force, contextual: true });
+    sdkScan(event, scanInsideWord(event) ? SCAN_SKIP_INSIDE_WORD : undefined, undefined, undefined, undefined,
+      { immediate: force, contextual: true });
   }
 
   document.addEventListener("pointerup", (event) => {
@@ -388,7 +397,7 @@ function boot(): void {
   }
 
   function parsePage(): void {
-    if (mode === "off") return;
+    if (mode === "off" || !marksAllowed()) return;
     setParsingPaused(false);
     parsed = true;
     const root = rule?.parse ? (document.querySelector(rule.parse) ?? document.body) : document.body;
@@ -397,12 +406,21 @@ function boot(): void {
     startMetrics();
   }
 
+  // Asked for marks they can't have: say what unlocks them. Lookup is unaffected.
+  function marksAllowed(): boolean {
+    if (current && canMarkWords(current)) return true;
+    toast(current?.localOnlyAnalysis
+      ? "Word marks are off because you keep page text on this device. You can change this in settings."
+      : "Sign in to Shirabe to mark the words you know on this page.", false);
+    return false;
+  }
+
   function ruleOptions() {
     return { filter: rule?.filter, collapseWhitespace: rule?.collapseWhitespace };
   }
 
   function parseSelection(): void {
-    if (mode === "off") return;
+    if (mode === "off" || !marksAllowed()) return;
     // The command is broadcast to every frame in the tab, and `getRangeAt(0)`
     // throws where there is no selection: which is all of them but one.
     const selection = window.getSelection();
@@ -410,7 +428,7 @@ function boot(): void {
     const range = selection.getRangeAt(0);
     const node = range.commonAncestorContainer;
     const root = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement;
-    if (root) parse(root, showFurigana, ruleOptions()); // eager: a selection is parsed now
+    if (root) void markSelection(root, showFurigana, ruleOptions()); // eager: a selection is marked now
   }
 
   ext.runtime.onMessage.addListener((message: { command?: string }, _sender, respond) => {
