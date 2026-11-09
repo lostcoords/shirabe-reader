@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://parcela.davafons.com/schema/v1.json
+version: 1
+project: shirabe-reader
+
+services:
+  reader:
+    command: >-
+      SHIRABE_DEV_RELOAD_PORT="$PORT" exec node build.mjs chrome --watch
+      --api="${SHIRABE_API_URL:-https://shirabe.localhost}"
+    http:
+      healthcheck: /build.json
+
+hooks:
+  setup:
+    command: test -d node_modules || npm ci --no-audit --no-fund

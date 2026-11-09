@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 
 const root = dirname(fileURLToPath(new URL("../build.mjs", import.meta.url)));
 
@@ -31,7 +32,11 @@ test("everyday Brave has one development command and no browser launcher", async
   assert.doesNotMatch(builder, /spawn\(|WebSocket|--cdp|Extensions\.loadUnpacked|web-ext run|osascript|open -a/);
 });
 
-test("the everyday Brave watcher rebuilds scripts and static assets in place", { timeout: 30_000 }, async () => {
+for (const launcher of ["direct", "parcela"]) {
+  test(`the ${launcher} watcher rebuilds scripts and static assets in place`, { timeout: 30_000 }, () => verifyWatchBuild(launcher));
+}
+
+async function verifyWatchBuild(launcher) {
   const workspace = await mkdtemp(join(tmpdir(), "shirabe-watch-test-"));
   const fixture = join(workspace, "extension");
   let watcher;
@@ -56,15 +61,21 @@ test("the everyday Brave watcher rebuilds scripts and static assets in place", {
     }
     await symlink(join(root, "node_modules"), join(fixture, "node_modules"), "dir");
     const port = await freePort();
-    watcher = spawn(process.execPath, ["build.mjs", "chrome", "--watch"], {
+    const config = parse(await readFile(join(root, "parcela.yaml"), "utf8"));
+    assert.deepEqual(Object.keys(config.services), ["reader"]);
+    assert.equal(config.services.reader.http.healthcheck, "/build.json");
+    const api = launcher === "parcela" ? "https://signup-shirabe.localhost:1443" : "https://shirabe.localhost";
+    const command = launcher === "parcela" ? "/bin/sh" : process.execPath;
+    const args = launcher === "parcela" ? ["-c", config.services.reader.command] : ["build.mjs", "chrome", "--watch"];
+    watcher = spawn(command, args, {
       cwd: fixture,
-      env: { ...process.env, SHIRABE_DEV_RELOAD_PORT: String(port) },
+      env: { ...process.env, PORT: String(port), SHIRABE_API_URL: api, SHIRABE_DEV_RELOAD_PORT: String(port) },
       stdio: ["ignore", "pipe", "pipe"],
     });
     exit = once(watcher, "exit");
     watcher.stdout.on("data", (chunk) => { output += chunk; });
     watcher.stderr.on("data", (chunk) => { output += chunk; });
-    await eventually(async () => output.includes("(watching)") && (await built("background.js")).includes("https://shirabe.localhost"));
+    await eventually(async () => output.includes("(watching)") && (await built("background.js")).includes(api));
     const css = await built("action/popup.css");
     assert.ok(css.includes(".gap-4"), "Tailwind layout utilities are compiled into the popup");
     assert.ok(css.includes("#252526"), "the popup uses neutral dark surfaces");
@@ -73,7 +84,7 @@ test("the everyday Brave watcher rebuilds scripts and static assets in place", {
 
     const manifest = JSON.parse(await built("manifest.json"));
     assert.deepEqual(manifest.background, { service_worker: "background.js" });
-    assert.ok(manifest.host_permissions.includes("https://shirabe.localhost/*"));
+    assert.ok(manifest.host_permissions.includes(`https://${new URL(api).hostname}/*`));
     assert.ok(!manifest.host_permissions.some((host) => host.includes("127.0.0.1")));
     assert.equal(manifest.externally_connectable, undefined);
     assert.match(await built("background.js"), new RegExp(`http://127\\.0\\.0\\.1:${port}/build.json`));
@@ -118,4 +129,4 @@ test("the everyday Brave watcher rebuilds scripts and static assets in place", {
     }
     await rm(workspace, { recursive: true, force: true });
   }
-});
+}

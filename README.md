@@ -24,19 +24,38 @@ Open the toolbar popup, select **Dictionary**, and install the dictionary. You c
 
 ## Develop
 
+Start the Shirabe backend separately. Reader has its own `parcela.yaml` and starts only the extension watcher:
+
 ```sh
-npm run watch:chrome
+parcela up --detach
 ```
 
-The watcher builds into `dist/chrome` against `https://shirabe.localhost`. Start the Shirabe backend separately if you want to test against it. To use the deployed API instead:
+The first start installs npm dependencies if `node_modules` is absent. The default backend is `https://shirabe.localhost`. To select a different web checkout, pass its URL explicitly:
+
+```sh
+SHIRABE_API_URL="$(parcela -C ../shirabe url)" parcela up --detach
+```
+
+Use the path to the desired Shirabe worktree in place of `../shirabe`. When changing the backend of a running Reader environment, use `restart --detach` instead of `up --detach`. Keep the same `SHIRABE_API_URL` on later restarts if you use a non-default backend.
+
+Load this checkout's `dist/chrome` once as an unpacked extension. Parcela allocates a reload port for this checkout. Its HTTPS URL exposes `/build.json` for watcher health, not the Rails API or an extension web page.
+
+Later saves rebuild scripts and static assets, then publish a build stamp so the extension can reload itself. Refresh an open page to load its new content script. The watcher does not start the backend, jobs, an SDK watcher, or your browser.
+
+Inspect and stop Reader independently:
+
+```sh
+parcela logs reader
+parcela down
+```
+
+Without Parcela, run `npm run watch:chrome`. The standalone watcher uses reload port 4188. To select another backend:
 
 ```sh
 npm run watch:chrome -- --api=https://shirabe.org
 ```
 
-Load `dist/chrome` once as an unpacked extension. Later saves rebuild scripts and static assets, then publish a stamp on `http://127.0.0.1:4188/build.json` so the extension can reload itself. Refresh an open page to load its new content script. The watcher does not start or control your browser.
-
-While a watcher is running, use `npm run verify:build:chrome` or `npm run verify:build:firefox` for separate one-shot builds. Regular builds overwrite `dist/<browser>`.
+Run only one watcher per checkout. While a watcher is running, use `npm run verify:build:chrome` or `npm run verify:build:firefox` for separate one-shot builds. Regular builds overwrite `dist/<browser>`.
 
 ### Work on the SDK
 
@@ -46,7 +65,7 @@ The API client and word card come from the public [Shirabe SDK](https://github.c
 npm run sdk:link
 ```
 
-The default checkout is `../shirabe-sdk`. Pass another checkout after `--` if needed. This builds and links both packages without changing the Reader manifest or lockfile. Run the SDK watcher in its own checkout, or use Shirabe's `bin/sdk watch`, to rebuild after edits. The Reader watcher picks up those rebuilt modules. Run `npm ci` to restore published packages.
+The default checkout is `../shirabe-sdk`. Pass another checkout after `--` if needed. This builds and links both packages without changing the Reader manifest or lockfile. Run `parcela up --detach` from the SDK checkout with a Parcela build that supports watcher-only environments, or run `npm run watch` there directly, to rebuild after edits. The Reader watcher picks up those rebuilt modules. Run `npm ci` to restore published packages.
 
 ## Verify
 
