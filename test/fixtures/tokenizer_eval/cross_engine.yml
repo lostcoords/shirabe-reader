@@ -464,8 +464,8 @@
 
 # The provisional-ba divergence was retired on 2026-08-03. It recorded that the
 # web left 食べれ + ば apart because "nothing re-fuses them" while the extension
-# deinflected the whole span. Something does now: merge_ba_predicate runs in :word
-# mode as well as :phrase, so both engines answer 食べれば and lemma it to 食べる.
+# deinflected the whole span. Something does now: merge_ba_predicate runs in the
+# word grouping, so both engines answer 食べれば and lemma it to 食べる.
 # Splitting was not merely coarser, it was wrong: the bare 仮定形 reached the hint
 # layer as a string and deinflected to the IMPERATIVE.
 - name: provisional-ba-merges-in-both
