@@ -14,7 +14,9 @@ import { developmentBuildLabel, readPackagedBuildId, shouldReloadDevelopmentBuil
 // stay in sync with stored settings.
 let config: Config = DEFAULTS;
 let api: ShirabeApi;
-let dictionaryConnectionEpoch = 0;
+// Moves on every sign-in and sign-out, so work begun for one account can tell
+// it no longer speaks for the one now signed in.
+let profileEpoch = 0;
 installBackgroundErrorHandlers();
 declare const __DEV_RELOAD__: boolean;
 declare const __DEV_RELOAD_URL__: string;
@@ -217,15 +219,15 @@ function checkAndNotifyDictionary(previous?: DictionaryStatus): Promise<void> {
 }
 
 async function checkAndNotifyDictionaryNow(previous?: DictionaryStatus): Promise<void> {
-  const connectionEpoch = dictionaryConnectionEpoch;
+  const connectionEpoch = profileEpoch;
   const before = previous ?? await dictionaryStatus();
-  if (connectionEpoch !== dictionaryConnectionEpoch) return;
+  if (connectionEpoch !== profileEpoch) return;
   try {
     const authorization = await dictionaryAuthorization();
-    if (connectionEpoch !== dictionaryConnectionEpoch) return;
-    await checkDictionaryUpdate(config.apiBase, authorization, () => connectionEpoch === dictionaryConnectionEpoch, config.dictionaryStackFingerprint);
+    if (connectionEpoch !== profileEpoch) return;
+    await checkDictionaryUpdate(config.apiBase, authorization, () => connectionEpoch === profileEpoch, config.dictionaryStackFingerprint);
   } finally {
-    if (connectionEpoch === dictionaryConnectionEpoch) {
+    if (connectionEpoch === profileEpoch) {
       if (isConnected(config) || config.dictionaryStack.length) await setActiveDictionaryStack(
         config.dictionaryStack, config.dictionaryReveal, config.dictionaryNames, config.dictionaryStackFingerprint);
       const after = await dictionaryStatus();
@@ -246,6 +248,9 @@ ext.tabs.onRemoved.addListener((tabId) => tabMetrics.delete(tabId));
 
 async function handle(request: Request, senderTabId?: number, senderWindowId?: number): Promise<Response> {
   await ready;
+  // An answer is about the account that asked. One that lands after sign-out
+  // or a switch of account is about someone else, and is not cached.
+  const epoch = profileEpoch;
   switch (request.type) {
     case "parseBatch": {
       try {
@@ -257,7 +262,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       }
     }
     case "parseBatchOnline": {
-      const { tokens, studied, retryAfter } = await parseBatchOnline(request.texts);
+      const { tokens, studied, retryAfter } = await parseBatchOnline(request.texts, epoch);
       return { ok: true, type: "parseBatchOnline", accepted: tokens !== null, tokens: tokens ?? [], studied,
         ...(retryAfter ? { retryAfter } : {}) };
     }
@@ -377,7 +382,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       // image it replaces.
       const result = await api.save(options);
       if (request.newDeckName) await forgetDecks();
-      await cacheStates({ [request.lemma]: result.state }, { [request.lemma]: result });
+      await cacheStates(epoch, { [request.lemma]: result.state }, { [request.lemma]: result });
       return { ok: true, type: "save", result };
     }
     case "decks":
@@ -404,25 +409,25 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
     case "markKnown": {
       const { type: _type, ...options } = request;
       const details = await api.markKnown(options);
-      await cacheStates({ [request.lemma]: details.state }, { [request.lemma]: details });
+      await cacheStates(epoch, { [request.lemma]: details.state }, { [request.lemma]: details });
       return { ok: true, type: "markKnown", details };
     }
     case "unmarkKnown": {
       const { type: _type, ...options } = request;
       const details = await api.unmarkKnown(options);
-      await cacheStates({ [request.lemma]: details.state }, { [request.lemma]: details });
+      await cacheStates(epoch, { [request.lemma]: details.state }, { [request.lemma]: details });
       return { ok: true, type: "unmarkKnown", details };
     }
     case "ignore": {
       await api.ignore({ lemma: request.lemma, reading: request.reading, key: request.key });
-      await cacheStates({ [request.lemma]: "ignored" }, { [request.lemma]: { state: "ignored", decks: [] } });
+      await cacheStates(epoch, { [request.lemma]: "ignored" }, { [request.lemma]: { state: "ignored", decks: [] } });
       return { ok: true, type: "ignore" };
     }
     case "unignore": {
       await api.unignore({ lemma: request.lemma, reading: request.reading });
       // Only a word with no card reads as ignored, so lifting it leaves none.
       const details: StudyDetails = { state: "none", decks: [] };
-      await cacheStates({ [request.lemma]: details.state }, { [request.lemma]: details });
+      await cacheStates(epoch, { [request.lemma]: details.state }, { [request.lemma]: details });
       return { ok: true, type: "unignore", details };
     }
     case "connect":
@@ -463,14 +468,14 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
 // dictionary, so a pack older than the server's dictionary still gets its marks.
 // A reader who can read their cards gets each word's state with its cut, which
 // is also what the popup reads on open: no lookup per batch.
-async function parseBatchOnline(texts: string[]): Promise<{ tokens: ParsedToken[][] | null; studied: boolean; retryAfter?: number }> {
+async function parseBatchOnline(texts: string[], epoch: number): Promise<{ tokens: ParsedToken[][] | null; studied: boolean; retryAfter?: number }> {
   const studied = config.scopes.includes("user:study:read");
   if (!canMarkWords(config) || !texts.length) return { tokens: null, studied };
   const startedAt = performance.now();
   try {
     const { tokens, study } = await api.parseWithProvenance(texts, { study: studied });
     if (studied) {
-      await cacheStates(Object.fromEntries(Object.entries(study).map(([lemma, details]) => [lemma, details.state])), study);
+      await cacheStates(epoch, Object.fromEntries(Object.entries(study).map(([lemma, details]) => [lemma, details.state])), study);
     }
     recordBackgroundPerformance("online-parse", startedAt, {
       texts: texts.length,
@@ -563,8 +568,9 @@ async function cachedStateSnapshot(): Promise<CachedStateSnapshot> {
   return memoryStateSnapshot;
 }
 
-async function cacheStates(states: Record<string, WordState>, details: Record<string, StudyDetails> = {}): Promise<void> {
+async function cacheStates(epoch: number, states: Record<string, WordState>, details: Record<string, StudyDetails> = {}): Promise<void> {
   stateCacheWrite = stateCacheWrite.then(async () => {
+    if (epoch !== profileEpoch) return;
     const current = await cachedStateSnapshot();
     const checkedAt = { ...current.checkedAt };
     const now = new Date().toISOString();
@@ -598,8 +604,9 @@ async function drainRemoteStateRefresh(): Promise<void> {
   while (pendingRemoteStateLemmas.size) {
     const lemmas = [...pendingRemoteStateLemmas].slice(0, STATE_REQUEST_MAX_LEMMAS);
     for (const lemma of lemmas) pendingRemoteStateLemmas.delete(lemma);
+    const epoch = profileEpoch;
     const fresh = await api.states(lemmas);
-    await cacheStates(fresh.states, fresh.details);
+    await cacheStates(epoch, fresh.states, fresh.details);
   }
 }
 
@@ -621,7 +628,9 @@ async function cachedDecks(): Promise<Deck[]> {
     memoryDeckSnapshot = { decks: cached.decks, checkedAt: cached.checkedAt as string };
     return cached.decks;
   }
+  const epoch = profileEpoch;
   const decks = await api.decks();
+  if (epoch !== profileEpoch) return decks;
   memoryDeckSnapshot = { decks, checkedAt: new Date().toISOString() };
   await ext.storage.local.set({ [DECK_CACHE_KEY]: memoryDeckSnapshot });
   return decks;
@@ -687,7 +696,7 @@ async function runConnect(): Promise<void> {
 
 // Persist a freshly-minted token pair, then look up whose account it belongs to.
 async function adopt(tokens: Tokens): Promise<void> {
-  dictionaryConnectionEpoch += 1;
+  profileEpoch += 1;
   await deactivatePrivateDictionaries();
   await clearLocalDictionaryStack();
   const next: Config = { ...config, ...tokens, account: "", accountCheckedAt: "", entitled: false,
@@ -721,7 +730,7 @@ function refreshAccount(force = false): Promise<void> {
 
 async function refreshAccountNow(force: boolean): Promise<void> {
   if (!isConnected(config)) return;
-  const connectionEpoch = dictionaryConnectionEpoch;
+  const connectionEpoch = profileEpoch;
   // While not entitled, re-check often so an upgrade shows mining controls
   // without waiting out the full cache window (or re-connecting).
   const maxAge = config.entitled ? ACCOUNT_CACHE_MAX_AGE_MS : 30_000;
@@ -731,14 +740,14 @@ async function refreshAccountNow(force: boolean): Promise<void> {
       const stack = config.dictionaryStack;
       const reveal = config.dictionaryReveal;
       const fingerprint = await api.updateDictionaryStack(stack, reveal);
-      if (connectionEpoch !== dictionaryConnectionEpoch || config.dictionaryStack !== stack || config.dictionaryReveal !== reveal) return;
+      if (connectionEpoch !== profileEpoch || config.dictionaryStack !== stack || config.dictionaryReveal !== reveal) return;
       const synced: Config = { ...config, dictionaryStackDirty: false, dictionaryStackFingerprint: fingerprint };
       await saveConfig(synced);
       config = synced;
       api.update(synced);
     }
     const { name, entitled, languages, dictionaries, stackFingerprint, dictionaryReveal, dictionaryNames, availableDictionaries } = await api.me();
-    if (connectionEpoch !== dictionaryConnectionEpoch) return;
+    if (connectionEpoch !== profileEpoch) return;
     // The account's language order wins while connected, so the offline pack
     // renders meanings in the same order the website does for this reader. A
     // stack with nothing this pack ships (a French reader) leaves it untouched.
@@ -768,7 +777,7 @@ async function disconnect(): Promise<void> {
 }
 
 async function forgetConnection(): Promise<void> {
-  dictionaryConnectionEpoch += 1;
+  profileEpoch += 1;
   await clearLocalDictionaryStack();
   const next: Config = {
     ...config, accessToken: "", accessTokenExpiresAt: "", accessTokenRefreshAt: "", refreshToken: "",

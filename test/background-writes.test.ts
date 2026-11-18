@@ -193,3 +193,38 @@ test("a parse asks for study states, and opening a parsed word asks nothing more
   assert.deepEqual(opened.details["猫"], { state: "learning", decks: [{ id: 7, name: "Reading pile" }], cardId: 41, cardCount: 1, savedSenses: ["jmdict#0"] });
   assert.deepEqual(sent, []);
 });
+
+// Last: it signs the reader out. A parse answered before sign-out but landing
+// after it used to fill the signed-out cache with the old account's states and
+// deck names, which every page then read, and which the next account to sign
+// in within the cache window read as its own.
+test("a parse in flight at sign-out leaves nothing of the old account behind", async () => {
+  const worker = await send;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let parsing!: () => void;
+  const started = new Promise<void>((resolve) => { parsing = resolve; });
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    if (new URL(request.url).pathname !== "/api/v1/parse") return fetchBefore(input, init);
+    parsing();
+    await held;
+    return json({ packRevision: "r", stackFingerprint: "f", sources: [], results: [{ tokens: [
+      { startOffset: 0, endOffset: 1, surface: "犬", lemma: "犬", reading: "いぬ", kind: "word",
+        study: { state: "due", decks: [{ id: 1, name: "The old account's deck" }] } },
+    ] }] });
+  }) as typeof fetch;
+
+  const parse = worker({ type: "parseBatchOnline", texts: ["犬"] });
+  await started;
+  const signedOut = await worker({ type: "disconnect" });
+  assert.ok(signedOut.ok);
+  release();
+  await parse;
+
+  const states = await worker({ type: "states", lemmas: ["犬"] });
+  assert.ok(states.ok && states.type === "states");
+  assert.deepEqual(states.states, {}, "the signed-out reader sees no state of the old account");
+  assert.deepEqual(states.details, {});
+});
