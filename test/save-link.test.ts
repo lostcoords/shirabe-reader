@@ -226,3 +226,34 @@ test("Not known and Stop ignoring take back what was set, and a card Known made 
     { type: "unignore", lemma: "橋", reading: "はし" },
   ]);
 });
+
+// The card offers Ignore only on an unsaved word. The shortcut used to ignore
+// any word: the server kept answering a saved one by its cards, while the page
+// painted it ignored and then offered Stop ignoring on a word with cards.
+test("the ignore shortcut ignores only an unsaved word and lifts only an ignored one", async () => {
+  const window = installWindow();
+  const { ext } = await import("../src/common/browser.js");
+  const sent: MessageRequest[] = [];
+  ext.runtime.sendMessage = (async (message: MessageRequest) => {
+    sent.push(message);
+    return message.type === "ignore" ? { ok: true, type: "ignore" } : { ok: true, type: "unignore", details: { state: "none", decks: [] } };
+  }) as typeof ext.runtime.sendMessage;
+  const { toggleIgnore } = await import("../src/content/actions.js");
+  const word = window.document.createElement("span") as unknown as HTMLElement;
+  Object.assign(word.dataset, { lemma: "猫", reading: "ねこ" });
+
+  for (const state of ["new", "learning", "due", "suspended", "retired"]) {
+    word.dataset.state = state;
+    const outcome = await toggleIgnore(word);
+    assert.equal(outcome.ok, false, `a ${state} word is not ignored`);
+    assert.equal(word.dataset.state, state);
+  }
+  assert.deepEqual(sent, [], "a saved word sends nothing");
+
+  word.dataset.state = "none";
+  assert.equal((await toggleIgnore(word)).ok, true);
+  assert.equal(word.dataset.state, "ignored");
+  assert.equal((await toggleIgnore(word)).ok, true);
+  assert.equal(word.dataset.state, "none");
+  assert.deepEqual(sent.map(({ type }) => type), ["ignore", "unignore"]);
+});

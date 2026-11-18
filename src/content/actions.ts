@@ -403,6 +403,16 @@ export async function ignore(word: HTMLElement): Promise<Outcome> {
   return { ok: true, message: `Ignored ${lemma}` };
 }
 
+// The ignore shortcut offers what the card offers: Ignore on an unsaved word,
+// Stop ignoring on an ignored one. The server answers a word with cards by its
+// cards' state, so ignoring one records an ignore the page and server disagree on.
+export async function toggleIgnore(word: HTMLElement): Promise<Outcome> {
+  const state = word.dataset.state ?? "none";
+  if (state === "ignored") return unignore(word);
+  if (state === "none") return ignore(word);
+  return { ok: false, message: `${lemmaOf(word)} is saved, so it can't be ignored` };
+}
+
 export async function unignore(word: HTMLElement): Promise<Outcome> {
   const lemma = lemmaOf(word);
   const res = await send({ type: "unignore", lemma, ...(word.dataset.reading ? { reading: word.dataset.reading } : {}) });
