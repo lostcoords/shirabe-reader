@@ -3,17 +3,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { gzipSync } from "node:zlib";
 import { parse as parseYaml } from "yaml";
 import type { ParsedToken } from "../src/common/types.js";
 import { lookupGroupOffline, parseOffline, resolveParsedSpan, setActiveDictionaryStack } from "../src/common/offline-dictionary.js";
-import { installTestPack, packPayload, realPackPath, subsetPack } from "./support/pack.js";
+import { corpusPackPath, installTestPack, packPayload, subsetPack } from "./support/pack.js";
 
-// One suite rather than one per corpus, because each installs a pack and a pack
-// install owns the offline-dictionary module singleton and fake-indexeddb: two
-// suites in two processes meant scanning the 58 MB pack twice to build subsets
-// that are then thrown away. One subset covers both.
-//
 // Why a corpus and not more unit tests: the parser's ranking core (text-processor
 // variants, part-of-speech gating, tiebreakers) is easy to regress silently, and a
 // mis-parse fixed today can return on the next dictionary refresh. A row here can
@@ -24,9 +18,9 @@ const STACKS = parseYaml(readFileSync("test/fixtures/tokenizer_eval/dictionary_s
 
 const CORPORA = ["cross_engine", "segmentation", "search_mapping", "contextual_boundaries"] as const;
 
-// The floor a real-pack subset has to clear before it counts as one. The corpora
-// currently subset to a few thousand entries, so this only trips when the
-// subsetter itself breaks (a pack schema change, a renamed record type).
+// The floor a subset has to clear before it counts as one. A shard subsets to a
+// few thousand entries, so this only trips when the subsetter itself breaks (a
+// pack schema change, a renamed record type).
 const MINIMUM_REAL_ENTRIES = 500;
 
 type SegmentationCase = {
@@ -55,10 +49,6 @@ type SegmentationCase = {
   entries?: Record<string, string>;
   clickable?: string[];
   tokens?: string[];
-  // Absent means the row needs the real dictionary; `fixture` means it is still
-  // meaningful against the bundled 12-entry pack. Safe direction: a row that
-  // forgets the marker is skipped, never judged against a field it cannot lose in.
-  pack?: string;
   why?: string;
   divergence?: boolean; // recorded, never asserted
 };
@@ -73,63 +63,15 @@ const allRows: Array<SegmentationCase & { corpus: string }> = CORPORA.flatMap((n
   })));
 });
 
-const corpus = allRows.filter((row) => !row.divergence);
-const recorded = allRows.length - corpus.length;
-
-/** Compact term record: only the fields segmentation actually depends on. */
-function term(
-  id: number,
-  headword: string,
-  reading: string,
-  partsOfSpeech: string[],
-  rank: number,
-  { misc = [] as string[], tags = [] as string[], common = true } = {},
-) {
-  return {
-    type: "term", id: `jmdict:${id}`, dictionary: "jmdict", headword,
-    expressions: [{ text: headword, script: "mixed", common, tags }],
-    readings: [{ text: reading, kind: "kana" }],
-    senses: [{ glosses: { eng: [headword], spa: [headword] }, partsOfSpeech, fields: [], misc, dialects: [], restrictions: [] }],
-    frequencies: [{ source: "jiten-global", text: headword, reading, rank }],
-  };
-}
-
-const records = [
-  { type: "header", schemaVersion: 7, languages: ["eng", "spa"], source: "Shirabe golden corpus" },
-  // The 逸脱 trap: a noun/suru-verb that the godan った→つ rule would otherwise
-  // reach from いつだった, burying the usually-kana いつ.
-  term(1, "逸脱", "いつだつ", ["n", "vs"], 15_000),
-  term(2, "何時", "いつ", ["pn", "adv"], 500, { misc: ["uk"], tags: ["rK"] }),
-  // Emphasis katakana / stretched kana all have to reach this usually-kana entry.
-  term(3, "凄い", "すごい", ["adj-i"], 800, { misc: ["uk"], tags: ["rK"], common: false }),
-  // 見る exists so a lone katakana ミ folding to み would be caught, not silent.
-  term(4, "見る", "みる", ["v1"], 800),
-  term(5, "来る", "くる", ["vk"], 50),
-  term(6, "猫", "ねこ", ["n"], 700),
-  term(7, "に", "に", ["prt"], 1),
-  term(8, "読む", "よむ", ["v5m"], 500),
-  term(9, "高い", "たかい", ["adj-i"], 600),
-  term(10, "Ｔシャツ", "ティーシャツ", ["n"], 900),
-  {
-    type: "term", id: "jmdict:11", dictionary: "jmdict", headword: "について",
-    expressions: [
-      { text: "に就いて", script: "mixed", common: false, tags: ["rK"] },
-      { text: "に付いて", script: "mixed", common: false, tags: ["rK"] },
-    ],
-    readings: [{ text: "について", kind: "kana" }],
-    senses: [{ glosses: { eng: ["about"], spa: ["sobre"] }, partsOfSpeech: ["exp"], fields: [], misc: ["uk"], dialects: [], restrictions: [] }],
-    frequencies: [{ source: "jiten-global", text: "について", reading: "について", rank: 50 }],
-  },
-  {
-    type: "term", id: "jmdict:12", dictionary: "jmdict", headword: "一石二鳥",
-    expressions: [{ text: "一石二鳥", script: "mixed", common: false, tags: [] }],
-    readings: [{ text: "いっせきにちょう", kind: "kana" }],
-    senses: [{ glosses: { eng: ["two birds one stone"], spa: ["dos pájaros"] }, partsOfSpeech: ["exp"], fields: [], misc: ["yoji"], dialects: [], restrictions: [] }],
-    frequencies: [{ source: "jiten-global", text: "一石二鳥", reading: "いっせきにちょう", rank: 80_000 }],
-  },
-];
-
-const archive = gzipSync(records.map((record) => JSON.stringify(record)).join("\n") + "\n");
+// `SEGMENTATION_SHARD=i/n` (from test/run.mjs) takes the i-th of n contiguous
+// runs of rows, so each process sees one or two stacks. fake-indexeddb keeps
+// every transaction a database ever ran and scans that list on each new one,
+// so the whole corpus in one process grows quadratically: 150 s, against a few
+// seconds per shard.
+const [shard, shards] = (process.env.SEGMENTATION_SHARD ?? "0/1").split("/").map(Number) as [number, number];
+const asserted = allRows.filter((row) => !row.divergence);
+const corpus = asserted.slice(Math.floor(asserted.length * shard / shards), Math.floor(asserted.length * (shard + 1) / shards));
+const recorded = allRows.length - asserted.length;
 
 /** `surface[=lemma]`: the lemma half is optional, so a case can pin only the boundary. */
 function expected(entry: string): { surface: string; lemma?: string } {
@@ -137,42 +79,26 @@ function expected(entry: string): { surface: string; lemma?: string } {
   return lemma ? { surface, lemma } : { surface };
 }
 
-test("segmentation corpus", async (context) => {
-  // Prefer the real dictionary when one is built locally: it runs every row
-  // against real JMdict data (real POS, frequencies, uk flags), which is the only
-  // way a dictionary refresh can be caught. The bundled fixture is the fallback so
-  // the `pack: fixture` rows still ratchet on a clean checkout.
-  const packPath = realPackPath();
-  const realSubset = packPath ? subsetPack(packPath, corpus.flatMap((entry) => [entry.sentence, ...(entry.queries ?? [])])) : null;
-  // A pack that subsets down to almost nothing is a broken subsetter, not a small
-  // corpus, and it must not quietly become a fixture run: every case would then be
-  // judged against a 12-entry field it cannot lose in, and report green. Only the
-  // absence of a pack is a legitimate reason to fall back.
-  const entryCount = realSubset ? realSubset.length - 1 : 0;
-  const usingRealPack = entryCount >= MINIMUM_REAL_ENTRIES;
-  assert.ok(
-    !realSubset || usingRealPack,
-    `the real pack subsetted to ${entryCount} entries, under the ${MINIMUM_REAL_ENTRIES} this corpus needs: the subsetter is broken, not the corpus`,
-  );
-
-  if (usingRealPack && realSubset) {
-    await installTestPack(packPayload(realSubset), { contentRevision: "segmentation-real", terms: realSubset.length - 1 });
-    context.diagnostic(`segmentation corpus: using real pack ${packPath} (${realSubset.length - 1} relevant entries)`);
-  } else {
-    await installTestPack(archive, { contentRevision: "segmentation", terms: records.length - 1 });
-    context.diagnostic("segmentation corpus: no local dictionary pack: running fixture cases only");
-  }
+test(`segmentation corpus ${shard + 1}/${shards}`, async (context) => {
+  const packPath = corpusPackPath();
+  const subset = await subsetPack(packPath, corpus.flatMap((entry) => [entry.sentence, ...(entry.queries ?? [])]));
+  // A pack that subsets down to almost nothing is a broken subsetter, not a
+  // small corpus: every case would be judged against a field it cannot lose in.
+  assert.ok(subset.length - 1 >= MINIMUM_REAL_ENTRIES,
+    `the pack subsetted to ${subset.length - 1} entries, under the ${MINIMUM_REAL_ENTRIES} this corpus needs: the subsetter is broken, not the corpus`);
+  await installTestPack(packPayload(subset), { contentRevision: "segmentation", terms: subset.length - 1 });
+  context.diagnostic(`segmentation corpus: ${packPath} (${subset.length - 1} relevant entries)`);
+  const stacks = STACKS.filter((stack) => corpus.some((row) => row.stack === stack.name));
 
   const webPath = process.env.SHIRABE_WEB_AUDIT ?? "tmp/contextual-boundaries-audit.json";
   const requireWeb = process.env.SHIRABE_REQUIRE_CONTEXTUAL_WEB === "1";
-  assert.ok(!requireWeb || usingRealPack, "combined audit requires a real dictionary pack");
   assert.ok(!requireWeb || existsSync(webPath), "run the backend contextual boundary audit first");
   const webTokens = new Map<string, ParsedToken[]>();
   if (existsSync(webPath)) {
     const report = JSON.parse(readFileSync(webPath, "utf8"));
     const digest = createHash("sha256").update(readFileSync("test/fixtures/tokenizer_eval/contextual_boundaries.yml")).digest("hex");
     if (report.corpusDigest === digest && report.stackDigest === createHash("sha256").update(readFileSync("test/fixtures/tokenizer_eval/dictionary_stacks.yml")).digest("hex")) {
-      const expectedCases = corpus.filter((row) => row.corpus === "contextual_boundaries").length;
+      const expectedCases = asserted.filter((row) => row.corpus === "contextual_boundaries").length;
       assert.equal(report.cases * STACKS.length, expectedCases, "backend report must cover the whole shared corpus");
       assert.equal(report.results.length, expectedCases, "backend report must retain every case");
       assert.ok(report.results.every((row: { problems: string[] }) => !row.problems.length), "backend audit must pass before extension parity");
@@ -185,7 +111,7 @@ test("segmentation corpus", async (context) => {
       try {
         const { ShirabeApi } = await import("../src/common/api.js");
         const { DEFAULTS } = await import("../src/common/config.js");
-        for (const stack of STACKS) {
+        for (const stack of stacks) {
           const results = report.results.filter((row: { stack: string }) => row.stack === stack.name);
           assert.equal(results.length, report.cases, `backend report must cover ${stack.name}`);
           globalThis.fetch = (async () => {
@@ -209,8 +135,6 @@ test("segmentation corpus", async (context) => {
     }
   }
 
-  const skipped: string[] = [];
-  let checked = 0;
   let installedStack = "";
 
   // One subtest per case, so a JMdict refresh that breaks four rows reports all
@@ -221,12 +145,6 @@ test("segmentation corpus", async (context) => {
     // labelled by the sentence than by a slug, so fall back to it the way the web
     // runner does rather than printing `undefined`.
     const label = `${entry.corpus}/${entry.name || entry.sentence}`;
-    if (entry.pack !== "fixture" && !usingRealPack) {
-      skipped.push(label);
-      await context.test(label, { skip: "needs a real dictionary pack" }, () => {});
-      continue;
-    }
-    checked += 1;
 
     await context.test(label, async () => {
       const stack = STACKS.find((variant) => variant.name === entry.stack)!;
@@ -349,12 +267,6 @@ test("segmentation corpus", async (context) => {
   }
 
   context.diagnostic(`online extension parity: ${webTokens.size} backend cases available`);
-  context.diagnostic(
-    `segmentation corpus: ${checked}/${corpus.length} cases checked against the ${usingRealPack ? "real" : "fixture"} pack`,
-  );
-  if (skipped.length) {
-    context.diagnostic(`segmentation corpus: ${skipped.length} real-pack cases skipped (${skipped.join(", ")})`);
-  }
-  context.diagnostic(`segmentation corpus: ${recorded} known divergences recorded, not asserted`);
-  assert.ok(checked > 0, "the segmentation corpus ran at least one case");
+  context.diagnostic(`segmentation corpus: ${corpus.length} of ${asserted.length} cases in this shard; ${recorded} known divergences recorded, not asserted`);
+  assert.ok(corpus.length > 0, "the segmentation shard ran at least one case");
 });

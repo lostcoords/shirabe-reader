@@ -8,7 +8,7 @@ Use Jujutsu when `.jj/` exists. Use dav-mode only when the user explicitly reque
 
 - `npm ci` installs pinned dependencies.
 - `npm run check` checks browser source and test types.
-- `npm test` runs the Node suites and watcher checks.
+- `npm test` runs the Node suites and watcher checks in parallel.
 - `npm run build:firefox` and `npm run build:chrome` build production packages.
 - `npm run watch:chrome` watches source without launching or controlling a browser.
 - `npm run verify:installed:chrome` runs the installed-extension harness in headless Chromium.
@@ -20,7 +20,7 @@ Consume released `@shirabe-org/api` and `@shirabe-org/card` packages. `npm run s
 
 Language resources and tokenizer corpus snapshots are imported from Shirabe. Run `bin/reader sync-contract` in Shirabe to update them, and `bin/reader check-contract` there to verify equality. Commit both repositories when these inputs change.
 
-A real dictionary pack is optional for the default fixture suite. Set `SHIRABE_PACK` to its absolute path for the complete corpus. Rails parity scripts accept `SHIRABE_PATH`; combined audits accept `SHIRABE_WEB_AUDIT` and divergence sweeps accept `SHIRABE_WEB_EXPORT`.
+`npm test` runs the corpora against a committed slice of the real dictionary pack. Set `SHIRABE_PACK` to a full pack's absolute path to run against it instead; `npm run fixture-pack -- <full pack>` recuts the slice. Rails parity scripts accept `SHIRABE_PATH`; combined audits accept `SHIRABE_WEB_AUDIT` and divergence sweeps accept `SHIRABE_WEB_EXPORT`.
 
 ## Shared desktop
 

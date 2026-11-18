@@ -48,6 +48,29 @@ kept current as the data changes, which is why the extension links to it rather
 than shipping a copy that drifts.
 
 -------------------------------------------------------------------------------
+Test fixture: dictionary pack slice
+-------------------------------------------------------------------------------
+test/fixtures/dictionary-pack/slice.ndjson.gz is an excerpt of Shirabe's
+offline dictionary pack (content revision recorded in slice.json beside it),
+kept so the test suite runs against real dictionary data. It is test data: the
+built extension does not contain it, and the GPL does not cover it. It is
+distributed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
+
+Modifications: entries were selected to those the test corpora can look up, and
+their fields were selected and compacted for offline lookup.
+
+It contains material from:
+
+    JMdict and JMnedict, by the Electronic Dictionary Research and Development
+        Group (EDRDG), CC BY-SA 4.0, https://www.edrdg.org/edrdg/licence.html
+    Shirabe's Spanish JMdict adaptation (AI-assisted, human-reviewed glosses
+        aligned to JMdict senses), CC BY-SA 4.0, https://shirabe.org/credits
+    jiten.moe frequency lists, CC BY-SA 4.0, https://jiten.moe/other
+    UniDic pitch metadata, by the National Institute for Japanese Language and
+        Linguistics, used under its Modified BSD option,
+        https://clrd.ninjal.ac.jp/unidic/
+
+-------------------------------------------------------------------------------
 Third-party libraries
 -------------------------------------------------------------------------------
     @noble/hashes, MIT License, https://github.com/paulmillr/noble-hashes

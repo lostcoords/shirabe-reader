@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { parseOffline } from "../src/common/offline-dictionary.js";
-import { installTestPack, packPayload, realPackPath, subsetPack } from "./support/pack.js";
+import { installTestPack, packPayload, subsetPack } from "./support/pack.js";
 
 // Runner for divergence-sweep.mjs: see that file for what this is and how to run it.
 
@@ -36,8 +36,9 @@ const bump = (map: Map<string, { count: number; example: string }>, key: string,
   // second full sweep of its own on every sharded run.
   if (!process.env.SWEEP_RUN) return;
 
-  const pack = realPackPath();
-  if (!pack) throw new Error("no dictionary pack: run `bin/rails dictionary_packs:ensure`");
+  // The committed fixture slice covers only the corpora, so a sweep needs the full pack.
+  const pack = process.env.SHIRABE_PACK;
+  if (!pack) throw new Error("set SHIRABE_PACK to a full dictionary pack (Shirabe's storage/dictionary_packs/current)");
   process.stdout.write(`Subsetting ${pack} for ${rows.length} sentences…\n`);
   // Subsets at the same span cap as the asserting corpora. The sweep used to cap
   // at 16, which put every longer expression out of reach of its own subset and
@@ -51,7 +52,7 @@ const bump = (map: Map<string, { count: number; example: string }>, key: string,
   // a browser, so the cost is the fake-indexeddb underneath rather than the
   // lookup algorithm: sharding sentences across processes is what buys a bigger
   // corpus, not trimming the span cap.
-  const kept = subsetPack(pack, rows.map((row) => row.text));
+  const kept = await subsetPack(pack, rows.map((row) => row.text));
   await installTestPack(packPayload(kept), { contentRevision: "sweep", terms: kept.length - 1 });
   process.stdout.write(`Installed ${kept.length - 1} entries. Sweeping…\n\n`);
 

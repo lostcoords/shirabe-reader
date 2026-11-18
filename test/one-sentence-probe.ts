@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { parseOffline } from "../src/common/offline-dictionary.js";
-import { installTestPack, packPayload, realPackPath, subsetPack } from "./support/pack.js";
+import { installTestPack, packPayload, corpusPackPath, subsetPack } from "./support/pack.js";
 
 // One sentence through the extension: its cut, its lemmas, the entry each token
 // lands on, and the other words each span could be.
@@ -15,9 +15,8 @@ import { installTestPack, packPayload, realPackPath, subsetPack } from "./suppor
 // to come out the same (docs/specs/extension-parsing.md §3).
 const text = process.argv[2] ?? "本を読みませんでした。";
 (async () => {
-  const pack = realPackPath();
-  if (!pack) throw new Error("no dictionary pack");
-  const kept = subsetPack(pack, [ text ]);
+  const pack = corpusPackPath();
+  const kept = await subsetPack(pack, [ text ]);
   await installTestPack(packPayload(kept), { contentRevision: "probe", terms: kept.length - 1 });
   const tokens = await parseOffline(text, [ "eng" ], "https://shirabe.test");
   for (const token of tokens) {

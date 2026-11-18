@@ -25,7 +25,7 @@ async function main(): Promise<void> {
   const input = JSON.parse(readFileSync(process.argv[2]!, "utf8")) as Input;
   const digest = createHash("sha256").update(readFileSync(input.pack.path)).digest("hex");
   if (digest !== input.pack.sha256) throw new Error("Pack changed after web export");
-  const lines = subsetPack(input.pack.path, input.contexts.map((row) => row.text), { maxSpan: 32 });
+  const lines = await subsetPack(input.pack.path, input.contexts.map((row) => row.text), { maxSpan: 32 });
   const count = lines.filter((line) => line.includes('"type":"term"')).length;
   const visibleForms = new Map<string, Set<string>>();
   for (const line of lines) {

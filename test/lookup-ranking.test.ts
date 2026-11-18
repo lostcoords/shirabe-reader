@@ -2,17 +2,11 @@ import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { lookupOffline, parseOffline } from "../src/common/offline-dictionary.js";
-import { installTestPack, packPayload, realPackPath, subsetPack } from "./support/pack.js";
+import { installTestPack, packPayload, corpusPackPath, subsetPack } from "./support/pack.js";
 
-type AsyncTest = () => void | Promise<void>;
-
-const testWithPack = (name: string, callback: AsyncTest) =>
-  test(name, { skip: realPackPath() ? false : "requires a local dictionary pack" }, callback);
-
-testWithPack("lookup ranks whole inflections and distinguishes homophones by their own spellings", async () => {
-  const path = realPackPath();
-  assert.ok(path, "Build the dictionary pack before running lookup ranking tests");
-  const lines = subsetPack(path, ["かかなかった", "くださいます", "とうた"]);
+test("lookup ranks whole inflections and distinguishes homophones by their own spellings", async () => {
+  const path = corpusPackPath();
+  const lines = await subsetPack(path, ["かかなかった", "くださいます", "とうた"]);
   await installTestPack(packPayload(lines), { contentRevision: "lookup-ranking", terms: lines.length - 1 });
   for (const [query, expected] of [
     ["かかなかった", "jmdict:1343950"], ["kakanakatta", "jmdict:1343950"],
@@ -22,20 +16,18 @@ testWithPack("lookup ranks whole inflections and distinguishes homophones by the
   }
 });
 
-testWithPack("explicit kana lookup prefers its grammatical word over a city sharing the reading", async () => {
-  const path = realPackPath();
-  assert.ok(path);
-  const lines = subsetPack(path, ["なら", "ならば", "奈良"]);
+test("explicit kana lookup prefers its grammatical word over a city sharing the reading", async () => {
+  const path = corpusPackPath();
+  const lines = await subsetPack(path, ["なら", "ならば", "奈良"]);
   await installTestPack(packPayload(lines), { contentRevision: "lookup-kana-grammar", terms: lines.length - 1 });
   for (const [query, expected] of [["なら", "jmdict:1009470"], ["ならば", "jmdict:1009470"], ["奈良", "jmdict:2827768"]]) {
     assert.equal((await lookupOffline(query!, ["eng"], "https://shirabe.test"))?.entry, expected, query);
   }
 });
 
-testWithPack("contextual homophones use word frequency without discarding legitimate alternatives", async () => {
-  const path = realPackPath();
-  assert.ok(path);
-  const lines = subsetPack(path, ["きみ", "あめ", "そこにいます。", "かく", "それ", "家", "行った"]);
+test("contextual homophones use word frequency without discarding legitimate alternatives", async () => {
+  const path = corpusPackPath();
+  const lines = await subsetPack(path, ["きみ", "あめ", "そこにいます。", "かく", "それ", "家", "行った"]);
   await installTestPack(packPayload(lines), { contentRevision: "context-ranking", terms: lines.length - 1 });
   const [kimi] = await parseOffline("きみ", ["eng"], "https://shirabe.test");
   assert.equal(kimi?.entry, "jmdict:1247250");
@@ -61,11 +53,10 @@ testWithPack("contextual homophones use word frequency without discarding legiti
   assert.ok(verbs.indexOf("jmdict:1589060") >= 0 && verbs.indexOf("jmdict:1012980") > verbs.indexOf("jmdict:1589060"));
 });
 
-testWithPack("a complete word keeps its boundary before punctuation and non-Japanese text", async () => {
-  const path = realPackPath();
-  assert.ok(path);
+test("a complete word keeps its boundary before punctuation and non-Japanese text", async () => {
+  const path = corpusPackPath();
   const sentences = ["はし", "はし。", "はし！", "はし?", "はし\n", "はし abc", "はし\u3000猫", "はし\u00a0猫", "はし\u0085猫", "はし。猫"];
-  const lines = subsetPack(path, sentences);
+  const lines = await subsetPack(path, sentences);
   await installTestPack(packPayload(lines), { contentRevision: "word-boundary", terms: lines.length - 1 });
   for (const sentence of sentences) {
     const tokens = await parseOffline(sentence, ["eng"], "https://shirabe.test");
@@ -76,11 +67,10 @@ testWithPack("a complete word keeps its boundary before punctuation and non-Japa
   }
 });
 
-testWithPack("an adverb reading fits before a verb without replacing standalone or attributive verbs", async () => {
-  const path = realPackPath();
-  assert.ok(path);
+test("an adverb reading fits before a verb without replacing standalone or attributive verbs", async () => {
+  const path = corpusPackPath();
   const sentences = ["かく語った。", "かく", "かく。", "かく人", "字をかく。", "かいて語った。"];
-  const lines = subsetPack(path, sentences);
+  const lines = await subsetPack(path, sentences);
   await installTestPack(packPayload(lines), { contentRevision: "adverb-context", terms: lines.length - 1 });
   const contextual = await parseOffline(sentences[0]!, ["eng"], "https://shirabe.test");
   assert.equal(contextual[0]?.surface, "かく");
@@ -93,11 +83,10 @@ testWithPack("an adverb reading fits before a verb without replacing standalone 
   }
 });
 
-testWithPack("a particle before an adverb and verb is not swallowed into a noun", async () => {
-  const path = realPackPath();
-  assert.ok(path);
+test("a particle before an adverb and verb is not swallowed into a noun", async () => {
+  const path = corpusPackPath();
   const sentences = ["彼はかく語った。", "彼がかく語った。", "先生もかく語った。", "はかくの商品。"];
-  const lines = subsetPack(path, sentences);
+  const lines = await subsetPack(path, sentences);
   await installTestPack(packPayload(lines), { contentRevision: "particle-adverb-context", terms: lines.length - 1 });
   for (const [index, particle] of ["は", "が", "も"].entries()) {
     const tokens = await parseOffline(sentences[index]!, ["eng"], "https://shirabe.test");
@@ -109,11 +98,10 @@ testWithPack("a particle before an adverb and verb is not swallowed into a noun"
   assert.equal(literal[0]?.entry, "jmdict:1471290");
 });
 
-testWithPack("contextual copulas follow nominal predicates without offering verbal auxiliaries", async () => {
-  const path = realPackPath();
-  assert.ok(path);
+test("contextual copulas follow nominal predicates without offering verbal auxiliaries", async () => {
+  const path = corpusPackPath();
   const sentences = ["静かだった", "猫だった", "いつだった"];
-  const lines = subsetPack(path, sentences);
+  const lines = await subsetPack(path, sentences);
   await installTestPack(packPayload(lines), { contentRevision: "context-copula", terms: lines.length - 1 });
   for (const sentence of sentences) {
     const tokens = await parseOffline(sentence, ["eng"], "https://shirabe.test");
@@ -126,11 +114,10 @@ testWithPack("contextual copulas follow nominal predicates without offering verb
   assert.ok(isolated?.candidates?.some((candidate) => candidate.entry === "jmdict:2867372"));
 });
 
-testWithPack("contextual particles keep grammatical alternatives rather than noun homophones", async () => {
-  const path = realPackPath();
-  assert.ok(path);
+test("contextual particles keep grammatical alternatives rather than noun homophones", async () => {
+  const path = corpusPackPath();
   const sentences = ["昨日は静かだった。", "先生が来た。", "いつだったか考えた。"];
-  const lines = subsetPack(path, sentences);
+  const lines = await subsetPack(path, sentences);
   await installTestPack(packPayload(lines), { contentRevision: "context-particles", terms: lines.length - 1 });
   for (const [index, surface, entries] of [
     [0, "は", ["jmdict:2028920"]],
@@ -144,10 +131,9 @@ testWithPack("contextual particles keep grammatical alternatives rather than nou
   }
 });
 
-testWithPack("a suru noun constrains its complement without erasing isolated verb ambiguity", async () => {
-  const path = realPackPath();
-  assert.ok(path);
-  const lines = subsetPack(path, ["明日勉強します。", "します"]);
+test("a suru noun constrains its complement without erasing isolated verb ambiguity", async () => {
+  const path = corpusPackPath();
+  const lines = await subsetPack(path, ["明日勉強します。", "します"]);
   await installTestPack(packPayload(lines), { contentRevision: "context-suru-complement", terms: lines.length - 1 });
   const [isolated] = await parseOffline("します", ["eng"], "https://shirabe.test");
   assert.ok(isolated?.candidates?.some((candidate) => candidate.entry === "jmdict:1389440" && candidate.headword === "占む"));

@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   const digest = createHash("sha256").update(readFileSync(input.pack.path)).digest("hex");
   if (digest !== input.pack.sha256) throw new Error("Pack changed after web export");
   const ids = new Set<string>();
-  for (const line of packLines(input.pack.path)) {
+  for await (const line of packLines(input.pack.path)) {
     const record = JSON.parse(line) as { type: string; id?: string; dictionary?: string };
     if (record.type === "term" && input.dictionaries.includes(record.dictionary!)) {
       ids.add(record.id!);
@@ -56,7 +56,7 @@ async function main(): Promise<void> {
       }
     }
   }
-  const lines = subsetPack(input.pack.path,
+  const lines = await subsetPack(input.pack.path,
     [...input.rows.map((row) => row.query), ...input.contexts.map((row) => row.text)], { maxSpan: 32 });
   const installedIds = new Set(lines.filter((line) => line.includes('"type":"term"'))
     .map((line) => (JSON.parse(line) as { id: string }).id));

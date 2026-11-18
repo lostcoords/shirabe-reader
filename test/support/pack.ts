@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { gunzipSync, gzipSync } from "node:zlib";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+import { createGunzip, gzipSync } from "node:zlib";
+import { parse as parseYaml } from "yaml";
 import { deinflect } from "../../src/common/deinflect.js";
 import { searchReadings } from "../../src/common/romaji.js";
 import { installDictionary, lookupVariants, removeDictionary, type PackManifest } from "../../src/common/offline-dictionary.js";
@@ -11,41 +12,64 @@ import { installDictionary, lookupVariants, removeDictionary, type PackManifest 
 // this, which is how the sweep ended up subsetting at a different span cap than
 // the suites without anyone noticing.
 
-const PACK_DIR = "tmp/dictionary-packs/current";
+// A slice of the real pack holding every entry the corpora below could look up,
+// so a clean checkout runs every corpus row against real JMdict data.
+// `npm run fixture-pack -- <full pack>` cuts it again.
+export const FIXTURE_PACK = "test/fixtures/dictionary-pack/slice.ndjson.gz";
+export const FIXTURE_PACK_RECORD = "test/fixtures/dictionary-pack/slice.json";
+
+export type FixturePackRecord = {
+  cutFrom: { contentRevision: string; builtAt: string; sha256: string; sources: Array<{ name: string; license: string; url: string }> };
+  texts: string[];
+};
+
+const CORPORA = ["cross_engine", "segmentation", "search_mapping", "contextual_boundaries", "click_positions"];
 
 // The span cap the asserting corpora subset at. Long enough for the longest
 // grammar expressions a case can pin.
 export const CORPUS_MAX_SPAN = 24;
 
+/** The dictionary pack the corpus suites run against: `$SHIRABE_PACK`, or the committed slice. */
+export function corpusPackPath(): string {
+  const override = process.env.SHIRABE_PACK;
+  if (override && !existsSync(override)) throw new Error(`SHIRABE_PACK points at ${override}, which does not exist`);
+  return override || FIXTURE_PACK;
+}
+
+/** Every sentence and query in the shared tokenizer corpora. */
+export function corpusTexts(): string[] {
+  return CORPORA.flatMap((name) =>
+    (parseYaml(readFileSync(`test/fixtures/tokenizer_eval/${name}.yml`, "utf8")) as Array<{ sentence: string; queries?: string[] }>)
+      .flatMap((row) => [row.sentence, ...(row.queries ?? [])]));
+}
+
+let fixtureKeys: Set<string> | undefined;
+
 /**
- * The newest locally-built dictionary pack, or null when none is built.
- * SHIRABE_PACK overrides the search; otherwise it is the dev pack that
- * `bin/rails dictionary_packs:ensure` writes.
+ * Throw unless the committed slice was cut for these texts. The slice holds only
+ * the entries its recorded texts could reach, so a text it was not cut for would
+ * be judged against a dictionary missing the very entries that compete for it.
  */
-export function realPackPath(): string | null {
-  if (process.env.SHIRABE_PACK) return existsSync(process.env.SHIRABE_PACK) ? process.env.SHIRABE_PACK : null;
-  if (!existsSync(PACK_DIR)) return null;
-  const packs = readdirSync(PACK_DIR)
-    .filter((name) => name.endsWith(".ndjson.gz"))
-    .map((name) => join(PACK_DIR, name))
-    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-  return packs[0] ?? null;
+export function assertFixtureCovers(texts: string[]): void {
+  const record = JSON.parse(readFileSync(FIXTURE_PACK_RECORD, "utf8")) as FixturePackRecord;
+  const recorded = new Set(record.texts);
+  const unknown = texts.filter((text) => !recorded.has(text));
+  if (!unknown.length) return;
+  fixtureKeys ??= lookupKeys(record.texts);
+  const uncovered = unknown.filter((text) => [...lookupKeys([text])].some((key) => !fixtureKeys!.has(key)));
+  if (uncovered.length) {
+    throw new Error(`the fixture pack was not cut for ${JSON.stringify(uncovered)}: run \`npm run fixture-pack -- <full pack> ${uncovered.map((text) => JSON.stringify(text)).join(" ")}\``);
+  }
 }
 
 /**
- * A full pack gunzips past Node's maximum string length, so decoding the whole
- * thing at once throws ERR_STRING_TOO_LONG on exactly the real dictionary the
- * corpus cases need. Walk the buffer and decode a line at a time.
+ * Stream a pack a line at a time. A full pack gunzips to about 750 MB, past
+ * Node's maximum string length, and several suites scan it at once.
  */
-export function* packLines(path: string): Generator<string> {
-  const raw = gunzipSync(readFileSync(path));
-  let start = 0;
-  for (let at = 0; at < raw.length; at += 1) {
-    if (raw[at] !== 0x0a) continue;
-    if (at > start) yield raw.toString("utf8", start, at);
-    start = at + 1;
+export async function* packLines(path: string): AsyncGenerator<string> {
+  for await (const line of createInterface({ input: createReadStream(path).pipe(createGunzip()), crlfDelay: Infinity })) {
+    if (line) yield line;
   }
-  if (start < raw.length) yield raw.toString("utf8", start);
 }
 
 /**
@@ -90,11 +114,11 @@ export function lookupKeys(sentences: string[], maxSpan = CORPUS_MAX_SPAN): Set<
  * for a span in these sentences: not just the expected answers, or the corpus
  * would be rigged. 逸脱 has to be present for the いつだった case to mean anything.
  */
-export function subsetPack(path: string, sentences: string[], { maxSpan = CORPUS_MAX_SPAN } = {}): string[] {
+export async function subsetPack(path: string, sentences: string[], { maxSpan = CORPUS_MAX_SPAN } = {}): Promise<string[]> {
+  if (path === FIXTURE_PACK) assertFixtureCovers(sentences);
   const keys = lookupKeys(sentences, maxSpan);
   const kept: string[] = [];
-  for (const line of packLines(path)) {
-    if (!line) continue;
+  for await (const line of packLines(path)) {
     if (line.startsWith('{"type":"header"')) { kept.push(line); continue; }
     const record = JSON.parse(line) as {
       type: string;

@@ -77,7 +77,7 @@ npm run build:chrome
 npm run lint:firefox
 ```
 
-The default suite runs local fixtures. To run the full tokenizer corpus against a generated dictionary pack, set `SHIRABE_PACK` to the absolute path of its `.ndjson.gz` file.
+The suite runs every tokenizer corpus row against a committed slice of the real dictionary pack. To run against a full pack instead, set `SHIRABE_PACK` to the absolute path of its `.ndjson.gz` file. When the corpora gain a sentence, a test names it; recut the slice with `npm run fixture-pack -- <full pack>`.
 
 For the installed Chromium checks:
 
@@ -103,6 +103,6 @@ Upload the corresponding zip from `artifacts/<browser>/`. [Store listing copy](S
 
 ## License
 
-[GPL-3.0](LICENSE). [NOTICE](NOTICE) lists Yomitan and daidai attribution. Downloaded dictionary packs carry their own licenses, separately from the extension.
+[GPL-3.0](LICENSE). [NOTICE](NOTICE) lists Yomitan and daidai attribution, and the sources and CC BY-SA 4.0 licence of the dictionary slice under `test/fixtures`. Downloaded dictionary packs carry their own licenses, separately from the extension.
 
 The portable dictionary pack writer lives in [`tools/pack-builder`](tools/pack-builder). Rails supplies authorized dictionary records; this library owns Reader’s offline archive format.

@@ -11,6 +11,7 @@
     "watch:chrome": "node build.mjs chrome --watch",
     "check": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "node test/run.mjs",
+    "fixture-pack": "node script/fixture-pack.mjs",
     "verify:release": "node test/release-package.mjs",
     "lint:firefox": "web-ext lint --source-dir dist/firefox",
     "verify:build:firefox": "node build.mjs firefox --outdir=dist/verify/firefox",

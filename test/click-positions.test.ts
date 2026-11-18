@@ -5,16 +5,13 @@ import { readFileSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
 import { Window } from "happy-dom";
 import { lookupGroupOffline, lookupScanOffline, parseOffline, resolveParsedSpan, setActiveDictionaryStack } from "../src/common/offline-dictionary.js";
-import { installTestPack, packPayload, realPackPath, subsetPack } from "./support/pack.js";
+import { installTestPack, packPayload, corpusPackPath, subsetPack } from "./support/pack.js";
 
 const cases = (parseYaml(readFileSync("test/fixtures/tokenizer_eval/click_positions.yml", "utf8")) as
   Array<{ sentence: string; surface: string; entry: string }>).map((row) => ({ ...row, text: row.sentence }));
 
 test("pointer positions preserve whole-word identity across inline nodes and ruby", async (context) => {
-  const path = realPackPath();
-  if (!path && process.env.SHIRABE_REQUIRE_CONTEXTUAL_WEB !== "1") return context.skip("needs a real dictionary pack");
-  assert.ok(path, "click-position regressions require a real dictionary pack");
-  const records = subsetPack(path, cases.map((row) => row.text));
+  const records = await subsetPack(corpusPackPath(), cases.map((row) => row.text));
   await installTestPack(packPayload(records), { contentRevision: "click-positions", terms: records.length - 1 });
   const window = new Window({ url: "https://reader.test" });
   Object.assign(globalThis, {
