@@ -1,21 +1,10 @@
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Request as WorkerRequest, Response as WorkerResponse } from "../src/common/messages.js";
+import { stubBackground } from "./support/background.js";
 
 test("dictionary installation reports late failures once and ignores late cancellation", async (context) => {
-  let listener!: (request: WorkerRequest, sender: object, respond: (response: WorkerResponse) => void) => unknown;
-  const storage: Record<string, unknown> = {};
-  const event = { addListener() {} };
-  Object.assign(globalThis, {
-    self: { addEventListener() {} },
-    chrome: {
-      runtime: { onMessage: { addListener(callback: typeof listener) { listener = callback; } }, onConnect: event, onInstalled: event, getURL: (path: string) => path },
-      storage: { local: { get: async () => storage, set: async (values: Record<string, unknown>) => { Object.assign(storage, values); }, remove: async (keys: string | string[]) => { for (const key of [keys].flat()) delete storage[key]; } }, onChanged: event },
-      tabs: { onRemoved: event, query: async () => [], sendMessage: async () => {} },
-      scripting: { unregisterContentScripts: async () => {} }, permissions: { contains: async () => true },
-    },
-  });
+  const { storage, start } = stubBackground({ permissions: true });
   const { DEFAULTS } = await import("../src/common/config.js");
   storage.config = { ...DEFAULTS, apiBase: "https://api.test", errorReports: true };
   type CapturedEvent = { event: string; properties: Record<string, unknown> };
@@ -54,8 +43,7 @@ test("dictionary installation reports late failures once and ignores late cancel
     globalThis.fetch = originalFetch;
     console.error = originalError;
   });
-  await import("../src/background/background.js");
-  const send = (request: WorkerRequest) => new Promise<WorkerResponse>((resolve) => { listener(request, {}, resolve); });
+  const send = await start();
   const settled = async (predicate: () => Promise<boolean>) => {
     for (let attempt = 0; attempt < 500; attempt += 1) {
       if (await predicate()) return;

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { installWindow } from "./support/dom.js";
 
 // Yomitan has two lookup surfaces: shift-hover from the character under the
 // cursor, and a context-menu lookup of whatever is selected. Shirabe has both,
@@ -11,10 +12,7 @@ import test from "node:test";
 // furigana on handed the dictionary 帰かえった.
 
 async function selectionOver(html: string, select: (document: Document) => Range): Promise<string> {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
-  window.document.body.innerHTML = html;
-  Object.assign(globalThis, { window, document: window.document, NodeFilter: window.NodeFilter });
+  const window = installWindow({ html });
 
   const { rangeText } = await import("@shirabe-org/card/word-card/dom-text");
   return rangeText(select(window.document as unknown as Document) as unknown as Range);

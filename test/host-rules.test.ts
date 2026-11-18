@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ensureChrome } from "./support/dom.js";
 
 // `host-rules.ts` pulls in `browser.ts`, which resolves `ext` at module init and
 // throws without a WebExtension global. Stub it before importing, and import
 // inside each test, rather than relying on some earlier test file having
 // installed one first.
-if (!(globalThis as { chrome?: unknown }).chrome) {
-  (globalThis as { chrome?: unknown }).chrome = {
-    runtime: { sendMessage: async () => ({ ok: true }), onMessage: { addListener() {} }, getURL: (path: string) => path },
-    storage: { local: { get: async () => ({}), set: async () => {}, remove: async () => {} }, onChanged: { addListener() {} } },
-  };
-}
+ensureChrome();
 const load = () => import("../src/common/host-rules.js");
 
 test("match patterns anchor the host instead of matching anywhere in the URL", async () => {

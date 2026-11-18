@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ensureChrome } from "./support/dom.js";
 
 // The preset module reaches Config, which reaches browser.ts and its WebExtension
-// global. Same stub, same reason as host-rules.test.ts.
-if (!(globalThis as { chrome?: unknown }).chrome) {
-  (globalThis as { chrome?: unknown }).chrome = {
-    runtime: { sendMessage: async () => ({ ok: true }), onMessage: { addListener() {} }, getURL: (path: string) => path },
-    storage: { local: { get: async () => ({}), set: async () => {}, remove: async () => {} }, onChanged: { addListener() {} } },
-  };
-}
+// global, so stub it before importing.
+ensureChrome();
 const load = () => import("../src/common/presets.js");
 const loadConfig = () => import("../src/common/config.js");
 

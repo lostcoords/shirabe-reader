@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { installWindow } from "./support/dom.js";
 import type { Request as MessageRequest } from "../src/common/messages.js";
 
 // A saved word has to arrive at /api/v1 with the entry it came from. The pack cites
@@ -49,17 +50,8 @@ test("a quick save links the card even when the word's popup never opened", asyn
   // The popup stamps the entry it resolved. But a shortcut fires on the HOVERED
   // word, and in modifier mode nothing looked it up. Keyboard mining is the fast
   // path through a page, so it cannot be the one that lands orphans.
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
+  const window = installWindow({ frames: true });
   const sent: MessageRequest[] = [];
-  Object.assign(globalThis, {
-    window, document: window.document, HTMLElement: window.HTMLElement,
-    // The content bundle schedules its render work on a frame; nothing here waits
-    // on one, so a plain task is enough to let the modules load.
-    requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0) as unknown as number,
-    cancelAnimationFrame: (handle: number) => clearTimeout(handle),
-    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
-  });
   const { ext } = await import("../src/common/browser.js");
   ext.runtime.sendMessage = (async (message: MessageRequest) => {
     sent.push(message);
@@ -124,15 +116,8 @@ test("Known and taking it back post the word's reading and entry, the identity a
 });
 
 test("Known on a word whose popup never opened asks for its entry, as a save does", async () => {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
+  const window = installWindow({ frames: true });
   const sent: MessageRequest[] = [];
-  Object.assign(globalThis, {
-    window, document: window.document, HTMLElement: window.HTMLElement,
-    requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0) as unknown as number,
-    cancelAnimationFrame: (handle: number) => clearTimeout(handle),
-    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
-  });
   const { ext } = await import("../src/common/browser.js");
   ext.runtime.sendMessage = (async (message: MessageRequest) => {
     sent.push(message);
@@ -173,12 +158,7 @@ test("Ignore posts the word as text with its reading, and the page stops marking
     globalThis.fetch = original;
   }
 
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
-  Object.assign(globalThis, {
-    window, document: window.document, HTMLElement: window.HTMLElement,
-    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
-  });
+  const window = installWindow();
   const { ext } = await import("../src/common/browser.js");
   const sent: MessageRequest[] = [];
   ext.runtime.sendMessage = (async (message: MessageRequest) => {
@@ -198,14 +178,7 @@ test("Ignore posts the word as text with its reading, and the page stops marking
 });
 
 test("a save that kept its line but not its clip tells the reader, and why", async () => {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
-  Object.assign(globalThis, {
-    window, document: window.document, HTMLElement: window.HTMLElement,
-    requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0) as unknown as number,
-    cancelAnimationFrame: (handle: number) => clearTimeout(handle),
-    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
-  });
+  const window = installWindow({ frames: true });
   const { ext } = await import("../src/common/browser.js");
   ext.runtime.sendMessage = (async (message: MessageRequest) => {
     if (message.type === "lookup") return { ok: true, type: "lookup", definition: null };
@@ -224,14 +197,7 @@ test("a save that kept its line but not its clip tells the reader, and why", asy
 });
 
 test("Not known and Stop ignoring take back what was set, and a card Known made is forgotten with it", async () => {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
-  Object.assign(globalThis, {
-    window, document: window.document, HTMLElement: window.HTMLElement,
-    requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0) as unknown as number,
-    cancelAnimationFrame: (handle: number) => clearTimeout(handle),
-    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
-  });
+  const window = installWindow({ frames: true });
   const { ext } = await import("../src/common/browser.js");
   const sent: MessageRequest[] = [];
   ext.runtime.sendMessage = (async (message: MessageRequest) => {

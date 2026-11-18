@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { installWindow } from "./support/dom.js";
 import type { Request } from "../src/common/messages.js";
 
 // The capture form is the extension's front door to the same Card the website's
@@ -14,16 +15,8 @@ async function mountForm(options: {
   savedSenses?: string;
   capture?: { sentence?: { text: string; capturedAt: string }; imageDataUrl?: string };
 }) {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
+  const window = installWindow();
   const sent: Request[] = [];
-  Object.assign(globalThis, {
-    window, document: window.document, HTMLElement: window.HTMLElement, Option: (window as unknown as { Option: unknown }).Option,
-    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
-  });
-  // `ext` binds to whichever WebExtension global existed when browser.ts was
-  // first imported: the bundle shares one: so answer through that object
-  // rather than swapping the global out from under it.
   const { ext } = await import("../src/common/browser.js");
   ext.runtime.sendMessage = (async (message: Request) => {
     sent.push(message);

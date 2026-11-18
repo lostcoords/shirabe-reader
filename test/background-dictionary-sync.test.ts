@@ -1,37 +1,26 @@
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Request as WorkerRequest, Response as WorkerResponse } from "../src/common/messages.js";
-import { packPayload, testPackManifest } from "./support/pack.js";
+import { stubBackground } from "./support/background.js";
+import { packHeader, packPayload, term, testPackManifest } from "./support/pack.js";
 
 test("browser alarms recover pending exports without an open popup, and disconnect clears private sync state", async (context) => {
-  let listener!: (request: WorkerRequest, sender: object, respond: (response: WorkerResponse) => void) => unknown;
   let alarmListener!: (alarm: { name: string }) => void;
-  const storage: Record<string, unknown> = {};
   const alarms = new Map<string, { scheduledTime: number; periodInMinutes?: number }>();
-  const event = { addListener() {} };
-  Object.assign(globalThis, {
-    self: { addEventListener() {} },
-    chrome: {
-      runtime: { onMessage: { addListener(callback: typeof listener) { listener = callback; } }, onConnect: event, onInstalled: event, getURL: (path: string) => path },
-      storage: { local: { get: async () => storage, set: async (values: Record<string, unknown>) => { Object.assign(storage, values); }, remove: async (keys: string | string[]) => { for (const key of [keys].flat()) delete storage[key]; } }, onChanged: event },
-      tabs: { onRemoved: event, query: async () => [], sendMessage: async () => {} },
-      scripting: { unregisterContentScripts: async () => {} }, permissions: { contains: async () => false },
-      alarms: {
-        create: async (name: string, info: { when?: number; periodInMinutes?: number }) => { alarms.set(name, { scheduledTime: info.when ?? Date.now() + (info.periodInMinutes ?? 0) * 60_000, periodInMinutes: info.periodInMinutes }); },
-        get: async (name: string) => alarms.get(name), clear: async (name: string) => alarms.delete(name),
-        onAlarm: { addListener(callback: typeof alarmListener) { alarmListener = callback; } },
-      },
+  const { storage, start } = stubBackground({ apis: {
+    alarms: {
+      create: async (name: string, info: { when?: number; periodInMinutes?: number }) => { alarms.set(name, { scheduledTime: info.when ?? Date.now() + (info.periodInMinutes ?? 0) * 60_000, periodInMinutes: info.periodInMinutes }); },
+      get: async (name: string) => alarms.get(name), clear: async (name: string) => alarms.delete(name),
+      onAlarm: { addListener(callback: typeof alarmListener) { alarmListener = callback; } },
     },
-  });
+  } });
   const { DEFAULTS } = await import("../src/common/config.js");
   Object.assign(storage, { config: { ...DEFAULTS, apiBase: "https://api.test", accessToken: "token", refreshToken: "refresh",
     accessTokenExpiresAt: "2999-01-01T00:00:00Z", scopes: ["user:profile:read", "user:dictionary:read"], errorReports: false } });
   const makePack = (slug: string) => {
     const payload = packPayload([
-      JSON.stringify({ type: "header", schemaVersion: 7, languages: ["eng"], source: slug }),
-      JSON.stringify({ type: "term", id: `${slug}:1`, dictionary: slug, headword: "猫", expressions: [{ text: "猫", script: "kanji", common: true, tags: [] }],
-        readings: [{ text: "ねこ", kind: "kana" }], senses: [{ glosses: { eng: [slug] }, partsOfSpeech: ["n"], fields: [], misc: [], dialects: [], restrictions: [] }] }),
+      JSON.stringify(packHeader(["eng"], slug)),
+      term(`${slug}:1`, "猫", "猫", "ねこ", slug),
     ]);
     return { payload, manifest: testPackManifest(payload, { contentRevision: slug, terms: 1 }, { dictionaries: [{ slug }], downloadUrl: `https://packs.test/${slug}.gz` }) };
   };
@@ -57,8 +46,7 @@ test("browser alarms recover pending exports without an open popup, and disconne
     if (url.endsWith("/jmdict.gz")) return new Response(new Uint8Array(base.payload));
     return new Response(null, { status: 404 });
   }) as typeof fetch;
-  await import("../src/background/background.js");
-  const send = (request: WorkerRequest) => new Promise<WorkerResponse>((resolve) => { listener(request, {}, resolve); });
+  const send = await start();
   const settled = async (predicate: () => Promise<boolean>) => {
     for (let attempt = 0; attempt < 500; attempt += 1) {
       if (await predicate()) return;

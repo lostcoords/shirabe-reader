@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { installWindow, pageChrome } from "./support/dom.js";
 
 // The free/Pro line as the extension sees it: look up all you like, saving is
 // bought (specs/browser-extension.md §1). The server answers a free account's
@@ -45,16 +46,9 @@ test("the pricing link names the entry point it came from", async () => {
 });
 
 test("a signed-in free reader is told what's missing, and can act on it", async () => {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
+  installWindow();
   const config = { apiBase: "https://shirabe.test", accessToken: "shra_x", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), refreshToken: "shrr_x", scopes: ["user:study:read"], entitled: false };
-  Object.assign(globalThis, {
-    window, document: window.document, Node: window.Node, HTMLElement: window.HTMLElement,
-    chrome: {
-      runtime: { onMessage: { addListener() {} }, sendMessage: async () => ({ ok: true }) },
-      storage: { local: { get: async () => ({ config }), set: async () => {} }, onChanged: { addListener() {} } },
-    },
-  });
+  Object.assign(globalThis, { chrome: pageChrome({ config }) });
 
   const { setCardHost, setWriteState, studyUnavailable } = await import("@shirabe-org/card/word-card");
   // The link resolves through the host, which is what a card with no host (an

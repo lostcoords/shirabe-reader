@@ -1,9 +1,8 @@
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import test from "node:test";
 import { lookupEntryOffline, lookupOffline, lookupScanOffline, parseOffline, resolveParsedSpan } from "../src/common/offline-dictionary.js";
-import { installTestPack, packPayload } from "./support/pack.js";
+import { installTerms, term } from "./support/pack.js";
 import contextEvidence from "../src/common/resources/context-hints.json";
 
 // The offline half of `POST /api/v1/words/identify`.
@@ -24,7 +23,7 @@ test("a passive suru span offers its intermediate form before its frequent base"
   suru.frequencies = [{ source: "test", text: "する", reading: "する", rank: 10 }];
   const sareru = JSON.parse(term("jmdict:passive", "される", null, "される", "be done", true, "v1"));
   sareru.frequencies = [{ source: "test", text: "される", reading: "される", rank: 23_483 }];
-  await install([suru, sareru].map((entry) => JSON.stringify(entry)));
+  await installTerms([suru, sareru].map((entry) => JSON.stringify(entry)));
   const answer = await resolveParsedSpan("されている", {
     start: 0, length: 5, surface: "されている", lemma: "する", reading: "サレテイル",
     inflection: ["progressive", "te-form", "passive"], pos: "verb", kind: "inflected", content: true, state: "none",
@@ -33,7 +32,7 @@ test("a passive suru span offers its intermediate form before its frequent base"
 });
 
 test("a listed past copula stays ahead of its base in an offline card", async () => {
-  await install([
+  await installTerms([
     term("jmdict:past", "だった", null, "だった", "was", true, "exp"),
     term("jmdict:copula", "だ", null, "だ", "be", true, "cop"),
   ]);
@@ -44,7 +43,7 @@ test("a listed past copula stays ahead of its base in an offline card", async ()
 });
 
 test("a parsed noun drops a verb inflection in context but keeps it in isolation", async () => {
-  await install([
+  await installTerms([
     term("jmdict:rain", "雨", "雨", "あめ", "rain", true, "n"),
     term("jmdict:weave", "編む", "編む", "あむ", "weave", true, "v5m"),
   ]);
@@ -58,7 +57,7 @@ test("a parsed noun drops a verb inflection in context but keeps it in isolation
 });
 
 test("a conjunction offers its inflected verb and an adverb offers its base", async () => {
-  await install([
+  await installTerms([
     term("jmdict:then", "そうしたら", null, "そうしたら", "then", true, "conj"),
     term("jmdict:do-so", "そうする", null, "そうする", "do so", true, "vs-i"),
     term("jmdict:so-much", "そんなに", null, "そんなに", "so much", true, "adv"),
@@ -81,7 +80,7 @@ test("a suru noun constrains a clicked span even without a preceding token", asy
   study.senses[0].partsOfSpeech.push("vs");
   const rub = JSON.parse(term("jmdict:rub", "擦る", "擦る", "する", "rub", true, "v5r"));
   rub.expressions.push({ text: "する", script: "kana", common: false, tags: [] });
-  await install([
+  await installTerms([
     JSON.stringify(study),
     term("jmdict:do", "する", null, "する", "do", true, "vs-i"),
     JSON.stringify(rub),
@@ -96,7 +95,7 @@ test("a suru noun constrains a clicked span even without a preceding token", asy
 });
 
 test("a raw scan resolves the whole word at the caret with sentence context", async (context) => {
-  await install([
+  await installTerms([
     term("jmdict:study", "勉強", "勉強", "べんきょう", "study", true, "vs"),
     term("jmdict:do", "する", null, "する", "do", true, "vs-i"),
     term("jmdict:print", "刷る", "刷る", "する", "print", true, "v5r"),
@@ -115,7 +114,7 @@ test("a raw scan resolves the whole word at the caret with sentence context", as
 });
 
 test("a raw kana scan uses the same candidate order as a parsed span", async () => {
-  await install([
+  await installTerms([
     term("jmdict:yolk", "黄身", "黄身", "きみ", "egg yolk", false),
     term("jmdict:you", "君", "君", "きみ", "you"),
     term("jmdict:kana", "きみ", null, "きみ", "millet"),
@@ -130,7 +129,7 @@ test("a raw kana scan uses the same candidate order as a parsed span", async () 
 });
 
 test("a raw scan keeps an expression whole before resolving its dictionary headword", async () => {
-  await install([
+  await installTerms([
     term("jmdict:then", "そうしたら", null, "そうしたら", "then", true, "conj"),
     term("jmdict:do-so", "そうする", null, "そうする", "do so", true, "vs-i"),
   ]);
@@ -141,7 +140,7 @@ test("a raw scan keeps an expression whole before resolving its dictionary headw
 });
 
 test("a sentence-final で offers the copula as an alternative", async () => {
-  await install([
+  await installTerms([
     term("jmdict:particle", "で", null, "で", "at", true, "prt"),
     term("jmdict:copula", "だ", null, "だ", "be", true, "cop"),
   ]);
@@ -158,7 +157,7 @@ test("a rare kana headword keeps the frequency of its own written form", async (
     ["common", "いい", null, 33], ["easy", "易々", "易々", 42_000],
     ["saying", "いい", "謂", 93_847], ["obedient", "唯々", "唯々", 116_369],
   ] as const;
-  await install(rows.map(([id, headword, kanji, rank]) => {
+  await installTerms(rows.map(([id, headword, kanji, rank]) => {
     const entry = JSON.parse(term(`jmdict:${id}`, headword, kanji, "いい", id, id === "common", "adv"));
     if (kanji && headword === "いい") entry.expressions.push({ text: "いい", script: "kana", common: false, tags: [] });
     if (headword !== "いい") entry.expressions.push({ text: "いい", script: "kana", common: false, tags: [] });
@@ -177,7 +176,7 @@ test("a kana occurrence keeps its reading while the popup uses the dictionary he
   const tomorrow = JSON.parse(term("jmdict:tomorrow", "明日", "明日", "あした", "tomorrow", true, "n"));
   tomorrow.readings.push({ text: "あす", kind: "kana" }, { text: "みょうにち", kind: "kana" });
   tomorrow.expressions.push(...tomorrow.readings.map(({ text }: { text: string }) => ({ text, script: "kana", common: true, tags: [] })));
-  await install([JSON.stringify(tomorrow)]);
+  await installTerms([JSON.stringify(tomorrow)]);
   assert.equal((await parseOffline("明日。", ["eng"], HOST))[0].reading, "あした");
   for (const reading of ["あした", "あす", "みょうにち"]) {
     assert.equal((await parseOffline(`${reading}。`, ["eng"], HOST))[0].reading, reading);
@@ -194,7 +193,7 @@ test("a kana occurrence keeps its reading while the popup uses the dictionary he
 test("a kana popup keeps the occurrence separately from the dictionary heading", async () => {
   const word = JSON.parse(term("jmdict:bridge", "橋", "橋", "はし", "bridge", true, "n"));
   word.expressions.push({ text: "はし", script: "kana", common: true, tags: [] });
-  await install([JSON.stringify(word)]);
+  await installTerms([JSON.stringify(word)]);
   const popup = await lookupEntryOffline("jmdict:bridge", "はし", ["eng"], HOST);
   assert.equal(popup?.headword, "橋");
   assert.equal(popup?.baseForm, "橋");
@@ -207,7 +206,7 @@ test("a lexical imperative explains its referenced verb without replacing the se
   const please = JSON.parse(term("jmdict:please", "ください", "下さい", "ください", "please give me", true, "exp"));
   please.senses[0].xrefs = [{ kind: "related", text: "下さる", reading: "くださる" }];
   const give = term("jmdict:give", "下さる", "下さる", "くださる", "give", true, "v5aru");
-  await install([JSON.stringify(please), give]);
+  await installTerms([JSON.stringify(please), give]);
   for (const surface of ["下さい", "ください"]) {
     const popup = await lookupEntryOffline("jmdict:please", surface, ["eng"], HOST);
     assert.equal(popup?.entry, "jmdict:please");
@@ -218,16 +217,16 @@ test("a lexical imperative explains its referenced verb without replacing the se
     assert.equal(popup?.inflectionBase, surface === "下さい" ? "下さる" : "くださる");
   }
   please.senses[0].xrefs[0].reading = "おろさる";
-  await install([JSON.stringify(please), give]);
+  await installTerms([JSON.stringify(please), give]);
   assert.equal((await lookupEntryOffline("jmdict:please", "下さい", ["eng"], HOST))?.inflectionBase, undefined);
   please.senses[0].xrefs = [];
-  await install([JSON.stringify(please), give]);
+  await installTerms([JSON.stringify(please), give]);
   assert.equal((await lookupEntryOffline("jmdict:please", "下さい", ["eng"], HOST))?.inflectionBase, undefined);
 });
 
 test("a listing particle stays whole beside suru without replacing the conjunction", async () => {
   const ranks: Record<string, number> = { "する": 10, "すると": 128162, "とか": 91, "と": 3, "か": 12, "で": 7 };
-  await install([
+  await installTerms([
     term("jmdict:do", "する", null, "する", "do", true, "vs-i"),
     term("jmdict:then", "すると", null, "すると", "then", true, "conj"),
     term("jmdict:list", "とか", null, "とか", "such as", true, "exp"),
@@ -264,7 +263,7 @@ test("parsed inflections use surface readings while popups keep dictionary readi
     ["go-negative-te", "行く", "いく", "v5k-s", "行かないで", "いかないで"],
   ] as const;
   for (const [id, base, reading, pos, surface, expected] of cases) {
-    await install([term(`jmdict:${id}`, base, base, reading, id, true, pos)]);
+    await installTerms([term(`jmdict:${id}`, base, base, reading, id, true, pos)]);
     const token = (await parseOffline(`${surface}。`, ["eng"], HOST))[0];
     assert.equal(token?.surface, surface);
     assert.equal(token?.entry, `jmdict:${id}`, surface);
@@ -282,7 +281,7 @@ test("inflected expression readings use their validated conjugation rather than 
   debt.expressions[0].inflectionClass = "adj-i";
   const come = JSON.parse(term("jmdict:bring", "持って来る", "持って来る", "もってくる", "bring", true, "exp"));
   come.expressions[0].inflectionClass = "vk";
-  await install([rain, debt, come].map((row) => JSON.stringify(row)));
+  await installTerms([rain, debt, come].map((row) => JSON.stringify(row)));
   for (const [surface, reading] of [["雨が降った", "あめがふった"], ["首が回らなく", "くびがまわらなく"], ["持って来た", "もってきた"]]) {
     const [token] = await parseOffline(`${surface}。`, ["eng"], HOST);
     assert.equal(token.surface, surface);
@@ -291,7 +290,7 @@ test("inflected expression readings use their validated conjugation rather than 
 });
 
 test("a lexical adverb does not inherit a rare adjective explanation", async () => {
-  await install([
+  await installTerms([
     term("jmdict:entirely", "全く", "全く", "まったく", "entirely", true, "adv"),
     term("jmdict:complete", "全い", "全い", "まったい", "complete", false, "adj-i"),
   ]);
@@ -312,7 +311,7 @@ test("a lexical adjective adverb wins only when the inflected reading agrees", a
   const skilled = JSON.parse(term("jmdict:skilled", "上手い", "上手い", "うまい", "skilled", true, "adj-i"));
   skilled.frequencies = [{ source: "jiten-global", text: "上手い", reading: "うまい", rank: 3224 }];
   const sweet = JSON.parse(term("jmdict:sweet", "甘い", "甘い", "あまい", "sweet", true, "adj-i"));
-  await install([adverb, skilled, sweet].map((row) => JSON.stringify(row)));
+  await installTerms([adverb, skilled, sweet].map((row) => JSON.stringify(row)));
   const [token] = await parseOffline("上手く。", ["eng"], HOST);
   assert.equal(token.entry, "jmdict:well");
   assert.equal(token.lemma, "上手い");
@@ -329,13 +328,13 @@ test("a lexical adjective adverb wins only when the inflected reading agrees", a
   assert.equal((await parseOffline("甘く。", ["eng"], HOST))[0].entry, "jmdict:sweet");
   for (const tag of ["sK", "rK"]) {
     adverb.expressions[0].tags = [tag];
-    await install([adverb, skilled].map((row) => JSON.stringify(row)));
+    await installTerms([adverb, skilled].map((row) => JSON.stringify(row)));
     assert.equal((await parseOffline("上手く。", ["eng"], HOST))[0].entry, "jmdict:skilled", tag);
   }
   adverb.expressions[0].tags = [];
   for (const tag of ["arch", "obs"]) {
     adverb.senses[0].misc = ["uk", tag];
-    await install([adverb, skilled].map((row) => JSON.stringify(row)));
+    await installTerms([adverb, skilled].map((row) => JSON.stringify(row)));
     assert.equal((await parseOffline("上手く。", ["eng"], HOST))[0].entry, "jmdict:skilled", tag);
   }
 });
@@ -345,7 +344,7 @@ test("a rare spelling does not demote a common reading in the alternative list",
     ["house", "家", "いえ", 188, true], ["inside", "内", "うち", 2082, true],
     ["family", "家", "け", 2917, true], ["suffix", "屋", "や", 1740, false],
   ] as const;
-  await install(rows.map(([id, writing, reading, rank, common]) => {
+  await installTerms(rows.map(([id, writing, reading, rank, common]) => {
     const row = JSON.parse(term(`jmdict:${id}`, writing, writing, reading, id, common));
     row.expressions.push({ text: reading, script: "kana", common, tags: [] });
     if (writing !== "家") row.expressions.push({ text: "家", script: "kanji", common: false, tags: ["sK"] });
@@ -365,7 +364,7 @@ test("alternatives display the matched reading without borrowing another reading
   alternate.expressions.push({ text: "なま", script: "kana", common: true, tags: [] },
     { text: "しょう", script: "kana", common: false, tags: [] });
   alternate.readings.push({ text: "しょう", kind: "kana" });
-  await install([term("jmdict:chapter", "章", "章", "しょう", "chapter"), JSON.stringify(alternate)]);
+  await installTerms([term("jmdict:chapter", "章", "章", "しょう", "chapter"), JSON.stringify(alternate)]);
   const token = (await parseOffline("しょう。", ["eng"], HOST))[0];
   const candidate = token?.candidates?.find((row) => row.entry === "jmdict:alternate");
   assert.ok(candidate);
@@ -376,7 +375,7 @@ test("alternatives display the matched reading without borrowing another reading
 test("learned contexts choose attested homophones while retaining alternatives and explicit spellings", async () => {
   const verbs = [["1587040", "言う", "いう", "v5u", 145], ["1546640", "要る", "いる", "v5r", 38],
     ["1578850", "行く", "いく", "v5k-s", 172]] as const;
-  await install([
+  await installTerms([
     ...verbs.map(([id, kanji, kana, pos, rank]) => {
       const row = JSON.parse(term(`jmdict:${id}`, kanji, kanji, kana, kanji, true, pos));
       row.expressions.push({ text: kana, script: "kana", common: true, tags: [] });
@@ -417,7 +416,7 @@ test("quotation and purpose distinguish inflected homophones without deleting al
     ];
     return JSON.stringify(row);
   };
-  await install([
+  await installTerms([
     ranked("jmdict:say", "言う", "いう", "v5u", 145, 25),
     ranked("jmdict:need", "要る", "いる", "v5r", 38, 2905),
     ranked("jmdict:go", "行く", "いく", "v5k-s", 172, 48),
@@ -454,7 +453,7 @@ test("sentence-ending quoted speech splits without changing explicit listing loo
   const solve = JSON.parse(term("jmdict:solve", "解く", "解く", "とく", "solve", true, "v5k"));
   solve.expressions.push({ text: "とく", script: "kana", common: true, tags: [] });
   solve.frequencies = [{ source: "jiten-global", text: "解く", reading: "とく", rank: 1900 }];
-  await install([
+  await installTerms([
     term("jmdict:quote", "と", null, "と", "quotation", true, "prt"),
     term("jmdict:say", "言う", "言う", "いう", "say", true, "v5u"),
     JSON.stringify(solve),
@@ -475,7 +474,7 @@ test("sentence-ending quoted speech splits without changing explicit listing loo
 test("curated listing categories distinguish examples from a speaker", async () => {
   const listing = JSON.parse(term("jmdict:listing", "といった", "と言った", "といった", "such as", true, "conj"));
   listing.expressions.push({ text: "といった", script: "kana", common: true, tags: [] });
-  await install([
+  await installTerms([
     JSON.stringify(listing),
     term("jmdict:quote", "と", null, "と", "quotation", true, "prt"),
     term("jmdict:list", "や", null, "や", "and", true, "prt"),
@@ -496,7 +495,7 @@ test("curated listing categories distinguish examples from a speaker", async () 
 });
 
 test("a dropped ra potential label follows the selected verb class", async () => {
-  await install([
+  await installTerms([
     term("jmdict:eat", "食べる", "食べる", "たべる", "eat", true, "v1"),
     term("jmdict:come", "来る", "来る", "くる", "come", true, "vk"),
     term("jmdict:return", "帰る", "帰る", "かえる", "return", true, "v5r"),
@@ -515,7 +514,7 @@ test("a dropped ra potential label follows the selected verb class", async () =>
 test("a specified or relatively modified man does not select the sexual idiom", async () => {
   const idiom = JSON.parse(term("jmdict:idiom", "男を知る", "男を知る", "おとこをしる", "lose one's virginity", true, "v5r"));
   idiom.senses[0].partsOfSpeech.push("exp");
-  await install([
+  await installTerms([
     JSON.stringify(idiom),
     term("jmdict:man", "男", "男", "おとこ", "man", true, "n"),
     term("jmdict:know", "知る", "知る", "しる", "know", true, "v5r"),
@@ -548,7 +547,7 @@ test("de ii does not invent a progressive copula stem across the adjective bound
   good.frequencies = [{ source: "jiten-global", text: "いい", reading: "いい", rank: 100 }];
   const say = JSON.parse(term("jmdict:say", "言う", "言う", "いう", "say", true, "v5u"));
   say.expressions.push({ text: "いう", script: "kana", common: true, tags: [] });
-  await install([
+  await installTerms([
     JSON.stringify(good),
     JSON.stringify(say),
     term("jmdict:self", "私", "私", "わたし", "I", true, "pn"),
@@ -570,7 +569,7 @@ test("de ii does not invent a progressive copula stem across the adjective bound
 test("benefactive reported speech keeps the quotation particle separate", async () => {
   const naming = JSON.parse(term("jmdict:naming", "と言う", "と言う", "という", "called", true, "exp"));
   naming.expressions.push({ text: "という", script: "kana", common: true, tags: [] });
-  await install([
+  await installTerms([
     JSON.stringify(naming),
     term("jmdict:quote", "と", null, "と", "quotation", true, "prt"),
     term("jmdict:say", "言う", "言う", "いう", "say", true, "v5u"),
@@ -588,7 +587,7 @@ test("romaji compares both kana scripts before choosing a name over a common wor
   const name = JSON.parse(term("jmnedict:name", "花捺", "花捺", "ばなな", "Banana (name)", false));
   name.dictionary = "jmnedict";
   name.senses[0].partsOfSpeech = [];
-  await install([term("jmdict:banana", "バナナ", null, "バナナ", "banana"), JSON.stringify(name)]);
+  await installTerms([term("jmdict:banana", "バナナ", null, "バナナ", "banana"), JSON.stringify(name)]);
   assert.equal((await lookupOffline("banana", ["eng"], HOST))?.entry, "jmdict:banana");
   assert.equal((await lookupOffline("ばなな", ["eng"], HOST))?.entry, "jmnedict:name");
   assert.equal((await lookupOffline("バナナ", ["eng"], HOST))?.entry, "jmdict:banana");
@@ -597,7 +596,7 @@ test("romaji compares both kana scripts before choosing a name over a common wor
 test("half-width voiced katakana keeps its whole word and original offsets", async () => {
   const ha = JSON.parse(term("jmdict:ha", "ハ", null, "ハ", "ha"));
   ha.frequencies = [{ source: "test", text: "ハ", reading: "ハ", rank: 1 }];
-  await install([
+  await installTerms([
     term("jmdict:banana", "バナナ", null, "バナナ", "banana"),
     JSON.stringify(ha),
     term("jmdict:nana", "ナナ", null, "ナナ", "Nana"),
@@ -615,7 +614,7 @@ test("half-width voiced katakana keeps its whole word and original offsets", asy
 });
 
 test("decomposed kana inside a sentence keeps its entry and original UTF16 offsets", async () => {
-  await install([term("jmdict:eat", "食べる", "食べる", "たべる", "eat", true, "v1")]);
+  await installTerms([term("jmdict:eat", "食べる", "食べる", "たべる", "eat", true, "v1")]);
   const text = "🍣を食へ\u3099ました。";
   const tokens = await parseOffline(text, ["eng"], HOST);
   assert.equal(tokens.map((token) => token.surface).join(""), text);
@@ -632,7 +631,7 @@ test("a selected copula does not offer the voiced past auxiliary", async () => {
   const past = JSON.parse(term("jmdict:past", "た", null, "た", "past", false, "aux-v"));
   past.expressions.push({ text: "だ", script: "kana", common: false, tags: [] });
   past.readings.push({ text: "だ", kind: "kana" });
-  await install([
+  await installTerms([
     term("jmdict:thus", "そう", null, "そう", "so", true, "adv"),
     term("jmdict:copula", "だ", null, "だ", "be", true, "cop"),
     JSON.stringify(past),
@@ -644,7 +643,7 @@ test("a selected copula does not offer the voiced past auxiliary", async () => {
 });
 
 test("de connects a na-adjective through the copula without changing a noun's case particle", async () => {
-  await install([
+  await installTerms([
     term("jmdict:quiet", "静か", "静か", "しずか", "quiet", true, "adj-na"),
     term("jmdict:beautiful", "美しい", "美しい", "うつくしい", "beautiful", true, "adj-i"),
     term("jmdict:school", "学校", "学校", "がっこう", "school"),
@@ -668,7 +667,7 @@ test("de connects a na-adjective through the copula without changing a noun's ca
 });
 
 test("an unfinished noun plus de retains both case particle and copula readings", async () => {
-  await install([
+  await installTerms([
     term("jmdict:eye", "目", "目", "め", "eye", true, "n"),
     term("jmdict:doctor", "医者", "医者", "いしゃ", "doctor", true, "n"),
     term("jmdict:copula", "だ", null, "だ", "be", true, "cop"),
@@ -686,7 +685,7 @@ test("an unfinished noun plus de retains both case particle and copula readings"
 });
 
 test("a topic-marked occupation ends with a copula rather than a location particle", async () => {
-  await install([
+  await installTerms([
     term("jmdict:he", "彼", "彼", "かれ", "he", true, "pn"),
     term("jmdict:doctor", "医者", "医者", "いしゃ", "doctor", true, "n"),
     term("jmdict:school", "学校", "学校", "がっこう", "school", true, "n"),
@@ -714,7 +713,7 @@ test("path scoring keeps a noun compound before its particle rather than startin
     ["気", "き", "spirit", "n", 253], ["気になる", "きになる", "be concerned", "exp", 436],
     ["に", "に", "result marker", "prt", 3], ["なる", "なる", "become", "v5r", 19],
   ];
-  await install(words.map(([word, reading, gloss, pos, rank]) => {
+  await installTerms(words.map(([word, reading, gloss, pos, rank]) => {
     const record = JSON.parse(term(`jmdict:${word}`, word, word, reading, gloss, true, pos));
     record.frequencies = [{ source: "test", text: word, reading, rank }];
     return JSON.stringify(record);
@@ -731,7 +730,7 @@ test("resultative ni prefers become while explicit ringing remains a separate wo
   const ring = JSON.parse(term("jmdict:ring", "鳴る", "鳴る", "なる", "ring", true, "v5r"));
   ring.expressions.push({ text: "なる", script: "kana", common: true, tags: [] });
   ring.frequencies = [{ source: "test", text: "鳴る", reading: "なる", rank: 1477 }];
-  await install([JSON.stringify(become), JSON.stringify(ring),
+  await installTerms([JSON.stringify(become), JSON.stringify(ring),
     term("jmdict:weather", "天気", "天気", "てんき", "weather"),
     term("jmdict:ni", "に", null, "に", "result marker", true, "prt"),
     term("jmdict:bell", "鐘", "鐘", "かね", "bell"),
@@ -749,7 +748,7 @@ test("resultative ni prefers become while explicit ringing remains a separate wo
 });
 
 test("suru after a verbal noun excludes unrelated suru-reading verbs", async () => {
-  await install([
+  await installTerms([
     term("jmdict:study", "勉強", "勉強", "べんきょう", "study", true, "vs"),
     term("jmdict:do", "する", null, "する", "do", true, "vs-i"),
     term("jmdict:print", "刷る", "刷る", "する", "print", true, "v5r"),
@@ -762,7 +761,7 @@ test("suru after a verbal noun excludes unrelated suru-reading verbs", async () 
 });
 
 test("a selected case particle keeps its particle alternatives instead of conjugating the copula", async () => {
-  await install([
+  await installTerms([
     term("jmdict:school", "学校", "学校", "がっこう", "school"),
     term("jmdict:de", "で", null, "で", "at", true, "prt"),
     term("jmdict:connective", "で", null, "で", "and", false, "conj"),
@@ -782,7 +781,7 @@ test("a complete written name survives more frequent single-character names", as
     record.frequencies = [{ source: "test", text: writing, reading, rank }];
     return JSON.stringify(record);
   };
-  await install([
+  await installTerms([
     name("jmnedict:5238722", "啓太", "けいた", 84_941),
     name("jmnedict:5238365", "啓", "あきら", 49_469),
     name("jmnedict:5484340", "太", "おお", 17_649),
@@ -804,7 +803,7 @@ test("a complete written name survives more frequent single-character names", as
 });
 
 test("a lexical past copula supplies the reading of its study base", async () => {
-  await install([
+  await installTerms([
     term("jmdict:plain", "だ", null, "だ", "be", true, "cop"),
     term("jmdict:past", "だった", null, "だった", "was", false, "exp"),
   ]);
@@ -817,7 +816,7 @@ test("a lexical past copula supplies the reading of its study base", async () =>
 });
 
 test("a polite past copula explains itself as past rather than a suru verb", async () => {
-  await install([
+  await installTerms([
     term("jmdict:plain", "だ", null, "だ", "be", true, "cop"),
     term("jmdict:polite", "です", null, "です", "polite be", true, "cop"),
     term("jmdict:noun-homophone", "です", null, "です", "noun homophone", false, "n"),
@@ -840,7 +839,7 @@ test("a polite past copula explains itself as past rather than a suru verb", asy
 });
 
 test("a conditional auxiliary retains its entry while recovering the copula base", async () => {
-  await install([
+  await installTerms([
     term("jmdict:conditional", "なら", null, "なら", "if", true, "aux"),
     term("jmdict:plain", "だ", null, "だ", "be", true, "cop"),
     term("jmdict:student", "学生", "学生", "がくせい", "student"),
@@ -870,11 +869,11 @@ test("a conditional auxiliary retains its entry while recovering the copula base
     assert.deepEqual(definition?.inflection, []);
     assert.equal(definition?.inflectionBase, undefined);
   }
-  await install([term("jmdict:conditional", "なら", null, "なら", "if", true, "aux")]);
+  await installTerms([term("jmdict:conditional", "なら", null, "なら", "if", true, "aux")]);
   const missingBase = await lookupEntryOffline("jmdict:conditional", "なら", ["eng"], HOST);
   assert.deepEqual(missingBase?.inflection, []);
   assert.equal(missingBase?.inflectionBase, undefined);
-  await install([
+  await installTerms([
     term("jmdict:conditional", "なら", null, "なら", "if", true, "aux"),
     term("jmdict:homophone", "だ", null, "だ", "noun homophone", true, "n"),
   ]);
@@ -882,7 +881,7 @@ test("a conditional auxiliary retains its entry while recovering the copula base
 });
 
 test("a lexical past-copula entry keeps its identity but uses the copula base", async () => {
-  await install([
+  await installTerms([
     term("jmdict:past", "だった", null, "だった", "was", true, "exp"),
     term("jmdict:plain", "だ", null, "だ", "be", true, "cop"),
     term("jmdict:cat", "猫", "猫", "ねこ", "cat"),
@@ -898,35 +897,14 @@ test("a lexical past-copula entry keeps its identity but uses the copula base", 
   const past = await lookupEntryOffline("jmdict:past", "だった", ["eng"], HOST);
   assert.deepEqual(past?.inflection, ["past"]);
   assert.equal(past?.inflectionBase, "だ");
-  await install([term("jmdict:past", "だった", null, "だった", "was", true, "exp")]);
+  await installTerms([term("jmdict:past", "だった", null, "だった", "was", true, "exp")]);
   assert.equal((await parseOffline("だった", ["eng"], HOST))[0]?.lemma, "だった");
-  await install([
+  await installTerms([
     term("jmdict:literal", "だった", null, "だった", "literal noun", true, "n"),
     term("jmdict:plain", "だ", null, "だ", "be", true, "cop"),
   ]);
   assert.equal((await parseOffline("だった", ["eng"], HOST))[0]?.lemma, "だった");
 });
-
-function term(id: string, headword: string, kanji: string | null, kana: string, gloss: string, common = true, pos = "n") {
-  return JSON.stringify({
-    type: "term", id, dictionary: "jmdict", headword,
-    expressions: kanji
-      ? [ { text: kanji, script: "kanji", common, tags: [] } ]
-      : [ { text: kana, script: "kana", common, tags: [] } ],
-    readings: [ { text: kana, kind: "kana" } ],
-    senses: [ { glosses: { eng: [ gloss ] }, partsOfSpeech: [ pos ], fields: [], misc: [], dialects: [], restrictions: [] } ],
-  });
-}
-
-const HEADER = JSON.stringify({ type: "header", schemaVersion: 7, languages: [ "eng", "spa" ], source: "Shirabe candidates" });
-
-// The revision has to differ per pack: the installer treats a repeated one as
-// "already have this" and keeps whatever is installed, so two tests sharing a
-// revision silently run against each other's dictionary.
-async function install(lines: string[]): Promise<void> {
-  const revision = createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12);
-  await installTestPack(packPayload([ HEADER, ...lines ]), { contentRevision: revision, terms: lines.length });
-}
 
 test("a literal written noun survives common shorter competitors without swallowing a following adverb", async () => {
   const ranked = (id: string, writing: string, reading: string, rank: number, pos = "n") => {
@@ -934,7 +912,7 @@ test("a literal written noun survives common shorter competitors without swallow
     record.frequencies = [{ source: "test", text: writing, reading, rank }];
     return JSON.stringify(record);
   };
-  await install([
+  await installTerms([
     ranked("jmdict:rare-homograph", "一人静", "いちにんせい", 300_000),
     ranked("jmdict:plant", "一人静", "ひとりしずか", 261_000),
     ranked("jmdict:alone", "一人", "ひとり", 588),
@@ -951,7 +929,7 @@ test("a literal written noun survives common shorter competitors without swallow
 });
 
 test("a lexical number word retains its entry even when its suffix is a counter", async () => {
-  await install([
+  await installTerms([
     term("jmdict:alone", "一人", "一人", "ひとり", "alone"),
     term("jmdict:people", "人", "人", "にん", "people counter", true, "ctr"),
     term("jmdict:seven", "七本", "七本", "ななほん", "seven long objects"),
@@ -965,7 +943,7 @@ test("a lexical number word retains its entry even when its suffix is a counter"
 });
 
 test("ASCII and full-width digits enter the same Japanese word lookup", async () => {
-  await install([
+  await installTerms([
     term("jmdict:three", "三つ", "３つ", "みっつ", "three"),
     term("jmdict:horn", "角", null, "つの", "horn"),
     term("jmdict:of", "の", null, "の", "of", true, "prt"),
@@ -992,7 +970,7 @@ test("kana and digit numeral spellings share a dictionary heading", async () => 
   const one = JSON.parse(term("jmdict:one", "一つ", "一つ", "ひとつ", "one", true, "num"));
   one.expressions.push({ text: "ひとつ", script: "kana", common: true, tags: [] });
   one.expressions.push({ text: "１つ", script: "kanji", common: false, tags: [] });
-  await install([JSON.stringify(one)]);
+  await installTerms([JSON.stringify(one)]);
   for (const surface of ["ひとつ", "一つ", "1つ", "１つ"]) {
     const [token] = await parseOffline(surface!, ["eng"], HOST);
     assert.equal(token?.entry, "jmdict:one", surface);
@@ -1007,7 +985,7 @@ test("an adjective with attached ni retains its literal name alternative", async
   const name = JSON.parse(term("jmnedict:kamite", "上手", "上手", "かみて", "Kamite", false));
   name.dictionary = "jmnedict";
   name.senses[0].partsOfSpeech = [];
-  await install([
+  await installTerms([
     term("jmdict:skilled", "上手", "上手", "じょうず", "skilled", true, "adj-na"),
     term("jmdict:speak", "話す", "話す", "はなす", "speak", true, "v5s"),
     JSON.stringify(name),
@@ -1019,7 +997,7 @@ test("an adjective with attached ni retains its literal name alternative", async
 });
 
 test("adverbial na-adjectives keep ni without absorbing noun particles or word prefixes", async () => {
-  await install([
+  await installTerms([
     term("jmdict:skilled", "上手", "上手", "じょうず", "skilled", true, "adj-na"),
     term("jmdict:school", "学校", "学校", "がっこう", "school"),
     term("jmdict:ni", "に", null, "に", "to", true, "prt"),
@@ -1039,7 +1017,7 @@ test("adverbial na-adjectives keep ni without absorbing noun particles or word p
 });
 
 test("verbatim inflections do not offer homophones created by collapsing emphasis", async () => {
-  await install([
+  await installTerms([
     term("jmdict:meet", "会う", "会う", "あう", "meet", true, "v5u"),
     term("jmdict:unit", "咫", null, "あた", "old unit of length", false),
     term("jmdict:great", "凄い", null, "すごい", "great", true, "adj-i"),
@@ -1058,7 +1036,7 @@ test("verbatim inflections do not offer homophones created by collapsing emphasi
 test("a particle does not offer an auxiliary verb stem merely tagged as an expression", async () => {
   const auxiliary = JSON.parse(term("jmdict:progressive", "てる", null, "でる", "be doing", false, "exp"));
   auxiliary.senses[0].partsOfSpeech.push("aux-v", "v1");
-  await install([
+  await installTerms([
     term("jmdict:particle", "で", null, "で", "by", true, "prt"),
     term("jmdict:expression", "で", null, "で", "and then", false, "exp"),
     term("jmdict:copula", "で", null, "で", "being", false, "cop"),
@@ -1079,7 +1057,7 @@ test("a rebuilt expression retains its base and same-span alternatives", async (
     record.frequencies = [{ source: "test", text: writing, reading, rank }];
     return JSON.stringify(record);
   };
-  await install([
+  await installTerms([
     ranked("jmdict:expression", "そうとも", "然うとも", "そうとも", "exp", 1_000_000),
     ranked("jmdict:alternative", "そうとも", "然うとも", "そうとも", "exp", 2_000_000),
     ranked("jmdict:so", "然う", "然う", "そう", "adv", 1),
@@ -1096,7 +1074,7 @@ test("a rebuilt expression retains its base and same-span alternatives", async (
 });
 
 test("a span several words claim offers them all, the chosen one first", async () => {
-  await install([
+  await installTerms([
     term("jmdict:1247250", "君", "君", "きみ", "you"),
     term("jmdict:1182060", "黄身", "黄身", "きみ", "egg yolk", false),
   ]);
@@ -1114,7 +1092,7 @@ test("a span several words claim offers them all, the chosen one first", async (
 test("independent interjections lead without replacing attached explanatory auxiliaries", async () => {
   const auxiliary = JSON.parse(term("jmdict:aux", "なのだ", null, "なんだ", "it is that", true, "aux"));
   auxiliary.expressions.push({ text: "なのだ", script: "kana", common: true, tags: [] });
-  await install([
+  await installTerms([
     term("jmdict:int", "なんだ", null, "なんだ", "oh", false, "int"),
     JSON.stringify(auxiliary),
     term("jmdict:student", "学生", "学生", "がくせい", "student"),
@@ -1137,7 +1115,7 @@ test("independent interjections lead without replacing attached explanatory auxi
 });
 
 test("a particle-marked pronoun excludes verb inflections but isolated kana keeps them", async () => {
-  await install([
+  await installTerms([
     term("jmdict:that", "それ", null, "それ", "that", true, "pn"),
     term("jmdict:homophone", "それ", null, "それ", "an exact homophone", false, "n"),
     term("jmdict:shave", "剃る", "剃る", "そる", "to shave", true, "v5r"),
@@ -1156,7 +1134,7 @@ test("a particle-marked pronoun excludes verb inflections but isolated kana keep
 });
 
 test("a noun before an actual particle excludes imperatives but keeps isolated ambiguity", async () => {
-  await install([
+  await installTerms([
     term("jmdict:rain", "雨", null, "あめ", "rain"),
     term("jmdict:knit", "編む", "編む", "あむ", "knit", true, "v5m"),
     term("jmdict:object", "を", null, "を", "object marker", true, "prt"),
@@ -1177,7 +1155,7 @@ test("alternatives prefer the selected reading before a more frequent derived ve
     row.frequencies = [{ source: "test", text: row.headword, reading: row.readings[0].text, rank }];
     return JSON.stringify(row);
   };
-  await install([
+  await installTerms([
     ranked(term("jmdict:rain", "雨", null, "あめ", "rain"), 1),
     ranked(term("jmdict:candy", "飴", "飴", "あめ", "candy"), 100),
     ranked(term("jmdict:knit", "編む", "編む", "あむ", "knit", true, "v5m"), 10),
@@ -1191,7 +1169,7 @@ test("alternatives prefer the selected reading before a more frequent derived ve
 test("an adverb directly before a predicate excludes a finite n-negative but keeps isolated ambiguity", async () => {
   const plenty = JSON.parse(term("jmdict:plenty", "たくさん", null, "たくさん", "plenty"));
   plenty.senses[0].partsOfSpeech = ["adj-no", "adj-na", "n", "adv"];
-  await install([
+  await installTerms([
     JSON.stringify(plenty),
     term("jmdict:entrust", "託す", "託す", "たくす", "entrust", true, "v5s"),
     term("jmdict:eat", "食べる", "食べる", "たべる", "eat", true, "v1"),
@@ -1207,7 +1185,7 @@ test("an adverb directly before a predicate excludes a finite n-negative but kee
 });
 
 test("an adjective before a nominalizer excludes continuative verb alternatives without losing isolated ambiguity", async () => {
-  await install([
+  await installTerms([
     term("jmdict:good", "いい", null, "いい", "good", true, "adj-ix"),
     term("jmdict:say", "言う", "言う", "いう", "say", true, "v5u"),
     term("jmdict:although", "のに", null, "のに", "although", true, "prt"),
@@ -1226,7 +1204,7 @@ test("an adverbial expression offers its validated adjective base without unrela
   expression.frequencies = [{ source: "test", text: "確かに", reading: "たしかに", rank: 100 }];
   const adjective = JSON.parse(term("jmdict:adjective", "確か", "確か", "たしか", "certain", true, "adj-na"));
   adjective.frequencies = [{ source: "test", text: "確か", reading: "たしか", rank: 10 }];
-  await install([
+  await installTerms([
     JSON.stringify(expression), JSON.stringify(adjective),
     term("jmdict:noun", "確か", "確か", "たしか", "a different stem homophone", false, "n"),
   ]);
@@ -1251,7 +1229,7 @@ test("quietly in context studies the adverb while an explicit adjective pick stu
   adverb.frequencies = [{ source: "test", text: "静かに", reading: "しずかに", rank: 1170 }];
   const adjective = JSON.parse(term("jmdict:quiet", "静か", "静か", "しずか", "quiet", true, "adj-na"));
   adjective.frequencies = [{ source: "test", text: "静か", reading: "しずか", rank: 500 }];
-  await install([JSON.stringify(adverb), JSON.stringify(adjective),
+  await installTerms([JSON.stringify(adverb), JSON.stringify(adjective),
     term("jmdict:walk", "歩く", "歩く", "あるく", "walk", true, "v5k")]);
   const [token] = await parseOffline("静かに歩く。", ["eng"], HOST);
   assert.equal(token.surface, "静かに");
@@ -1267,7 +1245,7 @@ test("quietly in context studies the adverb while an explicit adjective pick stu
 });
 
 test("a selected lexical na form preserves its study spelling and reading", async () => {
-  await install([
+  await installTerms([
     term("jmdict:form", "好きな", "好きな", "すきな", "favorite", false, "exp"),
     term("jmdict:base", "好き", "好き", "すき", "liked", true, "adj-na"),
   ]);
@@ -1283,7 +1261,7 @@ test("a lexical adverb does not acquire an unrelated adjective by dropping its f
   adverb.frequencies = [{ source: "test", text: "さらに", reading: "さらに", rank: 1 }];
   const adjective = JSON.parse(term("jmdict:fresh", "さら", null, "さら", "new", true, "adj-na"));
   adjective.frequencies = [{ source: "test", text: "さら", reading: "さら", rank: 1000 }];
-  await install([JSON.stringify(adverb), JSON.stringify(adjective)]);
+  await installTerms([JSON.stringify(adverb), JSON.stringify(adjective)]);
 
   const [token] = await parseOffline("さらに", ["eng"], HOST);
   assert.equal(token.entry, "jmdict:further");
@@ -1306,7 +1284,7 @@ test("an uncommon potential retains its lexical entry behind the common base", a
   able.frequencies = [{ source: "test", text: "出来る", reading: "できる", rank: 1000 }];
   const doVerb = JSON.parse(term("jmdict:do", "する", null, "する", "to do", true, "vs-i"));
   doVerb.frequencies = [{ source: "test", text: "する", reading: "する", rank: 1 }];
-  await install([base, potential, independent, take, able, doVerb].map((record) => JSON.stringify(record)));
+  await installTerms([base, potential, independent, take, able, doVerb].map((record) => JSON.stringify(record)));
 
   for (const text of ["食べられる", "食べられなかった"]) {
     const [token] = await parseOffline(text, ["eng"], HOST);
@@ -1331,7 +1309,7 @@ test("a potential interpretation needs lexical support before replacing an indep
   for (const [row, rank] of [[burst, 20000], [flick, 1000], [speakable, 20000], [speak, 1000]] as const) {
     row.frequencies = [{ source: "test", text: row.headword, reading: row.readings[0].text, rank }];
   }
-  await install([burst, flick, speakable, speak].map((row) => JSON.stringify(row)));
+  await installTerms([burst, flick, speakable, speak].map((row) => JSON.stringify(row)));
   const [token] = await parseOffline("弾ける。", ["eng"], HOST);
   assert.equal(token.entry, "jmdict:burst");
   assert.ok(token.candidates?.some((candidate) => candidate.entry === "jmdict:flick"));
@@ -1343,7 +1321,7 @@ test("object evidence selects a potential without erasing lexical alternatives",
   const original = counts["ギターを"];
   counts["ギターを"] = { "jmdict:play": 47 };
   try {
-    await install([
+    await installTerms([
       term("jmdict:guitar", "ギター", null, "ギター", "guitar"),
       term("jmdict:bubble", "泡", "泡", "あわ", "bubble"),
       term("jmdict:subject", "が", null, "が", "subject", true, "prt"),
@@ -1385,7 +1363,7 @@ test("object evidence selects a potential without erasing lexical alternatives",
 });
 
 test("a span only one word claims offers no choice at all", async () => {
-  await install([ term("jmdict:1522150", "本", "本", "ほん", "book") ]);
+  await installTerms([ term("jmdict:1522150", "本", "本", "ほん", "book") ]);
 
   const [ token ] = await parseOffline("本", [ "eng" ], HOST);
 
@@ -1394,7 +1372,7 @@ test("a span only one word claims offers no choice at all", async () => {
 });
 
 test("a grammatical word retains same-headword alternatives but excludes noun homophones", async () => {
-  await install([
+  await installTerms([
     term("jmdict:1000001", "ない", null, "ない", "not", true, "aux-adj"),
     term("jmdict:1000002", "ない", null, "ない", "nonexistent", false, "adj-i"),
     term("jmdict:1000003", "内", "内", "ない", "inside", false),
@@ -1410,7 +1388,7 @@ test("a grammatical word retains same-headword alternatives but excludes noun ho
 // different cut of the sentence. Re-segmenting is the parser's job and it has
 // already done it.
 test("a longer word sharing a prefix is not offered as a choice", async () => {
-  await install([
+  await installTerms([
     term("jmdict:1000001", "日", "日", "ひ", "day"),
     term("jmdict:1000002", "日本", "日本", "にほん", "Japan"),
   ]);
@@ -1433,7 +1411,7 @@ test("a longer word sharing a prefix is not offered as a choice", async () => {
 // `contextualCandidates` answers with both sets out of one gather, and the cut
 // still comes from the gated one. Only the list reads the other.
 test("a word the spelling merely reads is reachable, behind the word it names", async () => {
-  await install([
+  await installTerms([
     term("jmdict:1226580", "きみ", null, "きみ", "millet"),
     term("jmdict:1247250", "君", "君", "きみ", "you"),
   ]);
@@ -1456,7 +1434,7 @@ test("a word the spelling merely reads is reachable, behind the word it names", 
 // (DECISIVE_POS) needs a morphological analyser and stays out of reach offline,
 // so the two engines agree on every rung the offline half can stand on.
 test("the offline order is the order identify answers with the same inputs", async () => {
-  await install([
+  await installTerms([
     term("jmdict:1182060", "黄身", "黄身", "きみ", "egg yolk", false),
     term("jmdict:1247250", "君", "君", "きみ", "you"),
     term("jmdict:1226580", "きみ", null, "きみ", "millet"),
@@ -1472,7 +1450,7 @@ test("the offline order is the order identify answers with the same inputs", asy
 // Rung 4, reached only when nothing above separates the field. Both are carried
 // kanji words read きみ, so rank breaks the tie and the commoner word wins.
 test("where nothing else separates them, the commoner word leads", async () => {
-  await install([
+  await installTerms([
     term("jmdict:1182060", "黄身", "黄身", "きみ", "egg yolk", false),
     term("jmdict:1247250", "君", "君", "きみ", "you", true),
   ]);
@@ -1489,7 +1467,7 @@ test("where nothing else separates them, the commoner word leads", async () => {
 // So the chosen word is fetched by its HANDLE: the terms store is keyed on the
 // entry id, so choosing costs one primary-key read rather than a re-parse.
 test("a picked word is fetched by its handle, not looked up again", async () => {
-  await install([
+  await installTerms([
     term("jmdict:1226580", "きみ", null, "きみ", "millet"),
     term("jmdict:1247250", "君", "君", "きみ", "you"),
   ]);
@@ -1506,7 +1484,7 @@ test("a picked word is fetched by its handle, not looked up again", async () => 
 });
 
 test("a handle the pack does not carry reports unavailable without substituting its spelling", async () => {
-  await install([ term("jmdict:1522150", "本", "本", "ほん", "book") ]);
+  await installTerms([ term("jmdict:1522150", "本", "本", "ほん", "book") ]);
 
   await assert.rejects(lookupEntryOffline("jmdict:9999999", "本", [ "eng" ], HOST), /Not available in this dictionary/);
 });

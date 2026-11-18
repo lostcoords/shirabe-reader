@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
-import { Window } from "happy-dom";
+import { installWindow } from "./support/dom.js";
 import { lookupGroupOffline, lookupScanOffline, parseOffline, resolveParsedSpan, setActiveDictionaryStack } from "../src/common/offline-dictionary.js";
 import { installTestPack, packPayload, corpusPackPath, subsetPack } from "./support/pack.js";
 
@@ -13,13 +13,7 @@ const cases = (parseYaml(readFileSync("test/fixtures/tokenizer_eval/click_positi
 test("pointer positions preserve whole-word identity across inline nodes and ruby", async (context) => {
   const records = await subsetPack(corpusPackPath(), cases.map((row) => row.text));
   await installTestPack(packPayload(records), { contentRevision: "click-positions", terms: records.length - 1 });
-  const window = new Window({ url: "https://reader.test" });
-  Object.assign(globalThis, {
-    window, document: window.document, Node: window.Node, NodeFilter: window.NodeFilter,
-    HTMLElement: window.HTMLElement, Text: window.Text, DOMRect: window.DOMRect, MutationObserver: window.MutationObserver,
-    chrome: { runtime: { sendMessage: async () => ({ ok: true }), onMessage: { addListener() {} }, getURL: (path: string) => path },
-      storage: { local: { get: async () => ({}), set: async () => {}, remove: async () => {} }, onChanged: { addListener() {} } } },
-  });
+  const window = installWindow({ url: "https://reader.test" });
   const { scanTargetAt } = await import("@shirabe-org/card/word-card/scan");
   const { extensionHost } = await import("../src/content/card-host.js");
   const { ext } = await import("../src/common/browser.js");

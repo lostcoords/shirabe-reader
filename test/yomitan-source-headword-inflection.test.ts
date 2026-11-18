@@ -2,11 +2,11 @@ import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { lookupOffline, installDictionary, removeDictionary } from "../src/common/offline-dictionary.js";
-import { packPayload, testPackManifest } from "./support/pack.js";
+import { packHeader, packPayload, testPackManifest } from "./support/pack.js";
 
 const HOST = "https://shirabe.test";
 
-function term(
+function sourceTerm(
   id: string,
   headword: string,
   readings: string[],
@@ -24,10 +24,10 @@ function term(
 
 async function installPrivateTerms(records: string[]): Promise<void> {
   const publicPayload = packPayload([
-    JSON.stringify({ type: "header", schemaVersion: 7, languages: ["eng"], source: "Public test dictionary" }),
+    JSON.stringify(packHeader(["eng"])),
   ]);
   const privatePayload = packPayload([
-    JSON.stringify({ type: "header", schemaVersion: 7, languages: ["jpn"], source: "Private Yomitan test dictionary" }),
+    JSON.stringify(packHeader(["jpn"])),
     ...records,
   ]);
   const publicManifest = testPackManifest(publicPayload, { contentRevision: "source-headword-public", terms: 0 }, {
@@ -64,25 +64,25 @@ test("source headword rules deinflect private entries without leaking across spe
 
   await removeDictionary();
   await installPrivateTerms([
-    term("yomitan-test:no-pos", "食べる", ["たべる"], [], [
+    sourceTerm("yomitan-test:no-pos", "食べる", ["たべる"], [], [
       { text: "食べる", reading: "たべる", rules: ["v1"] },
     ]),
-    term("yomitan-test:publisher-pos", "見る", ["みる"], ["他下一"], [
+    sourceTerm("yomitan-test:publisher-pos", "見る", ["みる"], ["他下一"], [
       { text: "見る", reading: "みる", rules: ["v1"] },
     ]),
-    term("yomitan-test:v5", "歩く", ["あるく"], [], [
+    sourceTerm("yomitan-test:v5", "歩く", ["あるく"], [], [
       { text: "歩く", reading: "あるく", rules: ["v5"] },
     ]),
-    term("yomitan-test:vs", "勉強する", ["べんきょうする"], [], [
+    sourceTerm("yomitan-test:vs", "勉強する", ["べんきょうする"], [], [
       { text: "勉強する", reading: "べんきょうする", rules: ["vs"] },
     ]),
-    term("yomitan-test:vk", "来る", ["くる"], [], [
+    sourceTerm("yomitan-test:vk", "来る", ["くる"], [], [
       { text: "来る", reading: "くる", rules: ["vk"] },
     ]),
-    term("yomitan-test:adj-i", "高い", ["たかい"], [], [
+    sourceTerm("yomitan-test:adj-i", "高い", ["たかい"], [], [
       { text: "高い", reading: "たかい", rules: ["adj-i"] },
     ]),
-    term("yomitan-test:pairs", "起きる", ["おきる", "かく"], [], [
+    sourceTerm("yomitan-test:pairs", "起きる", ["おきる", "かく"], [], [
       { text: "起きる", reading: "おきる", rules: ["v1"] },
       { text: "書く", reading: "かく", rules: [] },
     ], [

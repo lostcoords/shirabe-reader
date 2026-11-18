@@ -1,49 +1,20 @@
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Request, Response as WorkerResponse } from "../src/common/messages.js";
+import { stubBackground } from "./support/background.js";
 
 test("an anonymous background start purges an orphaned private dictionary before lookup", async () => {
-  let listener: (request: Request, sender: object, respond: (response: WorkerResponse) => void) => unknown;
-  const storage: Record<string, unknown> = {};
-  const event = { addListener() {} };
-  Object.assign(globalThis, {
-    self: { addEventListener() {} },
-    chrome: {
-      runtime: {
-        onMessage: { addListener(callback: typeof listener) { listener = callback; } },
-        onConnect: event, onInstalled: event, getURL: (path: string) => path,
-      },
-      storage: {
-        local: {
-          get: async () => storage,
-          set: async (values: Record<string, unknown>) => { Object.assign(storage, values); },
-          remove: async () => {},
-        },
-        onChanged: event,
-      },
-      tabs: { onRemoved: event, query: async () => [], sendMessage: async () => {} },
-      scripting: { unregisterContentScripts: async () => {} },
-      permissions: { contains: async () => false },
-    },
-  });
-
-  const { packPayload, testPackManifest } = await import("./support/pack.js");
+  const background = stubBackground();
+  const { packHeader, packPayload, term, testPackManifest } = await import("./support/pack.js");
   const { installDictionary, setActiveDictionaryStack } = await import("../src/common/offline-dictionary.js");
   const { DEFAULTS } = await import("../src/common/config.js");
-  const term = (id: string, writing: string, dictionary: string) => JSON.stringify({
-    type: "term", id, dictionary, headword: writing,
-    expressions: [{ text: writing, script: "kana", common: true, tags: [] }],
-    readings: [{ text: writing, kind: "kana" }],
-    senses: [{ glosses: { eng: [id] }, partsOfSpeech: ["n"], fields: [], misc: [], dialects: [], restrictions: [] }],
-  });
   const publicPayload = packPayload([
-    JSON.stringify({ type: "header", schemaVersion: 7, languages: ["eng"], source: "Startup test" }),
-    term("jmdict:public", "公開", "jmdict"),
+    JSON.stringify(packHeader(["eng"])),
+    term("jmdict:public", "公開", null, "公開", "jmdict:public"),
   ]);
   const privatePayload = packPayload([
-    JSON.stringify({ type: "header", schemaVersion: 7, languages: ["eng"], source: "Private startup test" }),
-    term("yomitan-test:private", "秘密", "yomitan-test"),
+    JSON.stringify(packHeader(["eng"])),
+    term("yomitan-test:private", "秘密", null, "秘密", "yomitan-test:private"),
   ]);
   const publicManifest = testPackManifest(publicPayload, { contentRevision: "startup-public", terms: 1 }, {
     downloadUrl: "https://packs.test/public.gz",
@@ -72,12 +43,9 @@ test("an anonymous background start purges an orphaned private dictionary before
   }) as typeof fetch;
   await installDictionary("https://api.test", "Bearer access-token");
   await setActiveDictionaryStack(["yomitan-test:en"], {}, {}, "b".repeat(16));
-  Object.assign(storage, { config: { ...DEFAULTS, apiBase: "https://api.test", errorReports: false } });
+  Object.assign(background.storage, { config: { ...DEFAULTS, apiBase: "https://api.test", errorReports: false } });
 
-  await import("../src/background/background.js");
-  const send = (request: Request) => new Promise<WorkerResponse>((resolve) => {
-    assert.equal(listener(request, {}, resolve), true);
-  });
+  const send = await background.start();
   const privateLookup = await send({ type: "lookup", query: "秘密" });
   assert.ok(privateLookup.ok && privateLookup.type === "lookup");
   assert.equal(privateLookup.definition, null);

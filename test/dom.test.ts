@@ -1,21 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Window } from "happy-dom";
+import { installWindow, pageChrome } from "./support/dom.js";
 
 // The tests drive the reader's own code, which is typed against lib.dom, so the
 // happy-dom window is handed to them as the browser window it stands in for.
 function installDom(html: string): globalThis.Window & typeof globalThis {
-  const window = new Window({ url: "https://reader.test/page" });
-  window.document.body.innerHTML = html;
-  Object.assign(globalThis, {
-    window, document: window.document, Node: window.Node, NodeFilter: window.NodeFilter,
-    HTMLElement: window.HTMLElement, Text: window.Text, MutationObserver: window.MutationObserver,
-    chrome: {
-      runtime: { sendMessage: async () => ({ ok: true }), onMessage: { addListener() {} }, getURL: (path: string) => path },
-      storage: { local: { get: async () => ({}), set: async () => {}, remove: async () => {} }, onChanged: { addListener() {} } },
-    },
-  });
-  return window as unknown as globalThis.Window & typeof globalThis;
+  Object.assign(globalThis, { chrome: pageChrome() });
+  return installWindow({ html }) as unknown as globalThis.Window & typeof globalThis;
 }
 
 test("page scanning sends Japanese widths unchanged without scanning Latin-only text", async () => {

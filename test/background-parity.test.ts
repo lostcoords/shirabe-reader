@@ -1,52 +1,23 @@
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Request, Response as WorkerResponse } from "../src/common/messages.js";
+import type { Response as WorkerResponse } from "../src/common/messages.js";
+import { stubBackground } from "./support/background.js";
 
 test("background messages parse locally with stable offsets and entry identity during account refresh", async () => {
   const firefox = process.env.PARITY_MESSAGE_API === "firefox";
-  let listener: (request: Request, sender: object, respond: (response: WorkerResponse) => void) => unknown;
-  const storage: Record<string, unknown> = {};
-  const tabMessages: unknown[] = [];
-  const event = { addListener() {} };
-  Object.assign(globalThis, {
-    self: { addEventListener() {} },
-    chrome: {
-      runtime: {
-        onMessage: { addListener(callback: typeof listener) { listener = callback; } },
-        onConnect: event, onInstalled: event, getURL: (path: string) => path,
-      },
-      storage: {
-        local: {
-          get: async () => storage,
-          set: async (values: Record<string, unknown>) => { Object.assign(storage, values); },
-          remove: async () => {},
-        },
-        onChanged: event,
-      },
-      tabs: { onRemoved: event, query: async () => [{ id: 1 }], sendMessage: async (_tabId: number, message: unknown) => { tabMessages.push(message); } },
-      scripting: { unregisterContentScripts: async () => {} },
-      permissions: { contains: async () => false },
-    },
-  });
-  if (firefox) Object.assign(globalThis, { browser: globalThis.chrome });
-  const { packPayload, testPackManifest } = await import("./support/pack.js");
+  const { storage, tabMessages, start } = stubBackground({ firefox, tabs: [{ id: 1 }] });
+  const { packHeader, packPayload, term, testPackManifest } = await import("./support/pack.js");
   const { installDictionary } = await import("../src/common/offline-dictionary.js");
   const { DEFAULTS } = await import("../src/common/config.js");
-  const term = (id: string, writing: string, reading: string, pos: string, dictionary = "jmdict") => JSON.stringify({
-    type: "term", id, dictionary, headword: writing,
-    expressions: [{ text: writing, script: "kana", common: true, tags: [] }],
-    readings: [{ text: reading, kind: "kana" }],
-    senses: [{ glosses: { eng: [id] }, partsOfSpeech: [pos], fields: [], misc: [], dialects: [], restrictions: [] }],
-  });
   const publicPayload = packPayload([
-    JSON.stringify({ type: "header", schemaVersion: 7, languages: ["eng", "spa"], source: "Background parity" }),
-    term("jmdict:banana", "バナナ", "バナナ", "n"),
-    term("jmdict:copula", "だ", "だ", "cop"),
+    JSON.stringify(packHeader()),
+    term("jmdict:banana", "バナナ", null, "バナナ", "jmdict:banana", true, "n"),
+    term("jmdict:copula", "だ", null, "だ", "jmdict:copula", true, "cop"),
   ]);
   const privatePayload = packPayload([
-    JSON.stringify({ type: "header", schemaVersion: 7, languages: ["eng"], source: "Private test dictionary" }),
-    term("yomitan-test:secret", "内緒", "ないしょ", "n", "yomitan-test"),
+    JSON.stringify(packHeader(["eng"])),
+    term("yomitan-test:secret", "内緒", "内緒", "ないしょ", "yomitan-test:secret"),
   ]);
   const publicManifest = testPackManifest(publicPayload, { contentRevision: "background-public", terms: 2 }, {
     downloadUrl: "https://packs.test/public.gz",
@@ -121,17 +92,8 @@ test("background messages parse locally with stable offsets and entry identity d
     return new Response(null, { status: 404 });
   }) as typeof fetch;
   await installDictionary("https://api.test", "Bearer access-token");
-  await import("../src/background/background.js");
+  const send = await start();
   await profileRequested;
-  const send = (request: Request) => new Promise<WorkerResponse>((resolve) => {
-    const result = listener(request, {}, resolve);
-    if (firefox) {
-      assert.ok(result instanceof Promise);
-      void result.then(resolve);
-    } else {
-      assert.equal(result, true);
-    }
-  });
   let parsed: WorkerResponse;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

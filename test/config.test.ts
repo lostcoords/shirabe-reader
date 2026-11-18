@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ensureChrome } from "./support/dom.js";
 
-if (!globalThis.chrome) {
-  globalThis.chrome = {
-    runtime: { sendMessage: async () => ({ ok: true }), onMessage: { addListener() {} }, getURL: (path: string) => path },
-    storage: { local: { get: async () => ({}), set: async () => {}, remove: async () => {} }, onChanged: { addListener() {} } },
-  };
-}
+ensureChrome();
 
 test("exported settings carry preferences and never a sign-in", async () => {
   const { DEFAULTS, shareableConfig } = await import("../src/common/config.js");

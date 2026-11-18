@@ -2,43 +2,20 @@ import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Request, Response as WorkerResponse } from "../src/common/messages.js";
+import { stubBackground } from "./support/background.js";
 
-// The background owns every write to Shirabe. It cannot be imported beside the
-// other suites (it registers listeners and crash handlers on import), so this
-// file is its own process: a connected, entitled reader, a fake server that
-// records what reached it, and the worker's real message listener.
+// The background owns every write to Shirabe: a connected, entitled reader, a
+// fake server that records what reached it, and the worker's real message listener.
 
 type Sent = { method: string; path: string; headers: Headers; body: unknown };
 
 const sent: Sent[] = [];
 const answers = new Map<string, (body: unknown) => Response>();
-let listener: (request: Request, sender: object, respond: (response: WorkerResponse) => void) => unknown;
 
 async function boot(): Promise<(request: Request) => Promise<WorkerResponse>> {
-  const storage: Record<string, unknown> = {};
-  const event = { addListener() {} };
-  Object.assign(globalThis, {
-    self: { addEventListener() {} },
-    chrome: {
-      runtime: {
-        onMessage: { addListener(callback: typeof listener) { listener = callback; } },
-        onConnect: event, onInstalled: event, getURL: (path: string) => path,
-      },
-      storage: {
-        local: {
-          get: async (key?: string) => (key ? { [key]: storage[key] } : storage),
-          set: async (values: Record<string, unknown>) => { Object.assign(storage, values); },
-          remove: async () => {},
-        },
-        onChanged: event,
-      },
-      tabs: { onRemoved: event, query: async () => [], sendMessage: async () => {} },
-      scripting: { unregisterContentScripts: async () => {} },
-      permissions: { contains: async () => false },
-    },
-  });
+  const background = stubBackground();
   const { DEFAULTS } = await import("../src/common/config.js");
-  Object.assign(storage, { config: {
+  Object.assign(background.storage, { config: {
     ...DEFAULTS, apiBase: "https://api.test", accessToken: "access-token",
     accessTokenExpiresAt: "2999-01-01T00:00:00Z", refreshToken: "refresh-token",
     scopes: ["user:profile:read", "user:dictionary:read", "user:study:read", "user:study:write"],
@@ -53,11 +30,7 @@ async function boot(): Promise<(request: Request) => Promise<WorkerResponse>> {
     const answer = answers.get(`${request.method} ${path}`);
     return answer ? answer(body) : new Response(null, { status: 503 });
   }) as typeof fetch;
-  await import("../src/background/background.js");
-  return (request) => new Promise<WorkerResponse>((resolve) => {
-    const result = listener(request, {}, resolve);
-    if (result instanceof Promise) void result.then(resolve);
-  });
+  return background.start();
 }
 
 const send = boot();

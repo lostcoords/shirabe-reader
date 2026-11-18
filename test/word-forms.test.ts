@@ -1,9 +1,8 @@
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import test from "node:test";
 import { lookupOffline } from "../src/common/offline-dictionary.js";
-import { installTestPack, packPayload } from "./support/pack.js";
+import { installTerms } from "./support/pack.js";
 
 // Which of a word's spellings the card is allowed to name, and the two things a
 // sense carries besides its meaning: how the word is USED, and what it points at.
@@ -15,7 +14,6 @@ import { installTestPack, packPayload } from "./support/pack.js";
 // would be showing a reader a spelling nobody writes.
 
 const HOST = "https://shirabe.test";
-const HEADER = JSON.stringify({ type: "header", schemaVersion: 7, languages: [ "eng", "spa" ], source: "Shirabe forms" });
 
 const opener = JSON.stringify({
   type: "term", id: "jmdict:1202650", dictionary: "jmdict", headword: "開く",
@@ -49,11 +47,8 @@ const plain = JSON.stringify({
 });
 
 test("a card names the spellings a reader can meet, and no others", async () => {
-  const lines = [ HEADER, opener, plain ];
-  await installTestPack(packPayload(lines), {
-    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12),
-    terms: 2,
-  });
+  const lines = [ opener, plain ];
+  await installTerms(lines);
 
   const definition = await lookupOffline("開く", [ "eng" ], HOST);
 
@@ -98,15 +93,13 @@ test("a sense with neither carries neither", async () => {
 });
 
 test("a note-only sense remains visible without inventing a gloss", async () => {
-  const lines = [HEADER, JSON.stringify({
+  const lines = [JSON.stringify({
     type: "term", id: "jmdict:note-only", dictionary: "jmdict", headword: "洗い出す",
     expressions: [{ text: "洗い出す", script: "kanji", common: true, tags: [] }],
     readings: [{ text: "あらいだす", kind: "kana" }],
     senses: [{ glosses: {}, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [], notes: { jpn: [ "（他五）" ] } }],
   })];
-  await installTestPack(packPayload(lines), {
-    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
-  });
+  await installTerms(lines);
 
   const definition = await lookupOffline("洗い出す", [ "eng" ], HOST);
 
@@ -115,16 +108,14 @@ test("a note-only sense remains visible without inventing a gloss", async () => 
 });
 
 test("a relation-only sense remains visible without inventing a gloss", async () => {
-  const lines = [HEADER, JSON.stringify({
+  const lines = [JSON.stringify({
     type: "term", id: "jmdict:relation-only", dictionary: "jmdict", headword: "関連語",
     expressions: [{ text: "関連語", script: "kanji", common: true, tags: [] }],
     readings: [{ text: "かんれんご", kind: "kana" }],
     senses: [{ glosses: {}, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [],
       xrefs: [{ kind: "related", text: "関係", reading: "かんけい" }] }],
   })];
-  await installTestPack(packPayload(lines), {
-    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
-  });
+  await installTerms(lines);
 
   const definition = await lookupOffline("関連語", [ "eng" ], HOST);
 
@@ -133,7 +124,7 @@ test("a relation-only sense remains visible without inventing a gloss", async ()
 });
 
 test("an empty sense is excluded while a relation-only sense keeps its position", async () => {
-  const lines = [HEADER, JSON.stringify({
+  const lines = [JSON.stringify({
     type: "term", id: "jmdict:empty-and-relation", dictionary: "jmdict", headword: "空関係",
     expressions: [{ text: "空関係", script: "kanji", common: true, tags: [] }],
     readings: [{ text: "からかんけい", kind: "kana" }],
@@ -143,9 +134,7 @@ test("an empty sense is excluded while a relation-only sense keeps its position"
         xrefs: [{ kind: "antonym", text: "充実", reading: "じゅうじつ" }] },
     ],
   })];
-  await installTestPack(packPayload(lines), {
-    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
-  });
+  await installTerms(lines);
 
   const definition = await lookupOffline("空関係", [ "eng" ], HOST);
 
@@ -155,16 +144,14 @@ test("an empty sense is excluded while a relation-only sense keeps its position"
 
 test("source tags retain publisher metadata and the matching term pair", async () => {
   const sourceTag = { name: "arch", category: "register", notes: "publisher note", order: -1.5, score: -3 };
-  const lines = [HEADER, JSON.stringify({
+  const lines = [JSON.stringify({
     type: "term", id: "jmdict:source-tags", dictionary: "jmdict", headword: "標識語",
     expressions: [{ text: "標識語", script: "kanji", common: false, tags: [] }],
     readings: [{ text: "ひょうしきご", kind: "kana" }],
     senses: [{ glosses: { eng: ["to eat"] }, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [], sourceTags: [sourceTag] }],
     sourceHeadwords: [{ text: "標識語", reading: "ひょうしきご", tags: [sourceTag], rules: ["v1"], score: 7 }],
   })];
-  await installTestPack(packPayload(lines), {
-    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
-  });
+  await installTerms(lines);
 
   const definition = await lookupOffline("標識語", ["eng"], HOST);
   assert.ok(definition, "the source-tag term is searchable");
@@ -175,7 +162,7 @@ test("source tags retain publisher metadata and the matching term pair", async (
 test("a stacked offline definition keeps source headwords from every dictionary", async () => {
   const firstTag = { name: "first", category: "register", order: 1, score: 1 };
   const secondTag = { name: "second", category: "register", order: 2, score: 2 };
-  const lines = [HEADER, JSON.stringify({
+  const lines = [JSON.stringify({
     type: "term", id: "jmdict:mixed", dictionary: "jmdict", headword: "混在",
     expressions: [{ text: "混在", script: "kanji", common: true, tags: [] }],
     readings: [{ text: "こんざい", kind: "kana" }],
@@ -188,9 +175,7 @@ test("a stacked offline definition keeps source headwords from every dictionary"
     senses: [{ glosses: { eng: ["second meaning"] }, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [] }],
     sourceHeadwords: [{ text: "混在", reading: "こんざい", tags: [secondTag], rules: [], score: 2 }],
   })];
-  await installTestPack(packPayload(lines), {
-    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 2,
-  });
+  await installTerms(lines);
 
   const definition = await lookupOffline("混在", ["eng"], HOST);
   assert.deepEqual(definition?.sourceHeadwordsByEntry, {
@@ -200,7 +185,7 @@ test("a stacked offline definition keeps source headwords from every dictionary"
 });
 
 test("offline gloss rows preserve same text across languages and repetitions", async () => {
-  const lines = [HEADER, JSON.stringify({
+  const lines = [JSON.stringify({
     type: "term", id: "jmdict:duplicate-gloss", dictionary: "jmdict", headword: "重複",
     expressions: [{ text: "重複", script: "kanji", common: true, tags: [] }],
     readings: [{ text: "ちょうふく", kind: "kana" }],
@@ -211,9 +196,7 @@ test("offline gloss rows preserve same text across languages and repetitions", a
     readings: [{ text: "だいたい", kind: "kana" }],
     senses: [{ glosses: { eng: ["same", "same"] }, partsOfSpeech: [], fields: [], misc: [], dialects: [], restrictions: [] }],
   })];
-  await installTestPack(packPayload(lines), {
-    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 2,
-  });
+  await installTerms(lines);
 
   const explicit = await lookupOffline("重複", ["eng", "spa"], HOST);
   assert.deepEqual(explicit?.senses[0]?.glosses, [
@@ -230,7 +213,7 @@ test("offline gloss rows preserve same text across languages and repetitions", a
 });
 
 test("publisher titles and usage-only content survive offline lookup", async () => {
-  const lines = [HEADER, JSON.stringify({
+  const lines = [JSON.stringify({
     type: "term", id: "jmdict:usage", dictionary: "jmdict", headword: "鼻にかける",
     expressions: [{ text: "鼻にかける", script: "kanji", common: false, tags: [] }],
     readings: [{ text: "はなにかける", kind: "kana" }],
@@ -241,9 +224,7 @@ test("publisher titles and usage-only content survive offline lookup", async () 
       partsOfSpeech: ["v1"], fields: [], misc: [], dialects: [], restrictions: [],
     }],
   })];
-  await installTestPack(packPayload(lines), {
-    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
-  });
+  await installTerms(lines);
 
   const definition = await lookupOffline("鼻にかける", ["jpn"], HOST);
   assert.ok(definition);
@@ -255,7 +236,7 @@ test("publisher titles and usage-only content survive offline lookup", async () 
 });
 
 test("offline hierarchy keeps published labels, depth, and scoped grammar", async () => {
-  const lines = [HEADER, JSON.stringify({
+  const lines = [JSON.stringify({
     type: "term", id: "jmdict:hierarchy", dictionary: "jmdict", headword: "階層",
     expressions: [{ text: "階層", script: "kanji", common: true, tags: [] }],
     readings: [{ text: "かいそう", kind: "kana" }],
@@ -270,9 +251,7 @@ test("offline hierarchy keeps published labels, depth, and scoped grammar", asyn
       ],
     }],
   })];
-  await installTestPack(packPayload(lines), {
-    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
-  });
+  await installTerms(lines);
 
   const definition = await lookupOffline("階層", ["eng"], HOST);
   assert.deepEqual(definition?.entryTagsByEntry, {
@@ -285,7 +264,7 @@ test("offline hierarchy keeps published labels, depth, and scoped grammar", asyn
 });
 
 test("offline cross-reference labels preserve same targets as distinct rows", async () => {
-  const lines = [HEADER, JSON.stringify({
+  const lines = [JSON.stringify({
     type: "term", id: "jmdict:xref-label", dictionary: "jmdict", headword: "機械",
     expressions: [{ text: "機械", script: "kanji", common: true, tags: [] }],
     readings: [{ text: "きかい", kind: "kana" }],
@@ -297,9 +276,7 @@ test("offline cross-reference labels preserve same targets as distinct rows", as
       ],
     }],
   })];
-  await installTestPack(packPayload(lines), {
-    contentRevision: createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12), terms: 1,
-  });
+  await installTerms(lines);
 
   const definition = await lookupOffline("機械", ["eng"], HOST);
   assert.deepEqual(definition?.senses[0]?.xrefs, [

@@ -137,6 +137,38 @@ export async function subsetPack(path: string, sentences: string[], { maxSpan = 
   return kept;
 }
 
+// The pack format every hand-built test pack is written in.
+const SCHEMA_VERSION = 7;
+
+/** The first line of a pack. */
+export function packHeader(languages: string[] = ["eng", "spa"], source = "Shirabe test") {
+  return { type: "header", schemaVersion: SCHEMA_VERSION, languages, source };
+}
+
+/** A JMdict-shaped term with one sense, as an ndjson line. `kanji` null writes the word in kana. */
+export function term(id: string, headword: string, kanji: string | null, kana: string, gloss: string, common = true, pos = "n",
+  dictionary = id.split(":")[0]!): string {
+  return JSON.stringify({
+    type: "term", id, dictionary, headword,
+    expressions: kanji
+      ? [ { text: kanji, script: "kanji", common, tags: [] } ]
+      : [ { text: kana, script: "kana", common, tags: [] } ],
+    readings: [ { text: kana, kind: "kana" } ],
+    senses: [ { glosses: { eng: [ gloss ] }, partsOfSpeech: [ pos ], fields: [], misc: [], dialects: [], restrictions: [] } ],
+  });
+}
+
+/**
+ * Install these term lines as the only pack. The revision follows the content:
+ * the installer treats a repeated revision as "already have this" and keeps
+ * whatever is installed, so two tests sharing one would run against each
+ * other's dictionary.
+ */
+export async function installTerms(lines: string[], languages?: string[]): Promise<void> {
+  const contentRevision = createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 12);
+  await installTestPack(packPayload([JSON.stringify(packHeader(languages)), ...lines]), { contentRevision, terms: lines.length });
+}
+
 /** Gzip a set of ndjson lines into the payload an install serves. */
 export function packPayload(lines: string[]): Buffer {
   return gzipSync(lines.join("\n") + "\n");
@@ -148,7 +180,7 @@ export function testPackManifest(
   overrides: Partial<PackManifest> = {},
 ): PackManifest {
   return {
-    schemaVersion: 7, buildRecipeVersion: 15, minimumExtensionVersion: "0.2.6", contentRevision,
+    schemaVersion: SCHEMA_VERSION, buildRecipeVersion: 15, minimumExtensionVersion: "0.2.6", contentRevision,
     audio: {
       baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f",
       engineVersion: 1, salt: "test-salt", defaultVoice: "male",

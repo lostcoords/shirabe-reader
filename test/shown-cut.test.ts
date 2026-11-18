@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { installWindow } from "./support/dom.js";
 import type { ParsedToken } from "../src/common/types.js";
 
 // What a mined card points into. The save sends our cut of the line plus which
@@ -23,12 +24,7 @@ function token(surface: string, start: number, extra: Partial<ParsedToken> = {})
 }
 
 async function page() {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: HOST });
-  Object.assign(globalThis, {
-    window, document: window.document, HTMLElement: window.HTMLElement, Node: window.Node,
-    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
-  });
+  const window = installWindow({ url: HOST });
   return { window, parser: await import("../src/content/parser.js"), word: await import("../src/content/word.js") };
 }
 

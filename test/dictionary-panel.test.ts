@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { Window } from "happy-dom";
+import { installWindow } from "./support/dom.js";
 import type { DictionaryStatus } from "../src/common/offline-dictionary.js";
 
 test("both dictionary panels distinguish pending sync, stored disabled packs and usable dictionaries after errors", async (context) => {
@@ -16,9 +16,7 @@ test("both dictionary panels distinguish pending sync, stored disabled packs and
   globalThis.fetch = (async () => Response.json({ contentRevision: "base", downloadUrl: "https://packs.test/base.gz" })) as typeof fetch;
   context.after(() => { globalThis.fetch = originalFetch; });
   for (const path of ["src/action/popup.html", "src/options/options.html"]) {
-    const browser = new Window();
-    Object.assign(globalThis, { window: browser, document: browser.document });
-    browser.document.body.innerHTML = readFileSync(path, "utf8");
+    const browser = installWindow({ html: readFileSync(path, "utf8") });
     status = { installed: true, revision: "base.private", publicRevision: "base", activeSources: ["jmdict:en"], stackFingerprint: "",
       builtAt: null, bytes: 100, terms: 1000, kanji: 0, installing: false, progress: 1, stage: null, error: null, storageBytes: null,
       sources: [], availableDictionaries: [{ slug: "personal", name: "Personal glossary", languages: ["eng"] }],

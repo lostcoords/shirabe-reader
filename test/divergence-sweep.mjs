@@ -21,10 +21,10 @@
 // install are seconds. Each shard takes every Nth row, so all of them see the
 // same mix of easy and hard lines and a shard's numbers mean the same as the
 // whole run's.
-import { build } from "esbuild";
 import { execFile } from "node:child_process";
 import { availableParallelism } from "node:os";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { bundleTests } from "./support/bundle.mjs";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,19 +41,9 @@ if (!existsSync(WEB_EXPORT)) {
 }
 
 const dir = mkdtempSync(join(tmpdir(), "shirabe-sweep-"));
-// Same reason as test/run.mjs: track the real manifest, not a literal that rots.
-const manifestVersion = JSON.parse(readFileSync(new URL("../manifest.base.json", import.meta.url), "utf8")).version;
-const outfile = join(dir, "sweep.cjs");
 
 try {
-  await build({
-    entryPoints: ["test/divergence-sweep-runner.ts"], bundle: true, platform: "node", format: "cjs", outfile, logLevel: "silent",
-    define: {
-      __EXTENSION_VERSION__: JSON.stringify(manifestVersion),
-      __DEFAULT_API_BASE__: JSON.stringify("private"),
-      __SHIRABE_OFF_HOSTS__: JSON.stringify([]),
-    },
-  });
+  const { "test/divergence-sweep-runner.ts": outfile } = await bundleTests(["test/divergence-sweep-runner.ts"], dir);
 
   if (SHARDS === 1) {
     await run(process.execPath, [outfile, String(LIMIT)], { env: { ...process.env, SWEEP_RUN: "1" }, maxBuffer: 1 << 28 })

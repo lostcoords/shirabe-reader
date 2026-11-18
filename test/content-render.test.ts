@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { installWindow } from "./support/dom.js";
 
 // Rendering behaviour that needs a real DOM: what the parser puts on the page,
 // and what the status bar cues on top of it.
 
 test("a token split across inline markup does not stamp its reading on each fragment", async () => {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
-  Object.assign(globalThis, { window, document: window.document, Node: window.Node, HTMLElement: window.HTMLElement });
+  const window = installWindow();
   window.document.body.innerHTML = "<p id='line'><b>日本</b>語</p>";
   const { mappedWrapper } = await import("../src/content/parser.js");
 
@@ -34,12 +33,7 @@ test("a token split across inline markup does not stamp its reading on each frag
 });
 
 test("nested blocks cue i+1 once, and a mixed block still counts its own words", async () => {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
-  Object.assign(globalThis, {
-    window, document: window.document, Node: window.Node, HTMLElement: window.HTMLElement,
-    MutationObserver: window.MutationObserver,
-  });
+  const window = installWindow();
   const known = `<span class="sb-word" data-lemma="猫" data-state="retired"></span>`;
   const unknown = `<span class="sb-word" data-lemma="犬" data-state="none" data-frequency="1200"></span>`;
   window.document.body.innerHTML = `<blockquote id="outer">${known}<p id="inner">${known}${unknown}</p></blockquote>`;
@@ -58,9 +52,7 @@ test("nested blocks cue i+1 once, and a mixed block still counts its own words",
 });
 
 test("a rendered word carries its part of speech, so the page can colour by it", async () => {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
-  Object.assign(globalThis, { window, document: window.document, Node: window.Node, HTMLElement: window.HTMLElement });
+  installWindow();
   const { renderToken } = await import("../src/content/word.js");
 
   // Part-of-speech colouring is pure CSS keyed on this attribute (content.css),
@@ -87,9 +79,7 @@ test("a rendered word carries its part of speech, so the page can colour by it",
 // entry, so the token carries it and `entryFor` never has to go back to the
 // dictionary with a lemma in its hand.
 test("a rendered token carries the dictionary entry it resolved to", async () => {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: "https://reader.test/page" });
-  Object.assign(globalThis, { window, document: window.document, Node: window.Node, HTMLElement: window.HTMLElement });
+  installWindow();
   const { renderToken } = await import("../src/content/word.js");
 
   const word = renderToken(

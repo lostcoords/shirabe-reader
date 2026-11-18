@@ -1,16 +1,14 @@
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { packPayload, testPackManifest } from "./support/pack.js";
+import { packHeader, packPayload, term, testPackManifest } from "./support/pack.js";
 import { checkDictionaryUpdate, dictionaryStatus, installDictionary, lookupOffline, removeDictionary,
   deactivatePrivateDictionaries, disablePrivateDictionaryLookups, setActiveDictionaryStack, type DictionaryStackManifest } from "../src/common/offline-dictionary.js";
 
 function pack(slug: string, revision = "1") {
   const payload = packPayload([
-    JSON.stringify({ type: "header", schemaVersion: 7, languages: ["eng"], source: slug }),
-    JSON.stringify({ type: "term", id: `${slug}:cat`, dictionary: slug, headword: "猫",
-      expressions: [{ text: "猫", script: "kanji", common: true, tags: [] }], readings: [{ text: "ねこ", kind: "kana" }],
-      senses: [{ glosses: { eng: [`${slug}-${revision}`] }, partsOfSpeech: ["n"], fields: [], misc: [], dialects: [], restrictions: [] }] }),
+    JSON.stringify(packHeader(["eng"], slug)),
+    term(`${slug}:cat`, "猫", "猫", "ねこ", `${slug}-${revision}`),
   ]);
   return { payload, manifest: testPackManifest(payload, { contentRevision: `${slug}-${revision}`, terms: 1 }, {
     dictionaries: [{ slug, version: revision, languages: ["eng"] }], languages: ["eng"],

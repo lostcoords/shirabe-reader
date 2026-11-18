@@ -1,5 +1,6 @@
 import type { Definition, ParsedToken } from "../../src/common/types.js";
 import type { Request } from "../../src/common/messages.js";
+import { installWindow } from "./dom.js";
 
 // ONE page for the whole SUITE, and that is a correctness requirement rather
 // than tidiness.
@@ -39,13 +40,7 @@ let pending: Promise<Page> | null = null;
 export const page = (): Promise<Page> => (pending ??= buildPage());
 
 async function buildPage(): Promise<Page> {
-  const { Window } = await import("happy-dom");
-  const window = new Window({ url: HOST });
-  Object.assign(globalThis, {
-    window, document: window.document, HTMLElement: window.HTMLElement,
-    Node: window.Node, DOMRect: window.DOMRect, getComputedStyle: window.getComputedStyle.bind(window),
-    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
-  });
+  const window = installWindow({ url: HOST });
 
   const { ext } = await import("../../src/common/browser.js");
   ext.runtime.sendMessage = (async (message: Request) => {

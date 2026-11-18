@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
+import { packHeader, testPackManifest } from "./support/pack.js";
 import { cancelDictionaryInstall, checkDictionaryUpdate, deactivatePrivateDictionaries, dictionaryStatus, installDictionary, lookupEntryOffline, lookupKanjiOffline, lookupOffline, lookupVariants, parseOffline, removeDictionary, resolveParsedSpan, type PackManifest } from "../src/common/offline-dictionary.js";
 
 const records = [
-  { type: "header", schemaVersion: 7, languages: ["eng", "spa"], source: "Shirabe open-core" },
+  packHeader(),
   {
     type: "term", id: "jmdict:1", dictionary: "jmdict", headword: "食べる",
     expressions: [{ text: "食べる", script: "mixed", common: true, tags: [] }],
@@ -256,13 +257,8 @@ const counts = {
 };
 
 function manifest(revision: string, sha256 = checksum) {
-  return {
-  schemaVersion: 7, buildRecipeVersion: 15, minimumExtensionVersion: "0.2.6", contentRevision: revision, builtAt: "2026-07-15T00:00:00Z",
-    audio: { baseUrl: "https://cdn.shirabe.org/audio", path: "words", extension: "m4a", separator: "\x1f", engineVersion: 1, salt: "test-salt", defaultVoice: "male", voices: { male: 1_628_969_216, female: 345_585_728 } },
-    artifact: "dictionary.ndjson.gz", compression: "gzip", mediaType: "application/x-ndjson",
-    bytes: compressed.byteLength, sha256, counts, languages: ["eng", "spa"],
-    dictionaries: [{ slug: "jmdict", version: "test" }], modifications: [], sources: [], downloadUrl: "https://packs.test/dictionary.gz",
-  } as const;
+  return testPackManifest(compressed, { contentRevision: revision, terms: counts.terms },
+    { sha256, counts, dictionaries: [{ slug: "jmdict", version: "test" }] });
 }
 
 async function dictionaryTermCount(database: string, dictionary: string): Promise<number> {
@@ -340,7 +336,7 @@ test("an authenticated stack installs personal overlays and applies source chang
   context.after(async () => { globalThis.fetch = originalFetch; await removeDictionary(); });
 
   const personalRecords = [
-    { type: "header", schemaVersion: 7, languages: ["jpn"], source: "Shirabe private dictionary" },
+    packHeader(["jpn"]),
     {
       type: "term", id: "yomitan-test:1", dictionary: "yomitan-test", headword: "言葉",
       expressions: [{ text: "言葉", script: "kanji", common: false, tags: [] }],
