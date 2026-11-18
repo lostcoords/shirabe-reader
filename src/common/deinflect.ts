@@ -225,7 +225,9 @@ export function posConditionFlags(pos: readonly string[]): number {
 
 export function matchesPos(candidate: Deinflection, codes: readonly string[]): boolean {
   return codes.some((code) => {
-    if (!(candidate.conditions & posConditionFlags([code]))) return false;
+    // Daidai reads the godan negative (愛さない) only after a kanji: in kana, ださない is 出す.
+    const godanSuru = code === "vs-s" && /\p{Script=Han}する$/u.test(candidate.term) ? CONDITION_FLAGS["vs-s"] ?? 0 : 0;
+    if (!(candidate.conditions & (posConditionFlags([code]) | godanSuru))) return false;
     const rows = (irregularData.rows as Record<string, Array<{ stem: number; okuri: string; euphr: string | null; euphk: string | null }>>)[code];
     if (!rows || !irregularData.rules.includes(candidate.inflections[candidate.inflections.length - 1]!)) return true;
     const text = [...candidate.term];
