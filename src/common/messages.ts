@@ -96,7 +96,7 @@ export type Request =
       // card links to it rather than landing as an orphan. Omitted when the word
       // was never looked up (nothing to link to), and the save still succeeds.
       entry?: string;
-      // 0-based sense positions to scope the card to (empty/omitted = whole word).
+      // Sense refs ("jmdict#2") to scope the card to (omitted = whole word).
       senses?: string[];
       imageDataUrl?: string; audioDataUrl?: string;
       // The full capture form's extras (docs/plans/extension-card-form.md): a deck

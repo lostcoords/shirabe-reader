@@ -9,7 +9,7 @@ import type { Request } from "../src/common/messages.js";
 type SaveRequest = Extract<Request, { type: "save" }>;
 
 async function mountForm(options: {
-  senses: Array<{ glosses: string[] }>;
+  senses: Array<{ glosses: string[]; ref?: string }>;
   examples?: Array<{ japanese: string; translation: string | null }>;
   savedSenses?: string;
   capture?: { sentence?: { text: string; capturedAt: string }; imageDataUrl?: string };
@@ -43,11 +43,8 @@ async function mountForm(options: {
     word,
     definition: {
       headword: "高い", reading: "たかい", entry: "jmdict:1200430", url: "", common: true, jlpt: null, frequency: null,
-      // Each sense at its own position, which is what a scoped save travels
-      // under: they used to all be built at 0, and the form read the list index
-      // instead, so nothing here could tell the two apart.
       pitch: [], senses: options.senses.map((s, position) => ({
-        position, partsOfSpeech: [], tags: [],
+        ref: s.ref ?? `jmdict#${position}`, position, partsOfSpeech: [], tags: [],
         glosses: [ { lang: "eng" as const, tag: "EN", text: s.glosses.join("; ") } ],
       })),
       examples: (options.examples ?? []).map((e) => ({ japanese: e.japanese, translation: e.translation })),
@@ -118,6 +115,35 @@ test("a partial selection saves the senses it ticked, named by their dictionary"
   boxes[0]!.checked = false;
 
   assert.deepEqual((await saveRequest()).senses, [ "jmdict#1" ]);
+});
+
+// Every dictionary numbers its senses from 0, so a pick from a second stacked
+// dictionary must travel under that dictionary's name. It used to be sent as
+// `jmdict#<n>`, which scoped the card to a JMdict sense the learner never picked.
+test("a sense from another stacked dictionary saves under that dictionary's ref", async () => {
+  const { host, saveRequest } = await mountForm({
+    senses: [{ glosses: ["高い所にある"], ref: "yomitan-c89af#0" }, { glosses: ["値段が多い"], ref: "yomitan-c89af#1" }],
+  });
+
+  const boxes = [...host.querySelectorAll("input[type='checkbox']")] as HTMLInputElement[];
+  boxes[0]!.checked = false;
+
+  assert.deepEqual((await saveRequest()).senses, [ "yomitan-c89af#1" ]);
+});
+
+// The server reports taken meanings as the refs a save sends (`savedSenses:
+// ["jmdict#1"]`), and the word carries them as a comma list.
+test("a meaning already saved under its ref is marked saved, not offered again", async () => {
+  const { host, saveRequest } = await mountForm({
+    senses: [{ glosses: ["high; tall"] }, { glosses: ["expensive"] }, { glosses: ["loud"] }],
+    savedSenses: "jmdict#1",
+  });
+
+  const boxes = [...host.querySelectorAll("input[type='checkbox']")] as HTMLInputElement[];
+  assert.deepEqual(boxes.map((box) => box.dataset.ref), [ "jmdict#0", "jmdict#2" ]);
+  assert.equal(host.querySelectorAll(".sb-sense-saved-mark").length, 1);
+  boxes[1]!.checked = false;
+  assert.deepEqual((await saveRequest()).senses, [ "jmdict#0" ]);
 });
 
 test("a word whose meanings are all saved does not offer an empty selection", async () => {

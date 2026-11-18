@@ -426,6 +426,8 @@ test("an authenticated stack installs personal overlays and applies source chang
   assert.equal(japaneseFirst?.entry, "yomitan-test:2");
   assert.deepEqual(japaneseFirst?.senses.flatMap((sense) => sense.glosses.map((gloss) => gloss.text)),
     ["食物を口に入れる", "to eat"], "each enabled dictionary contributes its result in stack order");
+  assert.deepEqual(japaneseFirst?.senses.map((sense) => sense.ref), ["yomitan-test#0", "jmdict#0"],
+    "both books number from 0, so a sense is saved under its own dictionary's ref");
   assert.equal(downloads, 2);
 
   await deactivatePrivateDictionaries();

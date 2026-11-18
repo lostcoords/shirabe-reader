@@ -23,6 +23,7 @@ function definition(senses: Definition["senses"]): Definition {
 
 Object.assign(answers, {
   "lookup:開く-notes": definition([ {
+    ref: "jmdict#0",
     position: 0,
     partsOfSpeech: [ { label: "Godan verb", code: "v5k", category: "pos" } ],
     tags: [],
@@ -34,6 +35,7 @@ Object.assign(answers, {
     ],
   } ]),
   "lookup:綺麗": definition([ {
+    ref: "jmdict#0",
     position: 0,
     partsOfSpeech: [ { label: "Na-adjective", code: "adj-na", category: "pos" } ],
     tags: [ { label: "Usually kana", code: "uk", category: "misc" }, { label: "Computing", code: "comp", category: "field" } ],
@@ -43,6 +45,7 @@ Object.assign(answers, {
     ],
   } ]),
   "lookup:本": definition([ {
+    ref: "jmdict#0",
     position: 0,
     partsOfSpeech: [ { label: "Noun", code: "n", category: "pos" } ],
     tags: [],

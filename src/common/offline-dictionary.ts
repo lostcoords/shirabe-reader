@@ -3653,16 +3653,18 @@ function termDefinition(hit: LookupHit, languages: readonly GlossLanguage[], api
     ? [language as GlossLanguage] : glossLanguagesFrom([language]));
   const blocks = selected?.length ? selected : (languages.length ? languages : ["eng" as const]);
   const entryTags = uniqueSenseChips(term.senses.flatMap((sense) => senseChipsFor(sense, "entry")));
-  const senses: Sense[] = term.senses.flatMap((sense) => {
+  const senses: Sense[] = term.senses.flatMap((sense, position) => {
     const glosses = glossRows(sense, blocks);
     const usages = usageRows(sense, blocks);
     const notes = noteRows(sense, blocks);
     const xrefs = crossReferences(sense.xrefs ?? []);
     if (!glosses.length && !usages.length && !notes.length && !xrefs.length) return [];
     return [{
-      // Sense's 0-based position in the entry (display-only offline: saving is
-      // gated on a connected Pro account, so the picker never appears here).
-      position: term.senses.indexOf(sense),
+      // The server's handle for this sense. The pack writes an entry's senses in
+      // the server's order and drops only one with no content in its languages,
+      // so the index is that dictionary's own number unless such a sense comes first.
+      ref: `${term.dictionary}#${position}`,
+      position,
       sourceEntry: term.id,
       dictionary: dictionaryName(term.dictionary),
       ...(activeStackCache?.dictionaryReveal[term.dictionary] === "hover" ? { covered: true } : {}),
@@ -3859,7 +3861,7 @@ function kanjiDefinition(kanji: Stored<OfflineKanji>, languages: readonly GlossL
     jlpt: kanji.jlpt ? `N${kanji.jlpt}` : null,
     frequency: kanji.frequency ?? null,
     pitch: [],
-    senses: [{ position: 0, dictionary: "KANJIDIC2", partsOfSpeech: [], tags: [], glosses }],
+    senses: [{ ref: "kanjidic#0", position: 0, dictionary: "KANJIDIC2", partsOfSpeech: [], tags: [], glosses }],
     examples: [],
     offline: true,
   };

@@ -114,23 +114,21 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
   // sense and ticking none both save the whole word, so the control could not
   // change the outcome.
   const covered = coveredSenses(word);
-  // The sense's OWN position, not its place in this list. They agree today
-  // because a sense appears once; they did not when a card repeated its senses
-  // once per gloss language, and a save then scoped itself to sense numbers the
-  // word does not have.
-  const senses = definition.senses.map((sense) => ({ position: sense.position, sense }));
+  // A sense is named by its ref, never its place in this list: two stacked
+  // dictionaries both number their senses from 0.
+  const senses = definition.senses;
   const pickable = senses.length > 1;
   const senseBoxes: HTMLInputElement[] = [];
   if (senses.length) {
     const list = el("ul", "sb-form-senses");
-    for (const { position, sense } of senses) {
+    for (const sense of senses) {
       const row = el("li");
-      const isSaved = covered === "all" || covered.has(position);
+      const isSaved = covered === "all" || covered.has(sense.ref);
       if (pickable && !isSaved) {
         const box = el("input", "sb-sense-pick");
         box.type = "checkbox";
         box.checked = true;
-        box.dataset.position = String(position);
+        box.dataset.ref = sense.ref;
         box.setAttribute("aria-label", `Include "${senseText(sense)}" when saving`);
         senseBoxes.push(box);
         row.append(box);
@@ -265,11 +263,7 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
   submit.addEventListener("click", async () => {
     submit.disabled = true;
     feedback.textContent = "Saving…";
-    // The pack this extension ships is JMdict only, so a checkbox's position is
-    // JMdict's own sense number and the ref it qualifies to names that one book.
-    const ticked = senseBoxes
-      .filter((box) => box.checked)
-      .map((box) => `jmdict#${Number(box.dataset.position)}`);
+    const ticked = senseBoxes.filter((box) => box.checked).map((box) => box.dataset.ref!);
     // Ticking every meaning is the whole word, and so is ticking none: but an
     // all-covered word must not send an empty pick, which would build a second
     // whole-word card rather than the nothing the learner intended.
@@ -313,9 +307,8 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
 
 // Which meanings already have a card, as the state cache wrote them onto the
 // word (`applyStudyDetails`): "all" when a whole-word card covers everything.
-function coveredSenses(word: HTMLElement): Set<number> | "all" {
+function coveredSenses(word: HTMLElement): Set<string> | "all" {
   const raw = word.dataset.savedSenses;
-  if (!raw) return new Set();
   if (raw === "all") return "all";
-  return new Set(raw.split(",").map(Number).filter(Number.isInteger));
+  return new Set((raw ?? "").split(",").filter(Boolean));
 }

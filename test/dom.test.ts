@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Window } from "happy-dom";
 
-function installDom(html: string): Window {
+// The tests drive the reader's own code, which is typed against lib.dom, so the
+// happy-dom window is handed to them as the browser window it stands in for.
+function installDom(html: string): globalThis.Window & typeof globalThis {
   const window = new Window({ url: "https://reader.test/page" });
   window.document.body.innerHTML = html;
   Object.assign(globalThis, {
@@ -13,7 +15,7 @@ function installDom(html: string): Window {
       storage: { local: { get: async () => ({}), set: async () => {}, remove: async () => {} }, onChanged: { addListener() {} } },
     },
   });
-  return window;
+  return window as unknown as globalThis.Window & typeof globalThis;
 }
 
 test("page scanning sends Japanese widths unchanged without scanning Latin-only text", async () => {
@@ -262,7 +264,7 @@ test("a block that scrolls back mid-flight still parses once its batch settles",
   (window.document as unknown as { elementsFromPoint: () => unknown[] }).elementsFromPoint = () => [];
 
   // Drive intersection by hand so the test controls the scroll race.
-  let notify: ((entries: Array<{ target: unknown; isIntersecting: boolean }>) => void) | null = null;
+  let notify = null as ((entries: Array<{ target: unknown; isIntersecting: boolean }>) => void) | null;
   class FakeIO {
     constructor(callback: (entries: Array<{ target: unknown; isIntersecting: boolean }>) => void) { notify = callback; }
     observe(): void {}
@@ -296,7 +298,7 @@ test("a block that scrolls back mid-flight still parses once its batch settles",
 
   const { ext } = await import("../src/common/browser.js");
   const original = ext.runtime.sendMessage;
-  let release: (() => void) | null = null;
+  let release = null as (() => void) | null;
   let held = false;
   ext.runtime.sendMessage = async (message: { type: string; texts?: string[] }) => {
     if (message.type !== "parseBatchOnline") return { ok: true, states: {} };
@@ -555,7 +557,7 @@ test("the status bar counts every i+1 block on the page, not just the changed on
     // The cue also points at the word itself, so a marked block says which one.
     const targets = [...window.document.querySelectorAll<HTMLElement>(".sb-i-plus-one-word")].map((word) => word.dataset.lemma);
     assert.deepEqual(targets, ["食べる"], "the block's unknown word is cued, the known one is not");
-    assert.equal(sent.findLast((message) => message.type === "pageMetrics")?.metrics?.iPlusOne, 1);
+    assert.equal(sent.filter((message) => message.type === "pageMetrics").at(-1)?.metrics?.iPlusOne, 1);
 
     stopMetrics();
     assert.equal(window.document.querySelectorAll(".sb-i-plus-one").length, 0, "stopping the report clears the cue");
@@ -810,9 +812,9 @@ test("a meaning that already has a card is marked saved, not offered again", asy
 
   applyStudyDetails(word, {
     state: "new", decks: [ { id: 1, name: "Saved words" } ], cardId: 15, cardCount: 1,
-    savedSenses: [ 0 ],
+    savedSenses: [ "jmdict#0", "jmdict#2" ],
   });
-  assert.equal(word.dataset.savedSenses, "0");
+  assert.equal(word.dataset.savedSenses, "jmdict#0,jmdict#2");
 
   // A whole-word card covers every meaning at once.
   applyStudyDetails(word, { state: "new", decks: [], savedWholeWord: true });
