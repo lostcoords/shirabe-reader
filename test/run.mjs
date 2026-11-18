@@ -31,6 +31,7 @@ const suites = [
   { name: "background-parity.test.ts", entry: "test/background-parity.test.ts", env: { PARITY_MESSAGE_API: "firefox" } },
   { name: "background-private-startup.test.ts", entry: "test/background-private-startup.test.ts" },
   { name: "background-writes.test.ts", entry: "test/background-writes.test.ts" },
+  { name: "content-shortcuts.test.ts", entry: "test/content-shortcuts.test.ts" },
 ];
 
 const requested = process.argv.slice(2);

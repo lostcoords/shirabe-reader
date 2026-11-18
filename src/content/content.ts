@@ -225,8 +225,10 @@ function boot(): void {
     return wantPopup(e) && (scanModifier === "alt" ? e.shiftKey : e.altKey);
   }
 
+  // A page script can dispatch any event it likes on its own document. Only the
+  // reader's own hover and keys may pick a word or write to their account.
   document.addEventListener("mouseover", (e) => {
-    if (mode === "off") return;
+    if (mode === "off" || !e.isTrusted) return;
     const word = (e.target as Element | null)?.closest?.(".sb-word");
     if (word instanceof HTMLElement) {
       hovered = word;
@@ -249,6 +251,7 @@ function boot(): void {
   let pendingPointer: MouseEvent | null = null;
   let lastPointer: MouseEvent | null = null;
   document.addEventListener("mousemove", (event) => {
+    if (!event.isTrusted) return;
     lastPointer = event;
     pendingPointer = event;
     if (scanFrame) return;
@@ -299,7 +302,7 @@ function boot(): void {
   const WORD_ACTION_KEYS = Object.keys(WORD_ACTIONS) as WordAction[];
 
   window.addEventListener("keydown", (e) => {
-    if (isTyping(e.target)) return;
+    if (!e.isTrusted || isTyping(e.target)) return;
     const keybinds = current?.keybinds;
     if (!keybinds) return;
 
