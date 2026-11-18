@@ -257,3 +257,31 @@ test("the ignore shortcut ignores only an unsaved word and lifts only an ignored
   assert.equal(word.dataset.state, "none");
   assert.deepEqual(sent.map(({ type }) => type), ["ignore", "unignore"]);
 });
+
+// Writes name the word by its reading, but the page used to repaint every span
+// of the lemma: Known on 方 read かた marked 方 read ほう known too.
+test("Known and Ignore on one homograph leave the other's spans as they were", async () => {
+  const window = installWindow();
+  const { ext } = await import("../src/common/browser.js");
+  ext.runtime.sendMessage = (async (message: MessageRequest) => {
+    if (message.type === "lookup") return { ok: true, type: "lookup", definition: null };
+    if (message.type === "ignore") return { ok: true, type: "ignore" };
+    return { ok: true, type: "markKnown", details: { state: "retired", decks: [] } };
+  }) as typeof ext.runtime.sendMessage;
+  const { renderToken } = await import("../src/content/word.js");
+  const { ignore, markKnown } = await import("../src/content/actions.js");
+  const span = (reading: string) => {
+    const word = renderToken({ start: 0, length: 1, surface: "方", reading, lemma: "方", pos: "noun", content: true, state: "none" }, false) as HTMLElement;
+    window.document.body.append(word as never);
+    return word;
+  };
+  const [kata, hou, otherKata] = [span("かた"), span("ほう"), span("かた")];
+
+  assert.equal((await markKnown(kata)).ok, true);
+  assert.equal(otherKata.dataset.state, "retired", "every かた span is the word Known named");
+  assert.equal(hou.dataset.state, "none", "ほう is another word");
+  assert.match(hou.className, /\bsb-none\b/);
+
+  assert.equal((await ignore(hou)).ok, true);
+  assert.equal(kata.dataset.state, "retired", "ignoring ほう leaves かた alone");
+});

@@ -2,7 +2,7 @@ import type { Config } from "./config.js";
 import { ShirabePublicClient, ShirabePublicApiError, type PublicAuthorization, type PublicCredentials, type ShirabeScope, type WordStateEntry } from "@shirabe-org/api";
 import { glossLanguagesFrom, type GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import { cardWordState } from "@shirabe-org/card/word-card/types";
-import type { ParsedToken, WordState } from "./types.js";
+import { studyKey, type ParsedToken, type WordState } from "./types.js";
 import type { Deck, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
 
 export { ShirabePublicApiError as ApiError };
@@ -134,7 +134,8 @@ export class ShirabeApi {
   }
 
   // With `study`, each word comes back with the reader's study state, so marking
-  // a page needs no lookup of its own. `study` maps a lemma to what was said of it.
+  // a page needs no lookup of its own. `study` maps a word's `studyKey` to what
+  // was said of it.
   async parseWithProvenance(texts: string[], options: { study?: boolean } = {}): Promise<{
     tokens: ParsedToken[][]; study: Record<string, StudyDetails>; packRevision: string; stackFingerprint: string; sources: string[];
   }> {
@@ -164,7 +165,7 @@ export class ShirabeApi {
       state: cardWordState(token.study?.state),
     })));
     const study = Object.fromEntries(response.results.flatMap(({ tokens }) =>
-      tokens.flatMap((token) => (token.study && token.lemma ? [[token.lemma, studyDetails(token.study)] as const] : []))));
+      tokens.flatMap((token) => (token.study && token.lemma ? [[studyKey(token.lemma, token.reading), studyDetails(token.study)] as const] : []))));
     return { tokens, study, packRevision: response.packRevision, stackFingerprint: response.stackFingerprint, sources: response.sources };
   }
 

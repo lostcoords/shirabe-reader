@@ -194,6 +194,49 @@ test("a parse asks for study states, and opening a parsed word asks nothing more
   assert.deepEqual(sent, []);
 });
 
+// The cache used to hold one entry per lemma, so the last token or write won:
+// Known on 方 read かた made the card on 方 read ほう offer Not known. The card
+// asks by lemma alone, so a lemma cached under two readings is the server's to
+// answer.
+test("a lemma cached under two readings is asked for, not answered with whichever came last", async () => {
+  const worker = await send;
+  answers.set("POST /api/v1/parse", () => json({
+    packRevision: "r", stackFingerprint: "f", sources: ["jmdict:en"],
+    results: [{ tokens: [
+      { startOffset: 0, endOffset: 1, surface: "方", lemma: "方", reading: "ほう", kind: "word", study: { state: "none", decks: [] } },
+    ] }],
+  }));
+  answers.set("POST /api/v1/srs/knowns", () => json({ word: { lemma: "方", state: "retired", decks: [{ id: 7, name: "Reading pile" }], cardId: 9, cardCount: 1 } }));
+  answers.set("POST /api/v1/srs/states/lookup", () => json({ states: [{ lemma: "方", state: "none", decks: [] }] }));
+  await worker({ type: "parseBatchOnline", texts: ["方"] });
+
+  sent.length = 0;
+  const parsed = await worker({ type: "states", lemmas: ["方"] });
+  assert.ok(parsed.ok && parsed.type === "states");
+  assert.equal(parsed.states["方"], "none", "one reading cached answers for its lemma");
+  assert.deepEqual(sent.filter(({ path }) => path.startsWith("/api/v1/srs")), []);
+
+  await worker({ type: "markKnown", lemma: "方", reading: "かた", key: "known-kata" });
+  sent.length = 0;
+  const opened = await worker({ type: "states", lemmas: ["方"] });
+  assert.ok(opened.ok && opened.type === "states");
+  assert.deepEqual(sent.map(({ path }) => path).filter((path) => path.startsWith("/api/v1/srs")), ["/api/v1/srs/states/lookup"]);
+  assert.deepEqual(opened.details["方"], { state: "none", decks: [] }, "the server's answer, not かた's Known");
+
+  // One parse naming both readings keeps both, rather than the last token's.
+  answers.set("POST /api/v1/parse", () => json({
+    packRevision: "r", stackFingerprint: "f", sources: ["jmdict:en"],
+    results: [{ tokens: [
+      { startOffset: 0, endOffset: 1, surface: "方", lemma: "方", reading: "かた", kind: "word", study: { state: "retired", decks: [] } },
+      { startOffset: 1, endOffset: 2, surface: "方", lemma: "方", reading: "ほう", kind: "word", study: { state: "none", decks: [] } },
+    ] }],
+  }));
+  await worker({ type: "parseBatchOnline", texts: ["方方"] });
+  sent.length = 0;
+  await worker({ type: "states", lemmas: ["方"] });
+  assert.deepEqual(sent.map(({ path }) => path).filter((path) => path.startsWith("/api/v1/srs")), ["/api/v1/srs/states/lookup"]);
+});
+
 // Last: it signs the reader out. A parse answered before sign-out but landing
 // after it used to fill the signed-out cache with the old account's states and
 // deck names, which every page then read, and which the next account to sign

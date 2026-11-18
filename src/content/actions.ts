@@ -377,7 +377,7 @@ export async function save(word: HTMLElement, senseRefs?: string[]): Promise<Out
   const res = await saveRequest(word, senseRefs);
   let cardUrl: string | undefined;
   if (res.ok) {
-    applyStateEverywhere(lemma, res.result.state);
+    applyStateEverywhere(lemma, res.result.state, word.dataset.reading);
     applyStudyDetails(word, res.result);
     // Prefer explicit cardId; also accept a nested card.id if the envelope shape drifts.
     const cardId = res.result.cardId ?? (res.result as { card?: { id?: number } }).card?.id;
@@ -398,7 +398,7 @@ export async function ignore(word: HTMLElement): Promise<Outcome> {
   const lemma = lemmaOf(word);
   const res = await send({ type: "ignore", lemma, ...(word.dataset.reading ? { reading: word.dataset.reading } : {}), key: retryKey() });
   if (!res.ok) return refusal(res);
-  applyStateEverywhere(lemma, "ignored");
+  applyStateEverywhere(lemma, "ignored", word.dataset.reading);
   word.dataset.state = "ignored";
   return { ok: true, message: `Ignored ${lemma}` };
 }
@@ -417,7 +417,7 @@ export async function unignore(word: HTMLElement): Promise<Outcome> {
   const lemma = lemmaOf(word);
   const res = await send({ type: "unignore", lemma, ...(word.dataset.reading ? { reading: word.dataset.reading } : {}) });
   if (!res.ok) return refusal(res);
-  applyStateEverywhere(lemma, res.details.state);
+  applyStateEverywhere(lemma, res.details.state, word.dataset.reading);
   applyStudyDetails(word, res.details);
   return { ok: true, message: `${lemma} is no longer ignored` };
 }
@@ -436,7 +436,7 @@ export async function markKnown(word: HTMLElement): Promise<Outcome> {
     key: retryKey(),
   });
   if (res.ok) {
-    applyStateEverywhere(lemma, res.details.state);
+    applyStateEverywhere(lemma, res.details.state, word.dataset.reading);
     // The answer describes the whole word: its state, its decks, how many cards
     // it holds: so Manage re-points itself without a second lookup.
     applyStudyDetails(word, res.details);
@@ -460,7 +460,7 @@ export async function unmarkKnown(word: HTMLElement): Promise<Outcome> {
     delete word.dataset.cardUrl;
     delete word.dataset.cardCount;
   }
-  applyStateEverywhere(lemma, res.details.state);
+  applyStateEverywhere(lemma, res.details.state, word.dataset.reading);
   applyStudyDetails(word, res.details);
   return { ok: true, message: `${lemma} is no longer marked known` };
 }

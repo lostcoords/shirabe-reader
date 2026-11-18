@@ -155,12 +155,14 @@ function applyState(word: HTMLElement, state: WordState): void {
 }
 
 // …and on every other occurrence of the same word, so the whole page agrees
-// after a review. Returns detached nodes to its caller's GC by dropping them.
-export function applyStateEverywhere(lemma: string, state: WordState): void {
+// after a review. A write names the word by its reading too, and then leaves a
+// homograph alone (方 read かた is not 方 read ほう). Returns detached nodes to its
+// caller's GC by dropping them.
+export function applyStateEverywhere(lemma: string, state: WordState, reading?: string): void {
   const set = byLemma.get(lemma);
   if (!set) return;
   for (const word of set) {
-    if (word.isConnected) applyState(word, state);
-    else set.delete(word);
+    if (!word.isConnected) set.delete(word);
+    else if (!reading || word.dataset.reading === reading) applyState(word, state);
   }
 }

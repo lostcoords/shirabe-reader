@@ -6,7 +6,7 @@ import { isR2AudioUrl } from "@shirabe-org/card/word-card/audio";
 import { refreshRemoteHostRules } from "../common/host-rules.js";
 import { cancelDictionaryInstall, checkDictionaryUpdate, clearLocalDictionaryStack, deactivatePrivateDictionaries, disablePrivateDictionaryLookups, DictionaryNotInstalledError, dictionaryStatus, installDictionary, lookupEntryOffline, lookupGroupOffline, lookupKanjiOffline, lookupOffline, lookupScanOffline, OfflineLookupUnavailableError, parseOffline, removeDictionary, resolveParsedSpan, resumeInterruptedDictionaryInstall, setActiveDictionaryStack, type DictionaryStatus } from "../common/offline-dictionary.js";
 import type { Deck, Failure, PageMetrics, Request, Response, Status, StudyDetails } from "../common/messages.js";
-import type { Definition, ParsedToken, WordState } from "../common/types.js";
+import { studyKey, type Definition, type ParsedToken, type WordState } from "../common/types.js";
 import { captureEvent, captureException, captureMeasurement, ingestClientReport, installBackgroundErrorHandlers, setTelemetryEnabled } from "./telemetry.js";
 import { developmentBuildLabel, readPackagedBuildId, shouldReloadDevelopmentBuild } from "../common/development-build.js";
 
@@ -382,7 +382,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       // image it replaces.
       const result = await api.save(options);
       if (request.newDeckName) await forgetDecks();
-      await cacheStates(epoch, { [request.lemma]: result.state }, { [request.lemma]: result });
+      await cacheStates(epoch, { [studyKey(request.lemma, request.reading)]: result });
       return { ok: true, type: "save", result };
     }
     case "decks":
@@ -409,25 +409,25 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
     case "markKnown": {
       const { type: _type, ...options } = request;
       const details = await api.markKnown(options);
-      await cacheStates(epoch, { [request.lemma]: details.state }, { [request.lemma]: details });
+      await cacheStates(epoch, { [studyKey(request.lemma, request.reading)]: details });
       return { ok: true, type: "markKnown", details };
     }
     case "unmarkKnown": {
       const { type: _type, ...options } = request;
       const details = await api.unmarkKnown(options);
-      await cacheStates(epoch, { [request.lemma]: details.state }, { [request.lemma]: details });
+      await cacheStates(epoch, { [studyKey(request.lemma, request.reading)]: details });
       return { ok: true, type: "unmarkKnown", details };
     }
     case "ignore": {
       await api.ignore({ lemma: request.lemma, reading: request.reading, key: request.key });
-      await cacheStates(epoch, { [request.lemma]: "ignored" }, { [request.lemma]: { state: "ignored", decks: [] } });
+      await cacheStates(epoch, { [studyKey(request.lemma, request.reading)]: { state: "ignored", decks: [] } });
       return { ok: true, type: "ignore" };
     }
     case "unignore": {
       await api.unignore({ lemma: request.lemma, reading: request.reading });
       // Only a word with no card reads as ignored, so lifting it leaves none.
       const details: StudyDetails = { state: "none", decks: [] };
-      await cacheStates(epoch, { [request.lemma]: details.state }, { [request.lemma]: details });
+      await cacheStates(epoch, { [studyKey(request.lemma, request.reading)]: details });
       return { ok: true, type: "unignore", details };
     }
     case "connect":
@@ -474,9 +474,7 @@ async function parseBatchOnline(texts: string[], epoch: number): Promise<{ token
   const startedAt = performance.now();
   try {
     const { tokens, study } = await api.parseWithProvenance(texts, { study: studied });
-    if (studied) {
-      await cacheStates(epoch, Object.fromEntries(Object.entries(study).map(([lemma, details]) => [lemma, details.state])), study);
-    }
+    if (studied) await cacheStates(epoch, study);
     recordBackgroundPerformance("online-parse", startedAt, {
       texts: texts.length,
       chars: texts.reduce((sum, text) => sum + text.length, 0),
@@ -537,21 +535,39 @@ const STATE_REQUEST_MAX_LEMMAS = 1_000;
 const DECK_CACHE_KEY = "profileDeckSnapshot";
 async function stateSnapshotFor(lemmas: string[]): Promise<{ states: Record<string, WordState>; details: Record<string, StudyDetails> }> {
   const cached = await cachedStateSnapshot();
-  if (!isConnected(config) || !config.scopes.includes("user:study:read")) {
-    return { states: pickStates(cached.states, lemmas), details: pickDetails(cached.details, lemmas) };
-  }
+  if (!isConnected(config) || !config.scopes.includes("user:study:read")) return pickByLemma(cached, lemmas);
   const freshAfter = Date.now() - STATE_CACHE_MAX_AGE_MS;
-  if (lemmas.every((lemma) => lemma in cached.states && Date.parse(cached.checkedAt[lemma] ?? "") >= freshAfter)) {
-    return { states: pickStates(cached.states, lemmas), details: pickDetails(cached.details, lemmas) };
+  const keyFor = cacheKeyForLemma(cached);
+  if (lemmas.every((lemma) => Date.parse(cached.checkedAt[keyFor(lemma) ?? ""] ?? "") >= freshAfter)) {
+    return pickByLemma(cached, lemmas);
   }
   try {
     await refreshRemoteStates(lemmas);
-    const refreshed = await cachedStateSnapshot();
-    return { states: pickStates(refreshed.states, lemmas), details: pickDetails(refreshed.details, lemmas) };
+    return pickByLemma(await cachedStateSnapshot(), lemmas);
   } catch {
-    return { states: pickStates(cached.states, lemmas), details: pickDetails(cached.details, lemmas) };
+    return pickByLemma(cached, lemmas);
   }
 }
+
+// Entries are keyed by `studyKey`: lemma and reading where a parse or a write
+// named the reading, the lemma alone where the server's state lookup answered.
+// The card and the parser ask by lemma. A lemma's own answer wins; a lemma
+// cached under one reading answers with it; under two, neither reading speaks
+// for the other and the server is asked.
+function cacheKeyForLemma(snapshot: CachedStateSnapshot): (lemma: string) => string | undefined {
+  const readings = new Map<string, string[]>();
+  for (const key of Object.keys(snapshot.states)) {
+    const lemma = lemmaOfKey(key);
+    if (lemma !== key) readings.set(lemma, [...readings.get(lemma) ?? [], key]);
+  }
+  return (lemma) => {
+    if (lemma in snapshot.states) return lemma;
+    const keys = readings.get(lemma);
+    return keys?.length === 1 ? keys[0] : undefined;
+  };
+}
+
+const lemmaOfKey = (key: string): string => key.split("\u0000", 1)[0]!;
 
 type CachedStateSnapshot = {
   states: Record<string, WordState>;
@@ -568,16 +584,24 @@ async function cachedStateSnapshot(): Promise<CachedStateSnapshot> {
   return memoryStateSnapshot;
 }
 
-async function cacheStates(epoch: number, states: Record<string, WordState>, details: Record<string, StudyDetails> = {}): Promise<void> {
+async function cacheStates(epoch: number, answers: Record<string, StudyDetails>): Promise<void> {
   stateCacheWrite = stateCacheWrite.then(async () => {
     if (epoch !== profileEpoch) return;
     const current = await cachedStateSnapshot();
-    const checkedAt = { ...current.checkedAt };
+    const snapshot = { states: { ...current.states }, details: { ...current.details }, checkedAt: { ...current.checkedAt } };
     const now = new Date().toISOString();
-    for (const lemma of Object.keys(states)) checkedAt[lemma] = now;
-    const snapshot = {
-      states: { ...current.states, ...states }, details: { ...current.details, ...details }, checkedAt,
-    };
+    for (const [key, details] of Object.entries(answers)) {
+      // A reading that moved makes the lemma's own answer stale.
+      const lemma = lemmaOfKey(key);
+      if (lemma !== key) {
+        delete snapshot.states[lemma];
+        delete snapshot.details[lemma];
+        delete snapshot.checkedAt[lemma];
+      }
+      snapshot.states[key] = details.state;
+      snapshot.details[key] = details;
+      snapshot.checkedAt[key] = now;
+    }
     pruneStateSnapshot(snapshot);
     memoryStateSnapshot = snapshot;
     await ext.storage.local.set({ [STATE_CACHE_KEY]: snapshot });
@@ -606,7 +630,7 @@ async function drainRemoteStateRefresh(): Promise<void> {
     for (const lemma of lemmas) pendingRemoteStateLemmas.delete(lemma);
     const epoch = profileEpoch;
     const fresh = await api.states(lemmas);
-    await cacheStates(epoch, fresh.states, fresh.details);
+    await cacheStates(epoch, fresh.details);
   }
 }
 
@@ -656,21 +680,23 @@ async function clearProfileCaches(): Promise<void> {
   await ext.storage.local.remove([STATE_CACHE_KEY, DECK_CACHE_KEY]);
 }
 
-function pickStates(states: Record<string, WordState>, lemmas: string[]): Record<string, WordState> {
-  return Object.fromEntries(lemmas.filter((lemma) => states[lemma]).map((lemma) => [lemma, states[lemma]]));
-}
-
 // storage.local outlives any single build, so a snapshot written by an older one
 // still deserializes: a field short of the type it claims to be. `decks` was
 // `memberships` on the wire not long ago, and the reader dereferences it
 // directly to label a saved word. Normalize on the way out, so no consumer has
 // to defend itself against a cache older than it is.
-function pickDetails(details: Record<string, StudyDetails>, lemmas: string[]): Record<string, StudyDetails> {
-  return Object.fromEntries(
-    lemmas
-      .filter((lemma) => details[lemma])
-      .map((lemma) => [ lemma, { ...details[lemma], decks: details[lemma].decks ?? [] } ]),
-  );
+function pickByLemma(snapshot: CachedStateSnapshot, lemmas: string[]): { states: Record<string, WordState>; details: Record<string, StudyDetails> } {
+  const keyFor = cacheKeyForLemma(snapshot);
+  const states: Record<string, WordState> = {};
+  const details: Record<string, StudyDetails> = {};
+  for (const lemma of lemmas) {
+    const key = keyFor(lemma);
+    if (!key || !snapshot.states[key]) continue;
+    states[lemma] = snapshot.states[key];
+    const known = snapshot.details[key];
+    if (known) details[lemma] = { ...known, decks: known.decks ?? [] };
+  }
+  return { states, details };
 }
 
 // The popup is a page that dies when it loses focus, and clicking the auth

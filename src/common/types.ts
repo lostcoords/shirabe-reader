@@ -29,3 +29,7 @@ export type ParsedToken = {
 
 // One pitch-accent pattern: the downstep (0 = heiban), a type name, and the
 // pre-generated clip to play (null when we have no audio for it).
+
+// A word's study state is the server's for a lemma and a reading: 方 read かた
+// and 方 read ほう are two words. Without a reading it is the lemma's.
+export const studyKey = (lemma: string, reading?: string | null): string => (reading ? `${lemma}\u0000${reading}` : lemma);
