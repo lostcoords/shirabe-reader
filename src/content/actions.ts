@@ -433,10 +433,18 @@ export async function save(word: HTMLElement, senseRefs?: string[]): Promise<Out
   };
 }
 
-// Park as learned (out of review rotation).
+// Park as learned (out of review rotation). It names the word the way a save
+// does: a bare lemma would retire every homograph's cards, and an unsaved word
+// would get a card linked to nothing.
 export async function markKnown(word: HTMLElement): Promise<Outcome> {
   const lemma = lemmaOf(word);
-  const res = await send({ type: "setState", lemma, state: "retired" });
+  const config = await loadConfig();
+  const res = await send({
+    type: "setState", lemma, state: "retired",
+    ...(word.dataset.reading ? { reading: word.dataset.reading } : {}),
+    entry: await entryFor(word),
+    ...(config.preferredDeckId == null ? {} : { deckId: config.preferredDeckId }),
+  });
   if (res.ok) {
     applyStateEverywhere(lemma, res.state);
     // The answer describes the whole word: its state, its decks, how many cards

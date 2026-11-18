@@ -118,3 +118,60 @@ test("a word with no entry saves as free text rather than half a handle", async 
     assert.equal(body.lemma, "変わる", "the save still goes through: an orphan card beats no card");
   }
 });
+
+// Known used to post the bare spelling. The server then retired every card of
+// every homograph (はし the bridge with はし the chopsticks), and an unsaved word
+// got a card linked to no entry, in no chosen deck.
+test("Known posts the word's reading, entry and deck, the identity a save sends", async () => {
+  const original = globalThis.fetch;
+  const requests: Array<{ path: string; body: unknown }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    requests.push({ path: new URL(request.url).pathname, body: await request.json() });
+    return Response.json({ word: { lemma: "橋", state: "retired", decks: [{ id: 7, name: "Reading pile" }] } });
+  }) as typeof fetch;
+  try {
+    const { ShirabeApi } = await import("../src/common/api.js");
+    const { DEFAULTS } = await import("../src/common/config.js");
+    const api = new ShirabeApi({ ...DEFAULTS, apiBase: "https://shirabe.test", accessToken: "shra_test", refreshToken: "shrr_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    const details = await api.setState({ lemma: "橋", state: "retired", reading: "はし", entry: "jmdict:1489850", deckId: 7 });
+    assert.equal(details.state, "retired");
+    assert.deepEqual(requests, [{ path: "/api/v1/srs/states", body: {
+      lemma: "橋", state: "retired", reading: "はし", deckId: 7, dictionarySlug: "jmdict", sourceId: "1489850",
+    } }]);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Known on a word whose popup never opened asks for its entry, as a save does", async () => {
+  const { Window } = await import("happy-dom");
+  const window = new Window({ url: "https://reader.test/page" });
+  const sent: MessageRequest[] = [];
+  Object.assign(globalThis, {
+    window, document: window.document, HTMLElement: window.HTMLElement,
+    requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0) as unknown as number,
+    cancelAnimationFrame: (handle: number) => clearTimeout(handle),
+    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
+  });
+  const { ext } = await import("../src/common/browser.js");
+  ext.runtime.sendMessage = (async (message: MessageRequest) => {
+    sent.push(message);
+    if (message.type === "lookup") {
+      return { ok: true, type: "lookup", definition: { headword: "橋", entry: "jmdict:1489850", senses: [] } };
+    }
+    return { ok: true, type: "setState", state: "retired", details: { state: "retired", decks: [] } };
+  }) as typeof ext.runtime.sendMessage;
+
+  const { markKnown } = await import("../src/content/actions.js");
+  const word = window.document.createElement("span") as unknown as HTMLElement;
+  word.dataset.lemma = "橋";
+  word.dataset.reading = "はし";
+  window.document.body.append(word as never);
+
+  assert.equal((await markKnown(word)).ok, true);
+
+  const request = sent.find((message) => message.type === "setState") as Extract<MessageRequest, { type: "setState" }>;
+  assert.equal(request.reading, "はし", "the reading keeps the chopsticks' card out of it");
+  assert.equal(request.entry, "jmdict:1489850", "an unsaved word's new card links to its entry");
+});

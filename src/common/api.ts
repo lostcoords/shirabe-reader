@@ -157,10 +157,12 @@ export class ShirabeApi {
   }
 
   // Set a word's state directly: "retired" parks it as learned, "reviewing" brings
-  // it into rotation. A state is word-level: it lands on every card the word
-  // holds: so the answer is the whole word, not one card.
-  async setState(lemma: string, state: "retired" | "reviewing"): Promise<StudyDetails> {
-    const { word } = await this.oauth.request((client) => client.setWordState({ lemma, state }));
+  // it into rotation. It lands on every card of this lemma and reading, so the
+  // answer is the whole word, not one card. A word with no card gets one, linked
+  // to `entry` in `deckId`.
+  async setState(options: { lemma: string; state: "retired" | "reviewing"; reading?: string; entry?: string; deckId?: number }): Promise<StudyDetails> {
+    const { entry, ...fields } = options;
+    const { word } = await this.oauth.request((client) => client.setWordState({ ...fields, ...entryHandle(entry) }));
     return studyDetails(word);
   }
 

@@ -114,7 +114,9 @@ export type Request =
   | { type: "states"; lemmas: string[] }
   | { type: "pageMetrics"; metrics: PageMetrics }
   | { type: "activePageMetrics" } // popup asks what the active tab last measured
-  | { type: "setState"; lemma: string; state: "retired" | "reviewing" }
+  // The same identity a save sends: the reading keeps a homograph's cards out of
+  // it, and the entry and deck place the card an unsaved word gets.
+  | { type: "setState"; lemma: string; state: "retired" | "reviewing"; reading?: string; entry?: string; deckId?: number }
   | { type: "connect" } // begin device login; resolves with the code to show
   | { type: "disconnect" }
   | { type: "updateDictionaryStack"; dictionaries: string[]; dictionaryReveal: Record<string, "show" | "hover"> }

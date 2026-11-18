@@ -26,6 +26,7 @@ const suites = [
   { name: "telemetry-permission.test.ts", entry: "test/telemetry-permission.test.ts", outfile: join(dir, "telemetry-permission.cjs") },
   { name: "background-parity.test.ts", entry: "test/background-parity.test.ts", outfile: join(dir, "background-parity.cjs") },
   { name: "background-private-startup.test.ts", entry: "test/background-private-startup.test.ts", outfile: join(dir, "background-private-startup.cjs") },
+  { name: "background-writes.test.ts", entry: "test/background-writes.test.ts", outfile: join(dir, "background-writes.cjs") },
   { name: "all.test.ts", entry: "test/all.test.ts", outfile: join(dir, "tests.cjs") },
   { name: "segmentation.test.ts", entry: "test/segmentation.test.ts", outfile: join(dir, "segmentation.cjs") },
 ];

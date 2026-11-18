@@ -417,8 +417,9 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       return { ok: true, type: "activePageMetrics", metrics: (tab?.id != null && tabMetrics.get(tab.id)) || null };
     }
     case "setState": {
-      const details = await api.setState(request.lemma, request.state);
-      await cacheStates({ [request.lemma]: details.state });
+      const { type: _type, ...options } = request;
+      const details = await api.setState(options);
+      await cacheStates({ [request.lemma]: details.state }, { [request.lemma]: details });
       return { ok: true, type: "setState", state: details.state, details };
     }
     case "connect":
