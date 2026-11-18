@@ -260,10 +260,11 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
   cancel.type = "button";
   cancel.addEventListener("click", options.onCancel);
 
-  // One key for the life of the form: saving again after a failure is the same
-  // save, so a first attempt that did land (a new deck included) is answered,
-  // not repeated.
-  const key = retryKey();
+  // One key per request: saving again after a failure is the same save, so a
+  // first attempt that did land (a new deck included) is answered, not
+  // repeated. An edited form is another request, and the server refuses a key
+  // it already holds for a different body.
+  let last: { body: string; key: string } | undefined;
   submit.addEventListener("click", async () => {
     submit.disabled = true;
     feedback.textContent = "Saving…";
@@ -279,8 +280,8 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
     const sentences = [...picks.values()].map((pick) =>
       pick.key === "mined" && shot ? { ...pick.sentence, imageDataUrl: shot } : pick.sentence);
 
-    const response = await send({
-      type: "save",
+    const request = {
+      type: "save" as const,
       lemma: word.dataset.lemma || word.textContent || "",
       surface: word.dataset.surface,
       reading: word.dataset.reading,
@@ -292,8 +293,10 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
       ...(sentences.length ? { sentences } : {}),
       hint: hint.value.trim(),
       notes: notes.value.trim(),
-      key,
-    });
+    };
+    const body = JSON.stringify(request);
+    if (last?.body !== body) last = { body, key: retryKey() };
+    const response = await send({ ...request, key: last.key });
 
     if (!response.ok) {
       submit.disabled = false;

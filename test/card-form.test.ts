@@ -263,3 +263,35 @@ test("saving again after a failure is the same save under the same key; a new fo
   const second = await mountForm({ senses: [{ glosses: ["expensive"] }] });
   assert.notEqual((await second.saveRequest()).key, keys[0]);
 });
+
+// The server refuses a key it holds for a different body. With one key for the
+// form's life, a save whose deck was made but whose card failed answered 409 on
+// every attempt after the learner renamed the deck.
+test("a save edited after a failure goes out under a new key, and an unedited retry keeps it", async () => {
+  const form = await mountForm({ senses: [{ glosses: ["expensive"] }] });
+  const { ext } = await import("../src/common/browser.js");
+  const answer = ext.runtime.sendMessage;
+  ext.runtime.sendMessage = (async (message: Request) => {
+    if (message.type === "save") {
+      form.sent.push(message);
+      return { ok: false, error: "That didn't go through. Try again." };
+    }
+    return (answer as (message: Request) => Promise<unknown>)(message);
+  }) as typeof ext.runtime.sendMessage;
+  const submit = [...form.host.querySelectorAll("button")].find((b) => b.textContent === "Save card") as HTMLButtonElement;
+  const name = form.host.querySelector("input[type='text']") as HTMLInputElement;
+  name.hidden = false;
+  const attempt = async (deck: string) => {
+    name.value = deck;
+    submit.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  await attempt("Immersion");
+  await attempt("Immersion 2");
+  await attempt("Immersion 2");
+  const saves = form.sent.filter((message): message is SaveRequest => message.type === "save");
+  assert.deepEqual(saves.map((save) => save.newDeckName), ["Immersion", "Immersion 2", "Immersion 2"]);
+  assert.notEqual(saves[1]?.key, saves[0]?.key, "a renamed deck is a new request");
+  assert.equal(saves[2]?.key, saves[1]?.key, "the same form again is the same request");
+});
