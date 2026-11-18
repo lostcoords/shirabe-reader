@@ -1266,30 +1266,6 @@
     "accepted": false
   },
   {
-    "surface": "あれる",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
-    "surface": "あれます",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
-    "surface": "あれない",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
-    "surface": "あれません",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
     "surface": "あられる",
     "base": "ある",
     "pos": "v5r-i",
@@ -1320,19 +1296,7 @@
     "accepted": true
   },
   {
-    "surface": "あらす",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
     "surface": "あらせます",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
-    "surface": "あらします",
     "base": "ある",
     "pos": "v5r-i",
     "accepted": true
@@ -1344,19 +1308,7 @@
     "accepted": true
   },
   {
-    "surface": "あらさない",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
     "surface": "あらせません",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
-    "surface": "あらしません",
     "base": "ある",
     "pos": "v5r-i",
     "accepted": true
@@ -1368,19 +1320,7 @@
     "accepted": true
   },
   {
-    "surface": "あらされる",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
     "surface": "あらせられます",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
-    "surface": "あらされます",
     "base": "ある",
     "pos": "v5r-i",
     "accepted": true
@@ -1392,19 +1332,7 @@
     "accepted": true
   },
   {
-    "surface": "あらされない",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
     "surface": "あらせられません",
-    "base": "ある",
-    "pos": "v5r-i",
-    "accepted": true
-  },
-  {
-    "surface": "あらされません",
     "base": "ある",
     "pos": "v5r-i",
     "accepted": true
@@ -1537,6 +1465,78 @@
   },
   {
     "surface": "あらなければ",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あれる",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あれます",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あれない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あれません",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらす",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらします",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらさない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらしません",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらされる",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらされます",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらされない",
+    "base": "ある",
+    "pos": "v5r-i",
+    "accepted": false
+  },
+  {
+    "surface": "あらされません",
     "base": "ある",
     "pos": "v5r-i",
     "accepted": false
@@ -3531,7 +3531,13 @@
     "surface": "愛さない",
     "base": "愛する",
     "pos": "vs-s",
-    "accepted": false
+    "accepted": true
+  },
+  {
+    "surface": "愛しない",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
   },
   {
     "surface": "愛しません",
@@ -3555,7 +3561,13 @@
     "surface": "愛さなかった",
     "base": "愛する",
     "pos": "vs-s",
-    "accepted": false
+    "accepted": true
+  },
+  {
+    "surface": "愛しなかった",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
   },
   {
     "surface": "愛しませんでした",
@@ -3579,13 +3591,25 @@
     "surface": "愛さなくて",
     "base": "愛する",
     "pos": "vs-s",
-    "accepted": false
+    "accepted": true
+  },
+  {
+    "surface": "愛さないで",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
+  },
+  {
+    "surface": "愛しなくて",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
   },
   {
     "surface": "愛しないで",
     "base": "愛する",
     "pos": "vs-s",
-    "accepted": false
+    "accepted": true
   },
   {
     "surface": "愛しませんで",
@@ -3615,7 +3639,13 @@
     "surface": "愛さなければ",
     "base": "愛する",
     "pos": "vs-s",
-    "accepted": false
+    "accepted": true
+  },
+  {
+    "surface": "愛しなければ",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
   },
   {
     "surface": "愛しませんなら",
@@ -3825,7 +3855,13 @@
     "surface": "愛さなかったら",
     "base": "愛する",
     "pos": "vs-s",
-    "accepted": false
+    "accepted": true
+  },
+  {
+    "surface": "愛しなかったら",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
   },
   {
     "surface": "愛しませんでしたら",
@@ -3849,7 +3885,13 @@
     "surface": "愛さなかったり",
     "base": "愛する",
     "pos": "vs-s",
-    "accepted": false
+    "accepted": true
+  },
+  {
+    "surface": "愛しなかったり",
+    "base": "愛する",
+    "pos": "vs-s",
+    "accepted": true
   },
   {
     "surface": "愛しませんでしたり",
@@ -3862,30 +3904,6 @@
     "base": "愛する",
     "pos": "vs-s",
     "accepted": true
-  },
-  {
-    "surface": "愛しない",
-    "base": "愛する",
-    "pos": "vs-s",
-    "accepted": false
-  },
-  {
-    "surface": "愛しなかった",
-    "base": "愛する",
-    "pos": "vs-s",
-    "accepted": false
-  },
-  {
-    "surface": "愛しなくて",
-    "base": "愛する",
-    "pos": "vs-s",
-    "accepted": false
-  },
-  {
-    "surface": "愛しなければ",
-    "base": "愛する",
-    "pos": "vs-s",
-    "accepted": false
   },
   {
     "surface": "愛できる",
@@ -3907,18 +3925,6 @@
   },
   {
     "surface": "愛できません",
-    "base": "愛する",
-    "pos": "vs-s",
-    "accepted": false
-  },
-  {
-    "surface": "愛しなかったら",
-    "base": "愛する",
-    "pos": "vs-s",
-    "accepted": false
-  },
-  {
-    "surface": "愛しなかったり",
     "base": "愛する",
     "pos": "vs-s",
     "accepted": false

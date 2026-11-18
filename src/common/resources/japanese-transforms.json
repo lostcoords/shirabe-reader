@@ -28,6 +28,7 @@
         "v5",
         "vk",
         "vs",
+        "vs-s",
         "vz"
       ]
     },
@@ -87,6 +88,11 @@
     },
     "vs": {
       "name": "Suru verb",
+      "isDictionaryForm": true,
+      "subConditions": null
+    },
+    "vs-s": {
+      "name": "Suru verb, special class, by its godan negative (愛さない)",
       "isDictionaryForm": true,
       "subConditions": null
     },
@@ -3121,6 +3127,15 @@
           "type": "suffix",
           "conditionsIn": [],
           "conditionsOut": [
+            "vs-s"
+          ],
+          "inflected": "さず",
+          "deinflected": "する"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": [
             "v5"
           ],
           "inflected": "たず",
@@ -3266,6 +3281,15 @@
           ],
           "inflected": "さぬ",
           "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [],
+          "conditionsOut": [
+            "vs-s"
+          ],
+          "inflected": "さぬ",
+          "deinflected": "する"
         },
         {
           "type": "suffix",
@@ -5508,6 +5532,17 @@
           ],
           "inflected": "さない",
           "deinflected": "す"
+        },
+        {
+          "type": "suffix",
+          "conditionsIn": [
+            "adj-i"
+          ],
+          "conditionsOut": [
+            "vs-s"
+          ],
+          "inflected": "さない",
+          "deinflected": "する"
         },
         {
           "type": "suffix",

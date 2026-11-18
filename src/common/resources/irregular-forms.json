@@ -10,6 +10,7 @@
     "potential",
     "passive",
     "causative",
+    "short causative",
     "volitional",
     "imperative"
   ],
@@ -855,30 +856,6 @@
       },
       {
         "stem": 1,
-        "okuri": "れる",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
-        "okuri": "れます",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
-        "okuri": "れない",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
-        "okuri": "れません",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
         "okuri": "られる",
         "euphr": null,
         "euphk": null
@@ -909,19 +886,7 @@
       },
       {
         "stem": 1,
-        "okuri": "らす",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
         "okuri": "らせます",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
-        "okuri": "らします",
         "euphr": null,
         "euphk": null
       },
@@ -933,19 +898,7 @@
       },
       {
         "stem": 1,
-        "okuri": "らさない",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
         "okuri": "らせません",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
-        "okuri": "らしません",
         "euphr": null,
         "euphk": null
       },
@@ -957,19 +910,7 @@
       },
       {
         "stem": 1,
-        "okuri": "らされる",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
         "okuri": "らせられます",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
-        "okuri": "らされます",
         "euphr": null,
         "euphk": null
       },
@@ -981,19 +922,7 @@
       },
       {
         "stem": 1,
-        "okuri": "らされない",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
         "okuri": "らせられません",
-        "euphr": null,
-        "euphk": null
-      },
-      {
-        "stem": 1,
-        "okuri": "らされません",
         "euphr": null,
         "euphk": null
       },
@@ -1980,7 +1909,7 @@
       {
         "stem": 1,
         "okuri": "ないで",
-        "euphr": "し",
+        "euphr": "さ",
         "euphk": null
       },
       {
@@ -2256,6 +2185,48 @@
       {
         "stem": 1,
         "okuri": "",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ない",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なかった",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なくて",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "ないで",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なければ",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なかったら",
+        "euphr": "し",
+        "euphk": null
+      },
+      {
+        "stem": 1,
+        "okuri": "なかったり",
         "euphr": "し",
         "euphk": null
       }

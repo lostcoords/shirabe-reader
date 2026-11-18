@@ -322,7 +322,7 @@
   sentence: 確かにそんなに難しくない。
   lemmas: { 確かに: 確かに, そんなに: そんなに }
   entries: { 確かに: "jmdict:1205770", そんなに: "jmdict:2008740" }
-  divergence: { tokenizer: に overreach }
+  divergence: { extension: に overreach }
 
 - name: you-ni-lemmatises-to-you
   sentence: 私は彼にもう一枚送ってくれるように頼んだ。
