@@ -4,7 +4,7 @@ import { send } from "../common/messages.js";
 import type { StudyDetails } from "../common/types.js";
 import type { WordCardHost } from "@shirabe-org/card/word-card";
 import type { LookupResult } from "@shirabe-org/card/word-card/host";
-import { applyStudyDetails, captureFor, ignore, markKnown, save, setScanOrigin, studyUrlForWord, unignore, unmarkKnown } from "./actions.js";
+import { applyStudyDetails, captureFor, deckNamesFor, ignore, markKnown, save, setScanOrigin, studyUrlForWord, unignore, unmarkKnown } from "./actions.js";
 import { renderCardForm } from "./card-form.js";
 import { candidatesFor, groupsFor, isParsedWord } from "./word.js";
 import { refreshMetrics } from "./metrics-reporter.js";
@@ -100,6 +100,7 @@ export const extensionHost: WordCardHost = {
     },
     urlForWord: (word) => studyUrlForWord(word),
     apply: (word, details) => applyStudyDetails(word, details),
+    deckNames: (word) => deckNamesFor(word),
     save: (word, senseRefs) => save(word, senseRefs),
     markKnown: (word) => markKnown(word),
     unmarkKnown: (word) => unmarkKnown(word),

@@ -771,6 +771,16 @@ test("Manage opens the card itself, or the browser when a word has one per meani
   assert.doesNotMatch(url, /card_id/, "a stale deep link must not survive the second save");
 });
 
+test("a word's deck names reach the card without being written on the page", async () => {
+  const window = installDom("<p><span class='sb-word' id='w' data-lemma='今日'>今日</span></p>");
+  const { applyStudyDetails, deckNamesFor } = await import("../src/content/actions.js");
+  const word = window.document.getElementById("w") as unknown as HTMLElement;
+
+  applyStudyDetails(word, { state: "new", decks: [ { id: 1, name: "Private deck" } ], cardId: 15 });
+  assert.deepEqual(deckNamesFor(word), ["Private deck"]);
+  assert.doesNotMatch(window.document.body.innerHTML, /Private deck/, "a page script can read every attribute on its own DOM");
+});
+
 test("a meaning that already has a card is marked saved, not offered again", async () => {
   const window = installDom("<p><span class='sb-word' id='w' data-lemma='今日'>今日</span></p>");
   const { applyStudyDetails } = await import("../src/content/actions.js");

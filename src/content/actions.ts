@@ -19,6 +19,12 @@ function refusal(res: Failure): Outcome {
     : { ok: false, message: res.error };
 }
 
+// The decks a word sits in, kept in the content script's own memory. The span is
+// in the page's DOM, and an attribute on it would hand the reader's deck names to
+// every script the site runs.
+const deckNames = new WeakMap<HTMLElement, string[]>();
+export const deckNamesFor = (word: HTMLElement): string[] => deckNames.get(word) ?? [];
+
 // Four callers feed this: a save response, a state change, and two reads of a
 // cache that outlives the build that wrote it. `decks` is only ever a label, so
 // none of them is worth throwing over: a missing list means no deck line, not a
@@ -26,7 +32,7 @@ function refusal(res: Failure): Outcome {
 // field was `memberships` deserializes without it.)
 export function applyStudyDetails(word: HTMLElement, details: StudyDetails): void {
   word.dataset.state = details.state;
-  word.dataset.deckNames = (details.decks ?? []).map((deck) => deck.name).join(", ");
+  deckNames.set(word, (details.decks ?? []).map((deck) => deck.name));
   // Never clear an existing cardId: a later states payload without one would
   // hide the "Open in Shirabe" link after a successful save.
   if (details.cardId != null) word.dataset.cardId = String(details.cardId);
