@@ -1,11 +1,27 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
-import { extname, join, relative } from "node:path";
+import { lstat, readdir, readFile } from "node:fs/promises";
+import { dirname, extname, join, relative } from "node:path";
 
 const textExtensions = new Set([".css", ".html", ".js", ".json", ".mjs", ".txt"]);
 const requestedTarget = process.argv[2];
 assert.ok(!requestedTarget || ["firefox", "chrome"].includes(requestedTarget), "target must be firefox or chrome");
 const targets = requestedTarget ? [requestedTarget] : ["firefox", "chrome"];
+
+// The SDK a store build bundles has to be the one package.json pins. `npm run
+// sdk:link` symlinks a sibling working copy, so every local check passes
+// against code a clean `npm ci` (what AMO's source reviewer runs) never installs.
+const pkg = JSON.parse(await readFile("package.json", "utf8"));
+const lock = JSON.parse(await readFile("package-lock.json", "utf8"));
+for (const name of ["@shirabe-org/api", "@shirabe-org/card"]) {
+  const path = join("node_modules", name);
+  assert.ok(!(await lstat(path)).isSymbolicLink(), `${path} is a symlink: run npm ci before a release build`);
+  assert.ok(!(await lstat(dirname(path))).isSymbolicLink(), `${dirname(path)} is a symlink: run npm ci before a release build`);
+  const pinned = pkg.dependencies[name];
+  assert.equal(lock.packages[""].dependencies[name], pinned, `package-lock.json pins ${name} differently from package.json`);
+  assert.equal(lock.packages[path]?.version, pinned, `package-lock.json resolves ${name} to another version`);
+  const installed = JSON.parse(await readFile(join(path, "package.json"), "utf8")).version;
+  assert.equal(installed, pinned, `${name} ${installed} is installed but package.json pins ${pinned}`);
+}
 
 for (const target of targets) {
   const root = join("dist", target);
