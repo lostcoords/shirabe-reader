@@ -124,7 +124,7 @@ async function manifest() {
         id: watch ? "reader-dev@shirabe.org" : "reader@shirabe.org",
         strict_min_version: "142.0",
         data_collection_permissions: {
-          required: ["websiteContent"],
+          required: ["websiteContent", "browsingActivity"],
           optional: ["technicalAndInteraction", "authenticationInfo"],
         },
       },

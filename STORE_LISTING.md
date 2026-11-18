@@ -53,8 +53,9 @@ Shirabe Reader
 > **Reads real sites.** Ordinary web pages and Japanese Wikipedia, Netflix and
 > YouTube subtitles, asbplayer, and Mokuro manga OCR.
 >
-> Lookup and page parsing are free. A Shirabe Pro account adds sentence mining,
-> grading, deck selection, and sync.
+> Lookup and page parsing are free. A Shirabe Pro account adds saving words with
+> the sentence they came from, marking words known or ignored, deck selection,
+> and sync.
 >
 > Open source (GPL-3.0). Deinflection rules ported from Yomitan.
 
@@ -74,13 +75,14 @@ Reviewers reject vague answers here. Be specific and tie each one to a user-visi
 
 ## Data / privacy disclosure
 
-- **Stable page text may be sent to Shirabe for parsing** when the user runs
-  Parse page or Parse selection, including while signed out. Local parsing and
+- **Stable page text may be sent to Shirabe for parsing** when a signed-in user
+  runs Parse page or Parse selection. Signed out, nothing is sent. Local parsing and
   dictionary lookup work without an account or network. Turning on **Keep page
   text on this device for parsing** stops these requests. Changing subtitle
   cues and hovered word lookups stay local.
-- **Signed-in (optional):** words the user chooses to save, and their review
-  grades, are sent to their own Shirabe account. This is the feature the user
+- **Signed-in (optional):** words the user chooses to save, with the sentence,
+  page address and page title they came from, and the words they mark known or
+  ignore, are sent to their own Shirabe account. This is the feature the user
   asked for, not analytics.
 - **Error reports** include the error class and message, Reader stack frames,
   the extension version, the browser, and a random session identifier. We do not
@@ -115,8 +117,8 @@ Take at a fixed 1280×800 on a light background, same page across both stores:
 > The extension works fully offline for its core feature. On first run the user
 > installs a Japanese dictionary pack from cdn.shirabe.org, after which lookup
 > needs no network and no account.
-> Stable page text can be sent to Shirabe after the user explicitly parses a
-> page or selection. The local-only setting stops that request; live subtitle
+> Stable page text can be sent to Shirabe after a signed-in user explicitly
+> parses a page or selection. The local-only setting stops that request; live subtitle
 > cues stay local.
 >
 > `<all_urls>` is requested once when the extension is installed, so hovering a
