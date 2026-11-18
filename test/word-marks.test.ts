@@ -51,12 +51,28 @@ test("marks for a split paragraph land where the words are on the page", async (
 
   await withMessages((message) => ({ ok: true, type: "parseBatchOnline", accepted: true,
     tokens: (message.texts ?? []).map(() => [token("吾輩", 0)]) }), async () => {
-    const [tokens] = (await requestMarks([text]))!;
+    const [tokens] = (await requestMarks([text]))!.tokens;
     assert.equal(tokens![0]!.start, 0);
     assert.equal(tokens![1]!.start, firstPiece.length);
     assert.equal(tokens![1]!.components![0]!.start, firstPiece.length);
     assert.equal(text.slice(tokens![1]!.start, tokens![1]!.start + 2), "吾輩");
   });
+});
+
+// Shirabe joins a request's texts with a newline and holds anything over 500
+// characters for its one bulk slot, which a bulk client may be using. Counting
+// only the texts let three pieces that joined to 501 wait behind it.
+test("a request fits Shirabe's 500 characters once its texts are joined with newlines", async () => {
+  const { requestMarks } = await import("../src/content/parser.js");
+  const sent: string[][] = [];
+  await withMessages((message) => {
+    sent.push(message.texts ?? []);
+    return { ok: true, type: "parseBatchOnline", accepted: true, studied: false, tokens: (message.texts ?? []).map(() => []) };
+  }, async () => {
+    await requestMarks(["猫".repeat(250), "犬".repeat(249)]);
+    await requestMarks(["猫".repeat(250), "犬".repeat(250)]);
+  });
+  assert.deepEqual(sent.map((texts) => texts.join("\n").length), [500, 250, 250]);
 });
 
 test("a tab sends one parse at a time", async () => {

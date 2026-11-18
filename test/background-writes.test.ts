@@ -128,3 +128,31 @@ test("a new deck is made once under the save's key, and saving again after a fai
   assert.deepEqual(decks.decks.map(({ id }) => id), [12]);
   assert.deepEqual(sent.map(({ method, path }) => `${method} ${path}`), ["GET /api/v1/srs/decks"], "the next form lists the deck it made");
 });
+
+// Marks used to cost two requests a batch: the cut, then a lookup of every word
+// in it. The cut carries each word's state when asked, and the popup that opens
+// on one of those words reads what it said.
+test("a parse asks for study states, and opening a parsed word asks nothing more", async () => {
+  const worker = await send;
+  const study = { state: "learning", decks: [{ id: 7, name: "Reading pile" }], cardId: 41, cardCount: 1, savedSenses: ["jmdict#0"] };
+  answers.set("POST /api/v1/parse", () => json({
+    packRevision: "r", stackFingerprint: "f", sources: ["jmdict:en"],
+    results: [{ tokens: [
+      { startOffset: 0, endOffset: 1, surface: "猫", lemma: "猫", reading: "ねこ", kind: "word", study },
+      { startOffset: 1, endOffset: 2, surface: "が", lemma: "が", kind: "particle" },
+    ] }],
+  }));
+  sent.length = 0;
+  const parsed = await worker({ type: "parseBatchOnline", texts: ["猫が"] });
+  assert.ok(parsed.ok && parsed.type === "parseBatchOnline");
+  assert.equal(parsed.studied, true);
+  assert.equal(parsed.tokens[0]?.[0]?.state, "learning");
+  assert.deepEqual(sent.map(({ method, path, body }) => ({ method, path, body })),
+    [{ method: "POST", path: "/api/v1/parse", body: { texts: ["猫が"], include: ["study"] } }]);
+
+  sent.length = 0;
+  const opened = await worker({ type: "states", lemmas: ["猫"] });
+  assert.ok(opened.ok && opened.type === "states");
+  assert.deepEqual(opened.details["猫"], { state: "learning", decks: [{ id: 7, name: "Reading pile" }], cardId: 41, cardCount: 1, savedSenses: ["jmdict#0"] });
+  assert.deepEqual(sent, []);
+});

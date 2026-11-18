@@ -92,13 +92,13 @@ async function parseBatch(nodes: Text[], showFurigana: boolean): Promise<void> {
   renderNodes(nodes, texts, res.tokens, showFurigana);
 }
 
-function renderNodes(nodes: Text[], texts: string[], tokens: ParsedToken[][], showFurigana: boolean): void {
+function renderNodes(nodes: Text[], texts: string[], tokens: ParsedToken[][], showFurigana: boolean, studied = false): void {
   tokens.forEach((list, i) => {
     const node = nodes[i];
     if (!node?.parentNode || node.nodeValue !== texts[i]) return;
     node.parentNode.replaceChild(buildWrapper(texts[i]!, list, showFurigana), node);
   });
-  queueStateRefresh(tokens.flat());
+  if (!studied) queueStateRefresh(tokens.flat());
 }
 
 // Thrown when Shirabe will not cut this text now. `retryAfter` is its own answer
@@ -136,7 +136,7 @@ let markRequests: Promise<unknown> = Promise.resolve();
 // One request at a time per tab, so a long page waits its turn instead of holding
 // several of Shirabe's workers. Returns null when nothing on screen wants the
 // answer any more: the rest is never sent, and scrolling back asks again.
-export async function requestMarks(texts: string[], wanted: () => boolean = () => true): Promise<ParsedToken[][] | null> {
+export async function requestMarks(texts: string[], wanted: () => boolean = () => true): Promise<{ tokens: ParsedToken[][]; studied: boolean } | null> {
   const pieces = texts.flatMap((text, textIndex) => {
     let offset = 0;
     return splitForMarks(text).map((piece) => {
@@ -148,15 +148,18 @@ export async function requestMarks(texts: string[], wanted: () => boolean = () =
   const requests: Array<typeof pieces> = [];
   let chars = 0;
   for (const piece of pieces) {
-    if (!requests.length || chars + piece.piece.length > MARK_REQUEST_CHARS) {
-      requests.push([]);
-      chars = 0;
+    const joined = joinedLength(chars, piece.piece);
+    if (!requests.length || joined > MARK_REQUEST_CHARS) {
+      requests.push([piece]);
+      chars = piece.piece.length;
+    } else {
+      requests.at(-1)!.push(piece);
+      chars = joined;
     }
-    requests.at(-1)!.push(piece);
-    chars += piece.piece.length;
   }
 
   const results: ParsedToken[][] = texts.map(() => []);
+  let studied = true;
   for (const request of requests) {
     const turn = markRequests.then(async () => {
       if (!wanted()) return null;
@@ -166,11 +169,18 @@ export async function requestMarks(texts: string[], wanted: () => boolean = () =
     const response = await turn;
     if (response === null) return null;
     if (!response.ok || !response.accepted) throw new MarksUnavailable(response.ok ? response.retryAfter : undefined);
+    studied &&= response.studied;
     request.forEach((item, index) => {
       results[item.textIndex]!.push(...(response.tokens[index] ?? []).map((token) => shiftToken(token, item.offset)));
     });
   }
-  return results;
+  return { tokens: results, studied };
+}
+
+// Shirabe joins a request's texts with a newline and counts the whole, so every
+// text after the first costs one more than its own length.
+function joinedLength(chars: number, text: string): number {
+  return chars ? chars + 1 + text.length : text.length;
 }
 
 function shiftToken(token: ParsedToken, offset: number): ParsedToken {
@@ -315,8 +325,8 @@ export async function markSelection(root: Node, showFurigana: boolean, opts: Par
   const nodes = collectTextNodes(root, opts.filter);
   const texts = nodes.map((node) => node.nodeValue ?? "");
   try {
-    const tokens = await requestMarks(texts);
-    if (tokens && !paused && generation === renderGeneration) renderNodes(nodes, texts, tokens, showFurigana);
+    const marks = await requestMarks(texts);
+    if (marks && !paused && generation === renderGeneration) renderNodes(nodes, texts, marks.tokens, showFurigana, marks.studied);
   } catch {
     toast(MARKS_UNAVAILABLE, false);
   }
@@ -602,13 +612,13 @@ async function flushQueuedBlocks(): Promise<void> {
   let batch: PreparedBlock[] = [];
   let chars = 0;
   for (const block of prepared) {
-    if (batch.length && chars + block.text.length > MARK_REQUEST_CHARS) {
+    if (batch.length && joinedLength(chars, block.text) > MARK_REQUEST_CHARS) {
       runBlockBatch(batch);
       batch = [];
       chars = 0;
     }
     batch.push(block);
-    chars += block.text.length;
+    chars = joinedLength(chars, block.text);
   }
   if (batch.length) runBlockBatch(batch);
 }
@@ -639,9 +649,10 @@ async function parseBlockBatch(blocks: PreparedBlock[]): Promise<void> {
   const startedAt = performance.now();
   const generation = renderGeneration;
   try {
-    const tokens = await requestMarks(blocks.map((item) => item.text),
+    const marks = await requestMarks(blocks.map((item) => item.text),
       () => blocks.some((item) => visibleBlocks.has(item.block)));
-    if (!tokens || paused || generation !== renderGeneration) return;
+    if (!marks || paused || generation !== renderGeneration) return;
+    const { tokens, studied } = marks;
     markFailures = 0;
     blocks.forEach((item, blockIndex) => {
       // A block that scrolled out of view mid-flight is left observed (not flagged
@@ -655,7 +666,7 @@ async function parseBlockBatch(blocks: PreparedBlock[]): Promise<void> {
       });
       item.block.dataset[LAZY_BLOCK_FLAG] = "1";
       io?.unobserve(item.block);
-      queueStateRefresh(blockTokens);
+      if (!studied) queueStateRefresh(blockTokens);
     });
     recordPerformance("parse-render", startedAt, {
       blocks: blocks.length, chars: blocks.reduce((sum, item) => sum + item.text.length, 0),

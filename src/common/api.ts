@@ -1,5 +1,5 @@
 import type { Config } from "./config.js";
-import { ShirabePublicClient, ShirabePublicApiError, type PublicAuthorization, type PublicCredentials, type ShirabeScope, type WordStateEntry } from "@shirabe-org/api";
+import { ShirabePublicClient, ShirabePublicApiError, type ParseToken, type PublicAuthorization, type PublicCredentials, type ShirabeScope, type WordStateEntry } from "@shirabe-org/api";
 import { glossLanguagesFrom, type GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import { cardWordState } from "@shirabe-org/card/word-card/types";
 import type { ParsedToken, WordState } from "./types.js";
@@ -37,6 +37,18 @@ const studyDetails = (word: WordStateEntry): StudyDetails => ({
   ...(word.savedSenses ? { savedSenses: word.savedSenses } : {}),
   ...(word.savedWholeWord ? { savedWholeWord: word.savedWholeWord } : {}),
   ...(word.intervals ? { intervals: word.intervals as IntervalPreviews } : {}),
+});
+
+// A parsed word's study block says what a lookup says about the word, in a looser
+// declared shape: a deck missing its id or name names nothing to show.
+const parsedStudy = (study: NonNullable<ParseToken["study"]>): StudyDetails => ({
+  state: cardWordState(study.state),
+  decks: study.decks.flatMap(({ id, name }) => (id != null && name != null ? [{ id, name }] : [])),
+  ...(study.cardId != null ? { cardId: study.cardId } : {}),
+  ...(study.cardCount != null ? { cardCount: study.cardCount } : {}),
+  ...(study.savedSenses ? { savedSenses: study.savedSenses } : {}),
+  ...(study.savedWholeWord ? { savedWholeWord: study.savedWholeWord } : {}),
+  ...(study.intervals ? { intervals: study.intervals as IntervalPreviews } : {}),
 });
 
 // The pack cites an entry as one handle ("jmdict:2517580"); /api/v1 takes it as the
@@ -145,10 +157,14 @@ export class ShirabeApi {
     return (await this.parseWithProvenance(texts)).tokens;
   }
 
-  async parseWithProvenance(texts: string[]): Promise<{ tokens: ParsedToken[][]; packRevision: string; stackFingerprint: string; sources: string[] }> {
+  // With `study`, each word comes back with the reader's study state, so marking
+  // a page needs no lookup of its own. `study` maps a lemma to what was said of it.
+  async parseWithProvenance(texts: string[], options: { study?: boolean } = {}): Promise<{
+    tokens: ParsedToken[][]; study: Record<string, StudyDetails>; packRevision: string; stackFingerprint: string; sources: string[];
+  }> {
     let retryAfter = 0;
     const response = await this.oauth.request(async (client) => {
-      const result = await client.parse({ texts });
+      const result = await client.parse({ texts, ...(options.study ? { include: ["study" as const] } : {}) });
       retryAfter = Number(result.response?.headers.get("retry-after")) || 0;
       return result;
     }).catch((error: unknown) => {
@@ -171,7 +187,9 @@ export class ShirabeApi {
       content: token.kind !== "symbol",
       state: cardWordState(token.study?.state),
     })));
-    return { tokens, packRevision: response.packRevision, stackFingerprint: response.stackFingerprint, sources: response.sources };
+    const study = Object.fromEntries(response.results.flatMap(({ tokens }) =>
+      tokens.flatMap((token) => (token.study && token.lemma ? [[token.lemma, parsedStudy(token.study)] as const] : []))));
+    return { tokens, study, packRevision: response.packRevision, stackFingerprint: response.stackFingerprint, sources: response.sources };
   }
 
   // Set a word's state directly: "retired" parks it as learned, "reviewing" brings

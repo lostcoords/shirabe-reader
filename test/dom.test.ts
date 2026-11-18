@@ -839,3 +839,44 @@ test("an ignored word is neither the unknown in an i+1 block nor a gap in covera
   assert.equal(metrics.occurrences.unknown, 1, "only 紫陽花 is unknown");
   assert.equal(metrics.occurrenceCoverage, 67);
 });
+
+// A parse that carried study states is the whole answer: the words are drawn in
+// their state, and no lookup follows it. One that did not still asks.
+test("a parse that carried study states draws them and sends no state lookup after it", async () => {
+  const window = installDom(`<p id="line">猫が好き</p>`);
+  const frames: Array<() => void> = [];
+  const globals = globalThis as unknown as Record<string, unknown>;
+  const originalFrame = globals.requestAnimationFrame;
+  globals.requestAnimationFrame = (callback: () => void) => { frames.push(callback); return frames.length; };
+  const { ext } = await import("../src/common/browser.js");
+  const original = ext.runtime.sendMessage;
+  const types: string[] = [];
+  let studied = true;
+  ext.runtime.sendMessage = (async (message: { type: string; texts?: string[] }) => {
+    types.push(message.type);
+    if (message.type === "states") return { ok: true, type: "states", states: {}, details: {} };
+    return { ok: true, type: "parseBatchOnline", accepted: true, studied, tokens: (message.texts ?? []).map(() => [
+      { start: 0, length: 1, surface: "猫", lemma: "猫", reading: "ねこ", pos: "noun", content: true, state: studied ? "learning" : "none" },
+    ]) };
+  }) as typeof ext.runtime.sendMessage;
+  try {
+    const { markSelection, setParsingPaused } = await import("../src/content/parser.js");
+    setParsingPaused(false);
+    await markSelection(window.document.getElementById("line") as Node, false);
+    while (frames.length) frames.shift()?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(types, ["parseBatchOnline"]);
+    assert.equal(window.document.querySelector(".sb-word")?.className.includes("sb-learning"), true);
+
+    studied = false;
+    types.length = 0;
+    window.document.body.innerHTML = `<p id="again">猫が好き</p>`;
+    await markSelection(window.document.getElementById("again") as Node, false);
+    while (frames.length) frames.shift()?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(types, ["parseBatchOnline", "states"]);
+  } finally {
+    ext.runtime.sendMessage = original;
+    globals.requestAnimationFrame = originalFrame;
+  }
+});

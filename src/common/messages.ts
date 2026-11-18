@@ -136,7 +136,8 @@ export type Request =
 
 export type Response =
   | { ok: true; type: "parseBatch"; tokens: ParsedToken[][]; dictionaryInstalling?: boolean }
-  | { ok: true; type: "parseBatchOnline"; accepted: boolean; tokens: ParsedToken[][]; retryAfter?: number }
+  // `studied`: each token's state is the server's, so the page needs no state lookup.
+  | { ok: true; type: "parseBatchOnline"; accepted: boolean; tokens: ParsedToken[][]; studied: boolean; retryAfter?: number }
   | { ok: true; type: "lookup"; definition: Definition | null; dictionaryInstalling?: boolean }
   | { ok: true; type: "lookupEntry"; definition: Definition | null }
   | { ok: true; type: "lookupParsed"; definition: Definition | null; alternatives: Definition[] }

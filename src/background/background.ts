@@ -257,8 +257,8 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       }
     }
     case "parseBatchOnline": {
-      const { tokens, retryAfter } = await parseBatchOnline(request.texts);
-      return { ok: true, type: "parseBatchOnline", accepted: tokens !== null, tokens: tokens ?? [],
+      const { tokens, studied, retryAfter } = await parseBatchOnline(request.texts);
+      return { ok: true, type: "parseBatchOnline", accepted: tokens !== null, tokens: tokens ?? [], studied,
         ...(retryAfter ? { retryAfter } : {}) };
     }
     case "lookup": {
@@ -464,19 +464,25 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
 
 // The word's entry is found when its card opens (`lookupSpan`), from the local
 // dictionary, so a pack older than the server's dictionary still gets its marks.
-async function parseBatchOnline(texts: string[]): Promise<{ tokens: ParsedToken[][] | null; retryAfter?: number }> {
-  if (!canMarkWords(config) || !texts.length) return { tokens: null };
+// A reader who can read their cards gets each word's state with its cut, which
+// is also what the popup reads on open: no lookup per batch.
+async function parseBatchOnline(texts: string[]): Promise<{ tokens: ParsedToken[][] | null; studied: boolean; retryAfter?: number }> {
+  const studied = config.scopes.includes("user:study:read");
+  if (!canMarkWords(config) || !texts.length) return { tokens: null, studied };
   const startedAt = performance.now();
   try {
-    const { tokens } = await api.parseWithProvenance(texts);
+    const { tokens, study } = await api.parseWithProvenance(texts, { study: studied });
+    if (studied) {
+      await cacheStates(Object.fromEntries(Object.entries(study).map(([lemma, details]) => [lemma, details.state])), study);
+    }
     recordBackgroundPerformance("online-parse", startedAt, {
       texts: texts.length,
       chars: texts.reduce((sum, text) => sum + text.length, 0),
       tokens: tokens.reduce((sum, list) => sum + list.length, 0),
     });
-    return { tokens };
+    return { tokens, studied };
   } catch (error) {
-    return { tokens: null, retryAfter: error instanceof ParseRefused ? error.retryAfter : undefined };
+    return { tokens: null, studied, retryAfter: error instanceof ParseRefused ? error.retryAfter : undefined };
   }
 }
 
