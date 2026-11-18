@@ -466,30 +466,6 @@
   targetEntries:
     - jmdict:1578850
 - family: quote-clause-context
-  sentence: 彼が行ったって昨日知ってる
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 行く
-  contains:
-    - 行った
-    - って
-  targetEntries:
-    - jmdict:1578850
-- family: quote-clause-context
-  sentence: 彼が行ったって昨日信じてる
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 行く
-  contains:
-    - 行った
-    - って
-  targetEntries:
-    - jmdict:1578850
-- family: quote-clause-context
   sentence: 彼が行ったって彼に言った
   target:
     start: 2
@@ -514,30 +490,6 @@
   targetEntries:
     - jmdict:1578850
 - family: quote-clause-context
-  sentence: 彼が行ったって彼に知ってる
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 行く
-  contains:
-    - 行った
-    - って
-  targetEntries:
-    - jmdict:1578850
-- family: quote-clause-context
-  sentence: 彼が行ったって彼に信じてる
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 行く
-  contains:
-    - 行った
-    - って
-  targetEntries:
-    - jmdict:1578850
-- family: quote-clause-context
   sentence: 彼が行ったってすぐ言った
   target:
     start: 2
@@ -551,30 +503,6 @@
     - jmdict:1578850
 - family: quote-clause-context
   sentence: 彼が行ったってすぐ聞いた
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 行く
-  contains:
-    - 行った
-    - って
-  targetEntries:
-    - jmdict:1578850
-- family: quote-clause-context
-  sentence: 彼が行ったってすぐ知ってる
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 行く
-  contains:
-    - 行った
-    - って
-  targetEntries:
-    - jmdict:1578850
-- family: quote-clause-context
-  sentence: 彼が行ったってすぐ信じてる
   target:
     start: 2
     end: 7
@@ -658,30 +586,6 @@
   targetEntries:
     - jmdict:1169870
 - family: quote-clause-context
-  sentence: 彼が飲んだって昨日知ってる
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 飲む
-  contains:
-    - 飲んだ
-    - って
-  targetEntries:
-    - jmdict:1169870
-- family: quote-clause-context
-  sentence: 彼が飲んだって昨日信じてる
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 飲む
-  contains:
-    - 飲んだ
-    - って
-  targetEntries:
-    - jmdict:1169870
-- family: quote-clause-context
   sentence: 彼が飲んだって彼に言った
   target:
     start: 2
@@ -706,30 +610,6 @@
   targetEntries:
     - jmdict:1169870
 - family: quote-clause-context
-  sentence: 彼が飲んだって彼に知ってる
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 飲む
-  contains:
-    - 飲んだ
-    - って
-  targetEntries:
-    - jmdict:1169870
-- family: quote-clause-context
-  sentence: 彼が飲んだって彼に信じてる
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 飲む
-  contains:
-    - 飲んだ
-    - って
-  targetEntries:
-    - jmdict:1169870
-- family: quote-clause-context
   sentence: 彼が飲んだってすぐ言った
   target:
     start: 2
@@ -743,30 +623,6 @@
     - jmdict:1169870
 - family: quote-clause-context
   sentence: 彼が飲んだってすぐ聞いた
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 飲む
-  contains:
-    - 飲んだ
-    - って
-  targetEntries:
-    - jmdict:1169870
-- family: quote-clause-context
-  sentence: 彼が飲んだってすぐ知ってる
-  target:
-    start: 2
-    end: 7
-  queries:
-    - 飲む
-  contains:
-    - 飲んだ
-    - って
-  targetEntries:
-    - jmdict:1169870
-- family: quote-clause-context
-  sentence: 彼が飲んだってすぐ信じてる
   target:
     start: 2
     end: 7
@@ -850,30 +706,6 @@
   targetEntries:
     - jmdict:1547330
 - family: quote-clause-context
-  sentence: 彼が欲しかったって昨日知ってる
-  target:
-    start: 2
-    end: 9
-  queries:
-    - 欲しい
-  contains:
-    - 欲しかった
-    - って
-  targetEntries:
-    - jmdict:1547330
-- family: quote-clause-context
-  sentence: 彼が欲しかったって昨日信じてる
-  target:
-    start: 2
-    end: 9
-  queries:
-    - 欲しい
-  contains:
-    - 欲しかった
-    - って
-  targetEntries:
-    - jmdict:1547330
-- family: quote-clause-context
   sentence: 彼が欲しかったって彼に言った
   target:
     start: 2
@@ -898,30 +730,6 @@
   targetEntries:
     - jmdict:1547330
 - family: quote-clause-context
-  sentence: 彼が欲しかったって彼に知ってる
-  target:
-    start: 2
-    end: 9
-  queries:
-    - 欲しい
-  contains:
-    - 欲しかった
-    - って
-  targetEntries:
-    - jmdict:1547330
-- family: quote-clause-context
-  sentence: 彼が欲しかったって彼に信じてる
-  target:
-    start: 2
-    end: 9
-  queries:
-    - 欲しい
-  contains:
-    - 欲しかった
-    - って
-  targetEntries:
-    - jmdict:1547330
-- family: quote-clause-context
   sentence: 彼が欲しかったってすぐ言った
   target:
     start: 2
@@ -935,30 +743,6 @@
     - jmdict:1547330
 - family: quote-clause-context
   sentence: 彼が欲しかったってすぐ聞いた
-  target:
-    start: 2
-    end: 9
-  queries:
-    - 欲しい
-  contains:
-    - 欲しかった
-    - って
-  targetEntries:
-    - jmdict:1547330
-- family: quote-clause-context
-  sentence: 彼が欲しかったってすぐ知ってる
-  target:
-    start: 2
-    end: 9
-  queries:
-    - 欲しい
-  contains:
-    - 欲しかった
-    - って
-  targetEntries:
-    - jmdict:1547330
-- family: quote-clause-context
-  sentence: 彼が欲しかったってすぐ信じてる
   target:
     start: 2
     end: 9
@@ -1042,30 +826,6 @@
   targetEntries:
     - jmdict:2089020
 - family: quote-clause-context
-  sentence: 彼が学生だって昨日知ってる
-  target:
-    start: 4
-    end: 7
-  queries:
-    - だ
-  contains:
-    - だ
-    - って
-  targetEntries:
-    - jmdict:2089020
-- family: quote-clause-context
-  sentence: 彼が学生だって昨日信じてる
-  target:
-    start: 4
-    end: 7
-  queries:
-    - だ
-  contains:
-    - だ
-    - って
-  targetEntries:
-    - jmdict:2089020
-- family: quote-clause-context
   sentence: 彼が学生だって彼に言った
   target:
     start: 4
@@ -1090,30 +850,6 @@
   targetEntries:
     - jmdict:2089020
 - family: quote-clause-context
-  sentence: 彼が学生だって彼に知ってる
-  target:
-    start: 4
-    end: 7
-  queries:
-    - だ
-  contains:
-    - だ
-    - って
-  targetEntries:
-    - jmdict:2089020
-- family: quote-clause-context
-  sentence: 彼が学生だって彼に信じてる
-  target:
-    start: 4
-    end: 7
-  queries:
-    - だ
-  contains:
-    - だ
-    - って
-  targetEntries:
-    - jmdict:2089020
-- family: quote-clause-context
   sentence: 彼が学生だってすぐ言った
   target:
     start: 4
@@ -1127,30 +863,6 @@
     - jmdict:2089020
 - family: quote-clause-context
   sentence: 彼が学生だってすぐ聞いた
-  target:
-    start: 4
-    end: 7
-  queries:
-    - だ
-  contains:
-    - だ
-    - って
-  targetEntries:
-    - jmdict:2089020
-- family: quote-clause-context
-  sentence: 彼が学生だってすぐ知ってる
-  target:
-    start: 4
-    end: 7
-  queries:
-    - だ
-  contains:
-    - だ
-    - って
-  targetEntries:
-    - jmdict:2089020
-- family: quote-clause-context
-  sentence: 彼が学生だってすぐ信じてる
   target:
     start: 4
     end: 7
@@ -1245,6 +957,7 @@
     end: 5
   queries:
     - だって
+  ambiguity: Also 学生だ plus the quotative って, "(I) can tell (he is) a student"; this row pins the additive reading.
   contains:
     - だって
   targetEntries:
@@ -2098,17 +1811,6 @@
     - 食べる
   targetEntries:
     - jmdict:1358280
-- family: inflected-expressions
-  sentence: 文句を言うな
-  target:
-    start: 0
-    end: 6
-  queries:
-    - 文句を言う
-  contains:
-    - 文句を言うな
-  targetEntries:
-    - jmdict:2831372
 - family: inflected-expressions
   sentence: そうだったりする
   target:

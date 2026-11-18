@@ -116,8 +116,10 @@
 # cannot be marking anything: the run opens the clause, or another particle
 # already holds the slot. SudachiDict carries no でも morpheme at all (only
 # single-character で) and tags that で 格助詞 wherever it lands, so this position
-# test is the whole signal. What is left over (本でも "a book or something" vs
-# 日本でも "in Japan too") reads the same to every rule and stays apart.
+# test is the whole signal. What is left over needs the predicate: でも before a
+# suggestion or a volitional is one particle, "or something" (本でも読む, お茶でも
+# 飲みましょう), and で + も before a statement about a place is "in Japan too"
+# (日本でも人気がある, the guard in grammar.yml).
 - name: clause-initial-demo-is-the-connective
   sentence: でも学校に行く。
   merges: [でも]
@@ -126,9 +128,10 @@
   sentence: 一日だけでもいい。
   merges: [でも]
 
-- name: demo-after-a-noun-stays-apart
+- name: demo-or-something-is-one-particle
   sentence: 本でも読む。
-  splits: [でも]
+  merges: [でも]
+  divergence: { tokenizer: grammar unit }
 
 # SudachiDict holds words JMdict does not, and its cost model sometimes prefers
 # one: はしっぽ (端っぽ) beat は + しっぽ here, so the web ate the topic particle and
@@ -311,12 +314,15 @@
   splits: [間がなく]
   lemmas: { なくなった: なくなる }
 
-# JMdict lists ように/確かに/そんなに as entries; Sudachi reads them as the head plus
-# the adverbial copula. Both engines keep the phrase whole and BOTH name the head
-#:a card for 確かに and a card for 確か are two cards for one word.
-- name: adverbial-copula-lemmatises-to-the-head
+# JMdict lists 確かに and そんなに as adverbs of their own; Sudachi reads them as
+# the head plus the adverbial copula. The chip opens the listed adverb, so its base
+# is the adverb too: a base of 確か files the card under a different word than the
+# one opened, and そんな is a pre-noun adjectival, not this word at all.
+- name: a-listed-ni-adverb-is-its-own-base
   sentence: 確かにそんなに難しくない。
-  lemmas: { 確かに: 確か, そんなに: そんな }
+  lemmas: { 確かに: 確かに, そんなに: そんなに }
+  entries: { 確かに: "jmdict:1205770", そんなに: "jmdict:2008740" }
+  divergence: { tokenizer: に overreach }
 
 - name: you-ni-lemmatises-to-you
   sentence: 私は彼にもう一枚送ってくれるように頼んだ。
@@ -408,8 +414,7 @@
   merges: [お茶]
   lemmas: { お茶: お茶 }
 
-# Known, accepted differences. Recorded so they are a decision, not a surprise :
-# NOT asserted. Move a row into `cases:` once both engines agree.
+# Rows that once recorded a difference between the engines and now hold on both.
 
 - name: predicate-granularity
   sentence: 読みませんでした
@@ -544,9 +549,7 @@
 
 # ── boundary and lemma differences found by the divergence sweep (2026-08-14) ──
 #
-# Recorded rather than asserted: the two engines answer these differently and
-# both answers are defensible, so what matters is that the difference is a
-# decision on file instead of a surprise the next reader has to re-derive.
+# Each row is asserted on both engines; the sweep is where the case was found.
 
 - name: a-na-adjective-and-its-copula
   sentence: 英語が上手に話せない。
@@ -697,16 +700,14 @@
   sentence: 驚くことではないね。
   entries: { こと: "jmdict:1313580" }
 
-# 「信じたいものだ」 is the nominalizer, which JMdict files as a `prt`, and the
-# class gate refused a particle entry for a chip UniDic calls a 名詞: it fell
-# through to the words the spelling merely CARRIES and answered 者, a person, 162
-# times in the v8 sweep. UniDic names the SHAPE and JMdict names the JOB, and for
-# the 形式名詞 (もの, こと, ところ, わけ, はず) both describe the same word. The
-# extension answers it through the filed rung instead, which is why this row is
-# worth asserting on both: two routes, one answer.
-- name: entry-mono-is-the-nominaliser-not-a-person
+# The もの of 〜たいものだ is the formal noun 物, in JMdict's sense "used to
+# emphasize emotion, judgment". 者 (a person) is wrong, and so is 2780660, the
+# sentence-final particle of excuses (だって知らなかったんだもの), which only
+# shares the kana.
+- name: entry-mono-is-the-formal-noun
   sentence: 誰しも、夢はかなうと信じたいものだ。
-  entries: { もの: "jmdict:2780660" }
+  entries: { もの: "jmdict:1502390" }
+  divergence: { tokenizer: homograph }
 
 # The particle rule, stated once and held to on both engines: a head plus a
 # particle is ONE chip when the dictionary lists that exact string as a word, and

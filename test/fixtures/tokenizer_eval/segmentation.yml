@@ -18,8 +18,11 @@
 # cross_engine.yml asks of each.
 #
 # These rows have not been adjudicated against the web tokenizer. Pointing it at
-# this file wholesale produces a wall of red; each case is its own decision, and
-# a genuine difference belongs in cross_engine.yml as a `divergence: true` row.
+# this file wholesale produces a wall of red; each case is its own decision, and a
+# case both engines must answer belongs in cross_engine.yml. A row the extension
+# does not answer correctly yet carries `divergence: { extension: <cause> }`: the
+# Reader skips it, and Shirabe's tokenizer_eval:segmentation pins how many there
+# are (lib/known_failures.rb).
 #
 # It runs against the real dictionary pack when one is built locally
 # (storage/dictionary_packs/current, or $SHIRABE_PACK), which is the only way a
@@ -200,11 +203,13 @@
     An attested lexical counting word keeps its dictionary entry, as on the
     website. Splitting every numeral-led word also destroyed 一人 meaning alone.
 
-- name: counter-splits-multi-digit
+- name: a-multi-digit-number-and-its-counter-are-one-unit
   sentence: 三十本のバナナ
-  merges: [三十, 本]
-  splits: [三十本]
-  why: A multi-digit numeral stays whole (三十), only the counter separates.
+  merges: [三十本]
+  divergence: { extension: counter }
+  why: >
+    A number and its counter are one unit for every numeral, as 七本 above: the
+    pair's reading (さんじゅっぽん) is what a learner cannot guess from the parts.
 
 - name: non-counter-compound-intact
   sentence: 一石二鳥は便利だ
