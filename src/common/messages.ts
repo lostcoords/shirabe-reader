@@ -117,6 +117,8 @@ export type Request =
   // The same identity a save sends: the reading keeps a homograph's cards out of
   // it, and the entry and deck place the card an unsaved word gets.
   | { type: "setState"; lemma: string; state: "retired" | "reviewing"; reading?: string; entry?: string; deckId?: number }
+  // Never study this word. No card is made; the reading keeps a homograph out of it.
+  | { type: "ignore"; lemma: string; reading?: string }
   | { type: "connect" } // begin device login; resolves with the code to show
   | { type: "disconnect" }
   | { type: "updateDictionaryStack"; dictionaries: string[]; dictionaryReveal: Record<string, "show" | "hover"> }
@@ -152,6 +154,7 @@ export type Response =
   | { ok: true; type: "pageMetrics" }
   | { ok: true; type: "activePageMetrics"; metrics: PageMetrics | null }
   | { ok: true; type: "setState"; state: WordState; details: StudyDetails }
+  | { ok: true; type: "ignore" }
   | { ok: true; type: "connect" }
   | { ok: true; type: "disconnect" }
   | { ok: true; type: "updateDictionaryStack"; synced: boolean }

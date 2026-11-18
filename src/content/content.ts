@@ -7,7 +7,7 @@ import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
 // aimed at the page as a whole.
 type WordAction = Exclude<KeybindAction, "parse" | "highlighting">;
 import { send } from "../common/messages.js";
-import { grade, markKnown, REVIEW_IN_READER, save, type Outcome } from "./actions.js";
+import { grade, ignore, markKnown, REVIEW_IN_READER, save, type Outcome } from "./actions.js";
 import { markSelection, observeLazy, resetParsedPage, setParsingPaused } from "./parser.js";
 import { refreshMetrics, setMetricsOptions, startMetrics, stopMetrics } from "./metrics-reporter.js";
 import { setSentenceAudioEnabled } from "./sentence-audio.js";
@@ -297,6 +297,7 @@ function boot(): void {
     // word; whole-word save otherwise (picksForWord guards the word identity).
     save: (w) => save(w, picksForWord(w)),
     known: markKnown,
+    ignore,
   };
   // A shortcut for a button that isn't there grades a card by accident: the keys
   // leave with the row they belong to (see REVIEW_IN_READER).

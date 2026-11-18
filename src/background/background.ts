@@ -422,6 +422,11 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       await cacheStates({ [request.lemma]: details.state }, { [request.lemma]: details });
       return { ok: true, type: "setState", state: details.state, details };
     }
+    case "ignore": {
+      await api.ignore({ lemma: request.lemma, reading: request.reading });
+      await cacheStates({ [request.lemma]: "ignored" }, { [request.lemma]: { state: "ignored", decks: [] } });
+      return { ok: true, type: "ignore" };
+    }
     case "connect":
       await connect();
       return { ok: true, type: "connect" };

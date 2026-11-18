@@ -825,3 +825,17 @@ test("a meaning that already has a card is marked saved, not offered again", asy
   applyStudyDetails(word, { state: "none", decks: [] });
   assert.equal(word.dataset.savedSenses, undefined);
 });
+
+// An ignored word is one the reader chose never to study: it is not an unknown
+// word to point at, and it does not lower how much of the page they can read.
+test("an ignored word is neither the unknown in an i+1 block nor a gap in coverage", async () => {
+  const window = installDom(`
+    <p id="block"><span class="sb-word" data-lemma="田中" data-state="ignored"></span><span class="sb-word" data-lemma="咲く" data-pos="v5k" data-state="retired"></span><span class="sb-word" data-lemma="紫陽花" data-state="none"></span></p>
+  `);
+  const { iPlusOneTargets, measurePageWords } = await import("../src/content/page-metrics.js");
+  const words = [...window.document.querySelectorAll<HTMLElement>(".sb-word")];
+  assert.deepEqual(iPlusOneTargets(words, { includesLearning: true, frequencyMax: 10_000 }).map((word) => word.dataset.lemma), ["紫陽花"]);
+  const metrics = measurePageWords(words);
+  assert.equal(metrics.occurrences.unknown, 1, "only 紫陽花 is unknown");
+  assert.equal(metrics.occurrenceCoverage, 67);
+});

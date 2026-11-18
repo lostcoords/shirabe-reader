@@ -166,6 +166,11 @@ export class ShirabeApi {
     return studyDetails(word);
   }
 
+  // Ignore a word: the server's "don't study this" list, which bulk adds skip.
+  async ignore(options: { lemma: string; reading?: string }): Promise<void> {
+    await this.oauth.request((client) => client.ignoreWord({ text: options.lemma, ...(options.reading ? { reading: options.reading } : {}) }));
+  }
+
   // Connected account's display name + SRS entitlement, for the settings UI.
   // The account, dictionary stack, and catalog are separate API resources.
   async me(): Promise<{ name: string; entitled: boolean; languages: GlossLanguage[]; dictionaries: string[];

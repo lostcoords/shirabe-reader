@@ -12,13 +12,13 @@ export type Keybind = {
 
 // The actions a user can rebind. `parse` acts on the page (parse the page, or the
 // selection if any); the rest act on the word currently under the pointer.
-export type KeybindAction = "parse" | "highlighting" | "again" | "hard" | "good" | "easy" | "save" | "known";
+export type KeybindAction = "parse" | "highlighting" | "again" | "hard" | "good" | "easy" | "save" | "known" | "ignore";
 
 // What the settings page lets you rebind. The grade actions keep their type,
 // their labels and their defaults: they are simply not offered while the reader
 // has no grade row to fire them (see REVIEW_IN_READER in content/actions.ts), so
 // nobody binds a key to a button that isn't there.
-export const KEYBIND_ACTIONS: KeybindAction[] = ["parse", "highlighting", "save", "known"];
+export const KEYBIND_ACTIONS: KeybindAction[] = ["parse", "highlighting", "save", "known", "ignore"];
 
 // Human labels for the settings UI, in display order.
 export const KEYBIND_LABELS: Record<KeybindAction, string> = {
@@ -30,6 +30,7 @@ export const KEYBIND_LABELS: Record<KeybindAction, string> = {
   easy: "Grade: Easy",
   save: "Save word",
   known: "Mark known",
+  ignore: "Ignore word",
 };
 
 // Defaults preserve today's behaviour: bare 1–4 / S / K on the hovered word, plus
@@ -43,6 +44,7 @@ export const DEFAULT_KEYBINDS: Record<KeybindAction, Keybind> = {
   easy: { code: "Digit4", alt: false, ctrl: false, shift: false, meta: false },
   save: { code: "KeyS", alt: false, ctrl: false, shift: false, meta: false },
   known: { code: "KeyK", alt: false, ctrl: false, shift: false, meta: false },
+  ignore: { code: "KeyI", alt: false, ctrl: false, shift: false, meta: false },
 };
 
 const MODIFIER_CODES = new Set(["AltLeft", "AltRight", "ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight", "MetaLeft", "MetaRight"]);

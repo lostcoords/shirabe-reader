@@ -433,6 +433,16 @@ export async function save(word: HTMLElement, senseRefs?: string[]): Promise<Out
   };
 }
 
+// Never study this word: the server records it, and the page stops marking it.
+export async function ignore(word: HTMLElement): Promise<Outcome> {
+  const lemma = lemmaOf(word);
+  const res = await send({ type: "ignore", lemma, ...(word.dataset.reading ? { reading: word.dataset.reading } : {}) });
+  if (!res.ok) return refusal(res);
+  applyStateEverywhere(lemma, "ignored");
+  word.dataset.state = "ignored";
+  return { ok: true, message: `Ignored ${lemma}` };
+}
+
 // Park as learned (out of review rotation). It names the word the way a save
 // does: a bare lemma would retire every homograph's cards, and an unsaved word
 // would get a card linked to nothing.

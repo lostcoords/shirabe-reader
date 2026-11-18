@@ -175,3 +175,43 @@ test("Known on a word whose popup never opened asks for its entry, as a save doe
   assert.equal(request.reading, "はし", "the reading keeps the chopsticks' card out of it");
   assert.equal(request.entry, "jmdict:1489850", "an unsaved word's new card links to its entry");
 });
+
+test("Ignore posts the word as text with its reading, and the page stops marking it", async () => {
+  const original = globalThis.fetch;
+  const requests: Array<{ path: string; body: unknown }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    requests.push({ path: new URL(request.url).pathname, body: await request.json() });
+    return Response.json({ ignore: { text: "田中", reading: "たなか" } }, { status: 201 });
+  }) as typeof fetch;
+  try {
+    const { ShirabeApi } = await import("../src/common/api.js");
+    const { DEFAULTS } = await import("../src/common/config.js");
+    const api = new ShirabeApi({ ...DEFAULTS, apiBase: "https://shirabe.test", accessToken: "shra_test", refreshToken: "shrr_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    await api.ignore({ lemma: "田中", reading: "たなか" });
+    assert.deepEqual(requests, [{ path: "/api/v1/srs/word-ignores", body: { text: "田中", reading: "たなか" } }]);
+  } finally {
+    globalThis.fetch = original;
+  }
+
+  const { Window } = await import("happy-dom");
+  const window = new Window({ url: "https://reader.test/page" });
+  Object.assign(globalThis, {
+    window, document: window.document, HTMLElement: window.HTMLElement,
+    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
+  });
+  const { ext } = await import("../src/common/browser.js");
+  const sent: MessageRequest[] = [];
+  ext.runtime.sendMessage = (async (message: MessageRequest) => {
+    sent.push(message);
+    return { ok: true, type: "ignore" };
+  }) as typeof ext.runtime.sendMessage;
+  const { ignore } = await import("../src/content/actions.js");
+  const word = window.document.createElement("span") as unknown as HTMLElement;
+  word.dataset.lemma = "田中";
+  word.dataset.reading = "たなか";
+  word.dataset.state = "none";
+  assert.equal((await ignore(word)).ok, true);
+  assert.deepEqual(sent, [{ type: "ignore", lemma: "田中", reading: "たなか" }]);
+  assert.equal(word.dataset.state, "ignored");
+});

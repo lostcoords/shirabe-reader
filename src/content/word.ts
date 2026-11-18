@@ -10,7 +10,7 @@ export { appendFurigana, furiganaSegments, hasKanji, type FuriganaSegment };
 // lazily: detached nodes are skipped on recolour, not tracked for removal.
 const byLemma = new Map<string, Set<HTMLElement>>();
 
-const STATE_CLASS = /sb-(none|new|learning|due|suspended|retired)/;
+const STATE_CLASS = /sb-(none|new|learning|due|suspended|retired|ignored)/;
 
 // The other words each span could be, for the popup's picker. A WeakMap rather
 // than a `data-` attribute: a long page has thousands of ambiguous spans and

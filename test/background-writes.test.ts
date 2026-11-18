@@ -78,3 +78,19 @@ test("Known keeps the whole word it answered, so a reopened card does not snap b
   assert.equal(reopened.details["橋"]?.cardId, 41);
   assert.deepEqual(sent.filter(({ path }) => path.startsWith("/api/v1/srs")), [], "answered from what Known just returned");
 });
+
+test("Ignore reaches the server's list and the word reads as ignored without asking again", async () => {
+  const worker = await send;
+  answers.set("POST /api/v1/srs/word-ignores", (body) => json({ ignore: body }, 201));
+  sent.length = 0;
+  const ignored = await worker({ type: "ignore", lemma: "田中", reading: "たなか" });
+  assert.ok(ignored.ok && ignored.type === "ignore");
+  assert.deepEqual(sent.map(({ method, path, body }) => ({ method, path, body })),
+    [{ method: "POST", path: "/api/v1/srs/word-ignores", body: { text: "田中", reading: "たなか" } }]);
+
+  sent.length = 0;
+  const states = await worker({ type: "states", lemmas: ["田中"] });
+  assert.ok(states.ok && states.type === "states");
+  assert.equal(states.states["田中"], "ignored");
+  assert.deepEqual(sent, []);
+});
