@@ -16,6 +16,12 @@ for (const target of targets) {
     `${target} has unexpected required hosts`,
   );
   assert.equal(manifest.optional_host_permissions, undefined, `${target} must not request page access per site`);
+  // Firefox shows these at install. Error reports are optional because the
+  // reader can turn them off (the errorReports setting).
+  if (target === "firefox") {
+    assert.deepEqual(manifest.browser_specific_settings.gecko.data_collection_permissions,
+      { required: ["websiteContent"], optional: ["technicalAndInteraction", "authenticationInfo"] });
+  }
 
   for (const file of await filesBelow(root)) {
     const path = relative(root, file);

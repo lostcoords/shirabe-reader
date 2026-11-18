@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { developmentBuildId, startDevelopmentReloadServer } from "../dev-reload-server.mjs";
 
 const pattern = /^\d{8}T(\d{2})(\d{2})(\d{2})(\d{3})-[0-9a-f]{2}$/;
 
 test("the reload server publishes the same stamp the extension accepts", async () => {
-  const source = await readFile(new URL("../src/common/development-build.ts", import.meta.url), "utf8");
-  assert.match(source, /DEVELOPMENT_BUILD_PATTERN = \/\^\\d\{8\}T/);
   const server = startDevelopmentReloadServer({ port: 0 });
   try {
     const address = await server.ready;

@@ -3,7 +3,7 @@ import { ShirabePublicClient, ShirabePublicApiError, type PublicAuthorization, t
 import { glossLanguagesFrom, type GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import { cardWordState } from "@shirabe-org/card/word-card/types";
 import type { ParsedToken, WordState } from "./types.js";
-import type { Deck, GradeResult, IntervalPreviews, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
+import type { Deck, SaveResult, SentenceCapture, StudyDetails } from "./messages.js";
 
 export { ShirabePublicApiError as ApiError };
 
@@ -16,7 +16,7 @@ const ApiError = ShirabePublicApiError;
 
 // Dictionary lookup is public and local, so connecting must never ask for it.
 // OAuth exists only for the personal online layer: identify the account, read
-// its study state, and save/grade through the SRS.
+// its study state, and save through the SRS.
 const OAUTH_SCOPES = ["user:profile:read", "user:dictionary:read", "user:preferences:read", "user:preferences:write", "user:study:read", "user:study:write"] as const satisfies readonly ShirabeScope[];
 // Registered on the server (OauthClient), where the consent screen's name and
 // the redirect hosts we may use are decided. A public client: no secret, PKCE
@@ -34,11 +34,9 @@ const studyDetails = (word: Omit<WordStateEntry, "lemma">): StudyDetails => ({
   state: word.state,
   decks: word.decks,
   ...(word.cardId != null ? { cardId: word.cardId } : {}),
-  ...(word.reviewCard ? { reviewCard: word.reviewCard } : {}),
   ...(word.cardCount != null ? { cardCount: word.cardCount } : {}),
   ...(word.savedSenses ? { savedSenses: word.savedSenses } : {}),
   ...(word.savedWholeWord ? { savedWholeWord: word.savedWholeWord } : {}),
-  ...(word.intervals ? { intervals: word.intervals as IntervalPreviews } : {}),
 });
 
 // The pack cites an entry as one handle ("jmdict:2517580"); /api/v1 takes it as the
@@ -87,8 +85,7 @@ export class ShirabeApi {
 
   // ── SRS write-back (/api/v1/srs/*) ────────────────────
   // Save (or mine) a word as a review card. `senses` scopes the card to a
-  // subset of the word's senses (empty/omitted = the whole word). Grading is a
-  // separate call: see `grade`.
+  // subset of the word's senses (empty/omitted = the whole word).
   async save(options: {
     lemma: string; surface?: string; reading?: string; entry?: string; deckId?: number; newDeckName?: string;
     hint?: string; notes?: string; sentence?: SentenceCapture; sentences?: SentenceCapture[];
@@ -110,18 +107,6 @@ export class ShirabeApi {
       created: response.created,
       ...(response.card?.id != null ? { cardId: response.card.id } : {}),
       ...(response.mediaError ? { mediaError: response.mediaError } : {}),
-    };
-  }
-
-  async grade(options: { cardId: number; revision: string; rating: 1 | 2 | 3 | 4; key: string }): Promise<GradeResult> {
-    const { key, ...body } = options;
-    const headers = retrying(key);
-    const response = await this.oauth.request((client) => client.gradeCard(body, headers));
-    const cardId = response.card?.id;
-    return {
-      state: response.card.state,
-      intervals: response.intervals as IntervalPreviews,
-      ...(cardId != null ? { cardId } : {}),
     };
   }
 

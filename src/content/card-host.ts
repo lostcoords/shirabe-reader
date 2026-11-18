@@ -2,9 +2,9 @@ import { loadConfig, pricingUrl } from "../common/config.js";
 import { sendDictionary } from "../common/dictionary-port.js";
 import { send } from "../common/messages.js";
 import type { StudyDetails } from "../common/types.js";
-import type { Rating, WordCardHost } from "@shirabe-org/card/word-card";
+import type { WordCardHost } from "@shirabe-org/card/word-card";
 import type { LookupResult } from "@shirabe-org/card/word-card/host";
-import { applyStudyDetails, captureFor, grade, ignore, markKnown, REVIEW_IN_READER, save, setScanOrigin, studyUrlForWord, unignore, unmarkKnown } from "./actions.js";
+import { applyStudyDetails, captureFor, ignore, markKnown, save, setScanOrigin, studyUrlForWord, unignore, unmarkKnown } from "./actions.js";
 import { renderCardForm } from "./card-form.js";
 import { candidatesFor, groupsFor, isParsedWord } from "./word.js";
 import { refreshMetrics } from "./metrics-reporter.js";
@@ -105,10 +105,6 @@ export const extensionHost: WordCardHost = {
     unmarkKnown: (word) => unmarkKnown(word),
     ignore: (word) => ignore(word),
     unignore: (word) => unignore(word),
-    grade: (word, rating: Rating) => grade(word, rating),
-    // Reviewing lives on the site for this extension, so the card draws no
-    // grade row however capable the port looks (see REVIEW_IN_READER).
-    gradingInCard: REVIEW_IN_READER,
 
     // The screenshot, the decks and the account are all extension business, so
     // the whole form is built here and handed the card's own container.

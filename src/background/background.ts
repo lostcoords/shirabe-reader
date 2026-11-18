@@ -380,22 +380,6 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       await cacheStates({ [request.lemma]: result.state }, { [request.lemma]: result });
       return { ok: true, type: "save", result };
     }
-    case "grade": {
-      const result = await api.grade({ cardId: request.cardId, revision: request.revision, rating: request.rating, key: request.key });
-      // Refresh the cached details too, not just the top-level state: the popup
-      // prefers `details.state` on reopen, so caching state-only would let a stale
-      // detail snap a just-graded word back to "due". Carry the cached decks +
-      // cardId forward (grading changes neither) and overwrite state + intervals.
-      const previous = (await cachedStateSnapshot()).details[request.lemma];
-      const details: StudyDetails = {
-        state: result.state,
-        decks: previous?.decks ?? [],
-        intervals: result.intervals,
-        ...(result.cardId != null ? { cardId: result.cardId } : previous?.cardId != null ? { cardId: previous.cardId } : {}),
-      };
-      await cacheStates({ [request.lemma]: result.state }, { [request.lemma]: details });
-      return { ok: true, type: "grade", result };
-    }
     case "decks":
       return { ok: true, type: "decks", decks: await cachedDecks() };
     case "states":

@@ -7,7 +7,7 @@ import { type KeybindAction, matchesKeybind } from "../common/keybind.js";
 // aimed at the page as a whole.
 type WordAction = Exclude<KeybindAction, "parse" | "highlighting">;
 import { send } from "../common/messages.js";
-import { grade, ignore, markKnown, REVIEW_IN_READER, save, unignore, unmarkKnown, type Outcome } from "./actions.js";
+import { ignore, markKnown, save, unignore, unmarkKnown, type Outcome } from "./actions.js";
 import { markSelection, observeLazy, resetParsedPage, setParsingPaused } from "./parser.js";
 import { refreshMetrics, setMetricsOptions, startMetrics, stopMetrics } from "./metrics-reporter.js";
 import { setSentenceAudioEnabled } from "./sentence-audio.js";
@@ -289,10 +289,6 @@ function boot(): void {
   // `parse` and `highlighting` act on the page; the rest act on the hovered word.
   // All bindings live in config.keybinds and are user-editable in the popup.
   const WORD_ACTIONS: Record<WordAction, (word: HTMLElement) => Promise<Outcome>> = {
-    again: (w) => grade(w, 1),
-    hard: (w) => grade(w, 2),
-    good: (w) => grade(w, 3),
-    easy: (w) => grade(w, 4),
     // Honour the popup's sense picker when the shortcut fires on the popup's own
     // word; whole-word save otherwise (picksForWord guards the word identity).
     save: (w) => save(w, picksForWord(w)),
@@ -300,11 +296,7 @@ function boot(): void {
     known: (w) => (w.dataset.state === "retired" ? unmarkKnown(w) : markKnown(w)),
     ignore: (w) => (w.dataset.state === "ignored" ? unignore(w) : ignore(w)),
   };
-  // A shortcut for a button that isn't there grades a card by accident: the keys
-  // leave with the row they belong to (see REVIEW_IN_READER).
-  const GRADE_ACTIONS: KeybindAction[] = ["again", "hard", "good", "easy"];
-  const WORD_ACTION_KEYS = (Object.keys(WORD_ACTIONS) as WordAction[])
-    .filter((action) => REVIEW_IN_READER || !GRADE_ACTIONS.includes(action));
+  const WORD_ACTION_KEYS = Object.keys(WORD_ACTIONS) as WordAction[];
 
   window.addEventListener("keydown", (e) => {
     if (isTyping(e.target)) return;

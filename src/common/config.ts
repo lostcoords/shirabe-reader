@@ -66,7 +66,7 @@ export type Config = {
   dictionaryNames: Record<string, string>;
   availableDictionaries: Array<{ slug: string; name: string; languages: string[] }>;
   scanModifier: ScanModifier; // which key (if any) opens the hover popup
-  keybinds: Record<KeybindAction, Keybind>; // rebindable shortcuts (parse + grade/save/known)
+  keybinds: Record<KeybindAction, Keybind>; // rebindable shortcuts (parse, highlighting, save, known, ignore)
   disabledHosts: string[]; // domains/patterns where the reader is turned off entirely
   markHosts: string[]; // the reader's own sites to mark without being asked
   preferredDeckId: number | null; // connected mining target; null uses the server default
@@ -200,7 +200,7 @@ export const pricingUrl = (apiBase: string, source: string): string =>
   `${apiBase.replace(/\/$/, "")}/pricing?source=${encodeURIComponent(source)}`;
 
 // Signed in iff we hold a refresh token: the access token comes and goes by
-// the hour and is renewed from it. Mining (save/grade/known) needs user:study:write
+// the hour and is renewed from it. Mining (save/known) needs user:study:write
 // *and* SRS entitlement (Pro or school): matching require_srs_pro! on the API.
 // A free account still gets dictionary lookup and word coloring.
 export const isConnected = (config: Config): boolean => config.refreshToken.length > 0;
@@ -212,6 +212,19 @@ export const canMarkWords = (config: Config): boolean =>
 export const canWriteSrs = (config: Config): boolean =>
   config.scopes.includes("user:study:write") && config.entitled;
 
+
+// The fields a settings file may carry: everything except the OAuth tokens and
+// the account they belong to. Exporting a refresh token would put a live sign-in
+// in a file people mail to each other, and importing one would hand this browser
+// somebody else's account.
+const SECRET_KEYS = ["accessToken", "accessTokenExpiresAt", "accessTokenRefreshAt", "refreshToken", "account", "accountCheckedAt", "scopes", "entitled",
+  "dictionaryStackFingerprint", "dictionaryStackDirty", "dictionaryNames", "availableDictionaries"] as const;
+
+export function shareableConfig(config: Config): Partial<Config> {
+  const copy: Record<string, unknown> = { ...config };
+  for (const key of SECRET_KEYS) delete copy[key];
+  return copy as Partial<Config>;
+}
 
 export async function saveConfig(config: Config): Promise<void> {
   await ext.storage.local.set({ [KEY]: config });

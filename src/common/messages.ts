@@ -5,15 +5,10 @@ import type { ClientReport } from "./telemetry.js";
 
 export type { DeckMembership, IntervalPreviews, StudyDetails };
 
-// A grade on Shirabe's 1–4 FSRS scale, matching POST /api/v1/srs/reviews.
-export type Rating = 1 | 2 | 3 | 4;
 export type Deck = { id: number; name: string; visibility: "personal" | "school" };
 // `mediaError`: the card and its line were saved, but the clip or screenshot
 // was not, and this says why.
 export type SaveResult = StudyDetails & { created: boolean; mediaError?: string };
-// Grading returns the card's new state + next-grade previews, but not deck
-// membership (grading a card never changes which decks hold it).
-export type GradeResult = { state: WordState; intervals: IntervalPreviews; cardId?: number };
 export type SentenceCapture = {
   text: string;
   translation?: string;
@@ -112,7 +107,6 @@ export type Request =
       sentences?: SentenceCapture[];
       key: string;
     }
-  | { type: "grade"; lemma: string; cardId: number; revision: string; rating: Rating; key: string }
   | { type: "decks" }
   | { type: "states"; lemmas: string[] }
   | { type: "pageMetrics"; metrics: PageMetrics }
@@ -154,7 +148,6 @@ export type Response =
   | { ok: true; type: "removeDictionary" }
   | { ok: true; type: "cancelDictionaryInstall" }
   | { ok: true; type: "save"; result: SaveResult }
-  | { ok: true; type: "grade"; result: GradeResult }
   | { ok: true; type: "decks"; decks: Deck[] }
   | { ok: true; type: "states"; states: Record<string, WordState>; details: Record<string, StudyDetails> }
   | { ok: true; type: "pageMetrics" }

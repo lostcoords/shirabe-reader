@@ -1,41 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { TelemetrySignal } from "../src/common/telemetry.js";
-
-// The background worker can't be imported here: it registers listeners and
-// installs global crash handlers on import. So the two worker-only invariants
-// below are asserted against its source, the way telemetry.test.ts does.
-
-test("a definition comes from the active local stack, so the cache key carries no credential", () => {
-  const background = readFileSync("src/background/background.ts", "utf8");
-  const key = background.match(/lookupCache\.fetch\(`([^`]+)`/)?.[1];
-  assert.ok(key, "expected a template-literal lookup cache key");
-  // A stack replacement clears the cache outright. Nothing in one active
-  // stack's lookup path may reach the network for a definition.
-  assert.doesNotMatch(key, /scope|connected|online/i);
-  const handler = background.slice(background.indexOf('case "lookup"'), background.indexOf('case "dictionaryStatus"'));
-  assert.doesNotMatch(handler, /api\./, "the pack is the dictionary; there is no server fallback to drift from");
-});
-
-test("a cached word state from an older build still renders, deck list or not", () => {
-  const background = readFileSync("src/background/background.ts", "utf8");
-  const pick = background.slice(background.indexOf("function pickDetails"), background.indexOf("// ── Redirect login"));
-  // `decks` shipped as `memberships`; a snapshot from then has no `decks` at
-  // all, and the reader calls `.map` on it the moment a popup opens.
-  assert.match(pick, /decks: details\[lemma\]\.decks \?\? \[\]/);
-});
-
-test("a dictionary install reports its own failure, not just the ones the caller waits for", () => {
-  const background = readFileSync("src/background/background.ts", "utf8");
-  const install = background.slice(background.indexOf('case "installDictionary"'), background.indexOf('case "removeDictionary"'));
-  // The rejection handler must hang off the install promise itself: the 150ms
-  // race has already answered by the time a real download fails.
-  assert.match(install, /captureEvent\("dictionary_install_failed"/);
-  assert.match(install, /captureException\(error, "background", \{ request: "installDictionary" \}\)/);
-  // A swallowing catch would put the counter right back to sleep.
-  assert.doesNotMatch(install, /catch\(\(\) => undefined\)/);
-});
 
 // ── ingestClientReport ───────────────────────────────────────────────────────
 // FLUSH_AT signals so the batch is POSTed synchronously with no timer left

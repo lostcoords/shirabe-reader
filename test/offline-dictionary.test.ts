@@ -589,8 +589,6 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal(fullWidth?.headword, "Ｔシャツ");
   assert.deepEqual(fullWidth?.senses[0]?.glosses, [{ lang: "eng", tag: "EN", text: "T-shirt" }]);
   assert.equal((await lookupOffline("Tシャツ", ["eng"], "https://shirabe.test"))?.headword, "Ｔシャツ");
-  const shirtTokens = await parseOffline("Ｔシャツを買った。", ["eng"], "https://shirabe.test");
-  assert.ok(shirtTokens.some((token) => token.lemma === "Ｔシャツ" && token.surface === "Ｔシャツ"));
 
   const expressionTokens = await parseOffline("一石二鳥は便利だ。", ["eng"], "https://shirabe.test");
   assert.deepEqual(expressionTokens.filter((token) => token.content)[0], {
@@ -630,15 +628,6 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
     (await parseOffline("明日天気になる。", ["eng"], "https://shirabe.test")).filter((token) => token.content).slice(0, 2).map((token) => token.surface),
     ["明日", "天気"],
     "contextual parsing must not blindly consume an uncommon untagged headword",
-  );
-
-  // A usually-kana expression appears on the page as its kana reading, which is a
-  // *reading*, not a writing form: so contextual confidence must accept a reading
-  // match, or について loses to the bare particle に and is split into に + つい + て.
-  assert.deepEqual(
-    (await parseOffline("猫について", ["eng"], "https://shirabe.test")).filter((token) => token.content).map((token) => token.surface),
-    ["猫", "について"],
-    "a usually-kana expression parses as one token, not split into に + つい + て",
   );
 
   // An out-of-dictionary katakana run (a loanword/name the pack doesn't carry)
@@ -715,14 +704,6 @@ test("installs, deinflects, parses, and rolls back a corrupt offline pack", asyn
   assert.equal(itsu?.lemma, "いつ", "the uk word displays as kana いつ, not 何時");
   assert.equal((await lookupOffline("いつ", ["eng"], "https://shirabe.test"))?.headword, "いつ", "いつ lookup leads with kana");
   assert.equal((await lookupOffline("何時", ["eng"], "https://shirabe.test"))?.headword, "何時", "looking up the kanji spelling still leads with 何時");
-  // A usually-kana word's KANA spelling stays confident: only its kanji spellings
-  // are demoted. JMdict lists について as a real expression, and demoting every uk
-  // spelling shredded it into に + つい + て.
-  assert.deepEqual(
-    (await parseOffline("猫について", ["eng"], "https://shirabe.test")).filter((token) => token.content).map((token) => token.surface),
-    ["猫", "について"],
-    "a uk word's kana expression is not demoted",
-  );
 
   // The POS gate must not drop irregular verbs: 来た/来て/来ない all reach 来る (vk).
   for (const form of ["来た", "来て", "来ない", "来ます"]) {

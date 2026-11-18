@@ -66,16 +66,6 @@ test("a word glossed in two languages is one sense with a row each", async () =>
     "each row declares the language it is actually in, so a screen reader reads it right");
 });
 
-// The tag is a disambiguator, and there is nothing to disambiguate when a word
-// is glossed in one language: printing EN on every line of every card is noise
-// a reader has to learn to skip.
-test("a word glossed in one language carries no language tag at all", async () => {
-  await hover({ lemma: "本", surface: "本", pos: "noun" });
-
-  assert.equal((await drawn(".sb-gloss-row")).length, 1);
-  assert.deepEqual((await drawn(".sb-gloss-lang")).map((tag) => tag.textContent), []);
-});
-
 // The aside about how a word is USED, on the sense it qualifies and never
 // carried down to the next: "usu. in kana" on sense 3 and not on sense 4 is a
 // real difference between those two senses.

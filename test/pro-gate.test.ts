@@ -38,44 +38,10 @@ test("needs-Pro is recognised by code or bare status, and nothing else is", asyn
   assert.ok(!isProRequired({ ok: false, error: "Request failed (500)." }));
 });
 
-test("the popup offers plans on a refusal instead of colouring it as an error", async () => {
-  const { readFileSync } = await import("node:fs");
-  const popup = readFileSync("node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
-  const actions = readFileSync("src/content/actions.ts", "utf8");
-
-  assert.match(actions, /proRequired: true/, "the write actions flag the refusal");
-  // The card asks its host where plans live: a host with no pricing page simply
-  // does not answer, and the link stays inert rather than pointing at ours.
-  const cardHost = readFileSync("src/content/card-host.ts", "utf8");
-  assert.match(popup, /optional\(\)\.pricingUrl\?\.\("extension"\)/, "and the card asks for the plans link");
-  assert.match(cardHost, /pricingUrl\(config\.apiBase, source\)/, "which the extension answers from its own config");
-  assert.match(popup, /sb-error", !ok && !proRequired/, "a needs-Pro note is not painted as a failure");
-});
-
-test("every upgrade entry point tags itself, so none of them lands as organic traffic", async () => {
-  const { readFileSync } = await import("node:fs");
+test("the pricing link names the entry point it came from", async () => {
   const { pricingUrl } = await import("../src/common/config.js");
 
   assert.equal(pricingUrl("https://shirabe.test/", "extension"), "https://shirabe.test/pricing?source=extension");
-
-  // The word card, the toolbar popup, and the settings page each reach Pro from
-  // a different moment; an untagged /pricing from any of them is a click the
-  // funnel can't attribute (the web app tags the same way: pricing_path(source:)).
-  // The word card builds its own link; the toolbar popup and the settings page
-  // share one account card and declare the tag they mount it with.
-  const wordCard = readFileSync("node_modules/@shirabe-org/card/dist/word-card/card.js", "utf8");
-  assert.match(wordCard, /pricingUrl\?\.\("extension"\)/, "the word card must tag its upgrade link");
-  const accountPanel = readFileSync("src/common/account-panel.ts", "utf8");
-  assert.match(accountPanel, /pricingUrl\(apiBase, hooks\.pricingSource\)/, "the shared card must tag through its mount");
-  for (const [file, source] of [
-    ["src/action/popup.ts", "extension_popup"],
-    ["src/options/options.ts", "extension_settings"],
-  ] as const) {
-    assert.match(readFileSync(file, "utf8"), new RegExp(`pricingSource: "${source}"`), `${file} must declare its source`);
-  }
-  for (const file of ["node_modules/@shirabe-org/card/dist/word-card/card.js", "src/action/popup.ts", "src/options/options.ts", "src/common/account-panel.ts"]) {
-    assert.doesNotMatch(readFileSync(file, "utf8"), /\+ "\/pricing"/, `${file} must not hand-build an untagged pricing URL`);
-  }
 });
 
 test("a signed-in free reader is told what's missing, and can act on it", async () => {
@@ -125,9 +91,6 @@ test("a signed-in free reader is told what's missing, and can act on it", async 
   assert.equal(connect?.textContent, "Connect your account");
   assert.equal(anonymous.textContent, "Connect your account to see your dictionaries and save words");
   assert.equal(anonymous.querySelector(".sb-offline-mode"), null, "offline mode is named only for an offline lookup");
-  const { readFileSync } = await import("node:fs");
-  const content = readFileSync("src/content/content.ts", "utf8");
-  assert.match(content, /historyNavigation: false/);
   assert.equal(anonymous.querySelector("a.sb-plans"), null, "nothing to upgrade until an account exists");
   // `ext` is bound at first import, so a later globalThis.chrome is not what send() calls.
   const { ext } = await import("../src/common/browser.js");

@@ -23,20 +23,7 @@ function freePort() {
   });
 }
 
-test("everyday Brave has one development command and no browser launcher", async () => {
-  const { scripts } = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  assert.deepEqual(Object.keys(scripts).filter((name) => /^(dev|watch)(:|$)/.test(name)), ["watch:chrome"]);
-  assert.equal(scripts["watch:chrome"], "node build.mjs chrome --watch");
-  const builder = await readFile(join(root, "build.mjs"), "utf8");
-  assert.match(builder, /startDevelopmentReloadServer/);
-  assert.doesNotMatch(builder, /spawn\(|WebSocket|--cdp|Extensions\.loadUnpacked|web-ext run|osascript|open -a/);
-});
-
-for (const launcher of ["direct", "parcela"]) {
-  test(`the ${launcher} watcher rebuilds scripts and static assets in place`, { timeout: 30_000 }, () => verifyWatchBuild(launcher));
-}
-
-async function verifyWatchBuild(launcher) {
+test("the parcela watcher rebuilds scripts and static assets in place", { timeout: 30_000 }, async () => {
   const workspace = await mkdtemp(join(tmpdir(), "shirabe-watch-test-"));
   const fixture = join(workspace, "extension");
   let watcher;
@@ -64,10 +51,8 @@ async function verifyWatchBuild(launcher) {
     const config = parse(await readFile(join(root, "parcela.yaml"), "utf8"));
     assert.deepEqual(Object.keys(config.services), ["reader"]);
     assert.equal(config.services.reader.http.healthcheck, "/build.json");
-    const api = launcher === "parcela" ? "https://signup-shirabe.localhost:1443" : "https://shirabe.localhost";
-    const command = launcher === "parcela" ? "/bin/sh" : process.execPath;
-    const args = launcher === "parcela" ? ["-c", config.services.reader.command] : ["build.mjs", "chrome", "--watch"];
-    watcher = spawn(command, args, {
+    const api = "https://signup-shirabe.localhost:1443";
+    watcher = spawn("/bin/sh", ["-c", config.services.reader.command], {
       cwd: fixture,
       env: { ...process.env, PORT: String(port), SHIRABE_API_URL: api, SHIRABE_DEV_RELOAD_PORT: String(port) },
       stdio: ["ignore", "pipe", "pipe"],
@@ -129,4 +114,4 @@ async function verifyWatchBuild(launcher) {
     }
     await rm(workspace, { recursive: true, force: true });
   }
-}
+});

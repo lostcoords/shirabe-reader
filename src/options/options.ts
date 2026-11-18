@@ -1,4 +1,4 @@
-import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, type AudioVoice, type ColorPreset, type Config, type DefinitionSize, type FuriganaMode, type PosColoring, type ScanModifier, type StateColoring, type Theme } from "../common/config.js";
+import { DEFAULTS, loadConfig, onConfigChanged, saveConfig, shareableConfig, type AudioVoice, type ColorPreset, type Config, type DefinitionSize, type FuriganaMode, type PosColoring, type ScanModifier, type StateColoring, type Theme } from "../common/config.js";
 import { matchPreset, PRESET_IDS, PRESETS } from "../common/presets.js";
 import type { WordState } from "../common/types.js";
 import { mountAccountPanel } from "../common/account-panel.js";
@@ -468,21 +468,8 @@ $<HTMLFormElement>("advancedPrefs").addEventListener("change", async (event) => 
   status(permissionDenied ? "Error reports remain off" : "Saved");
 });
 
-// The fields a settings file may carry: everything except the OAuth tokens and
-// the account they belong to. Exporting a refresh token would put a live sign-in
-// in a file people mail to each other, and importing one would hand this browser
-// somebody else's account.
-const SECRET_KEYS = ["accessToken", "accessTokenExpiresAt", "accessTokenRefreshAt", "refreshToken", "account", "accountCheckedAt", "scopes", "entitled",
-  "dictionaryStackFingerprint", "dictionaryStackDirty", "dictionaryNames", "availableDictionaries"] as const;
-
-function shareable(config: Config): Partial<Config> {
-  const copy: Record<string, unknown> = { ...config };
-  for (const key of SECRET_KEYS) delete copy[key];
-  return copy as Partial<Config>;
-}
-
 $<HTMLButtonElement>("exportSettings").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(shareable(config), null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(shareableConfig(config), null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -511,7 +498,7 @@ importFile.addEventListener("change", async () => {
   }
   // Only keys we already have, so an old or hand-edited file cannot introduce a
   // setting this build does not understand, and never the sign-in keys.
-  const incoming = shareable(parsed as Config);
+  const incoming = shareableConfig(parsed as Config);
   const known = Object.fromEntries(Object.entries(incoming).filter(([key]) => key in DEFAULTS));
   if (!Object.keys(known).length) {
     status("Nothing in that file matched a setting");

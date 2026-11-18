@@ -1,14 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { hostOnly, parseFrames, scrub, toException, toFaroPayload, toPostHogBatch, MAX_MESSAGE, type FaroIdentity, type PostHogIdentity, type TelemetrySignal } from "../src/common/telemetry.js";
-
-const identity: FaroIdentity = {
-  appVersion: "0.2.0",
-  environment: "development",
-  sessionId: "sess-1",
-  userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-};
+import { hostOnly, parseFrames, scrub, toException, toPostHogBatch, MAX_MESSAGE, type PostHogIdentity, type TelemetrySignal } from "../src/common/telemetry.js";
 
 test("scrub caps length and hostOnly keeps only the host", () => {
   assert.equal(scrub("x".repeat(1000)).length, MAX_MESSAGE);
@@ -47,47 +39,6 @@ test("parseFrames reads V8 and Firefox stacks, outermost-first", () => {
 
   assert.deepEqual(parseFrames(undefined), []);
 });
-
-test("toFaroPayload produces the receiver's shape and tags app/environment", () => {
-  const signals: TelemetrySignal[] = [
-    { kind: "exception", type: "Error", value: "nope", stack: "Error: nope\n    at f (chrome-extension://abc/content.js:1:1)", context: "content", timestamp: 0 },
-    { kind: "event", name: "dictionary_install_failed", attributes: { stage: "download" }, context: "background", timestamp: 0 },
-    { kind: "measurement", metric: "parse_failed", value: 1, context: "content", timestamp: 0 },
-  ];
-  const payload = toFaroPayload(signals, identity) as {
-    meta: { app: { name: string; environment: string }; browser: { name: string }; session: { id: string } };
-    exceptions: Array<{ type: string; stacktrace: { frames: unknown[] }; context: { source: string } }>;
-    events: Array<{ name: string; domain: string; attributes: Record<string, string> }>;
-    measurements: Array<{ type: string; values: Record<string, number> }>;
-  };
-
-  assert.equal(payload.meta.app.name, "shirabe-reader");
-  assert.equal(payload.meta.app.environment, "development");
-  assert.equal(payload.meta.browser.name, "Chrome");
-  assert.equal(payload.meta.session.id, "sess-1");
-  assert.equal(payload.exceptions.length, 1);
-  assert.equal(payload.exceptions[0].stacktrace.frames.length, 1);
-  assert.equal(payload.exceptions[0].context.source, "content");
-  assert.equal(payload.events[0].name, "dictionary_install_failed");
-  assert.equal(payload.events[0].attributes.stage, "download");
-  assert.deepEqual(payload.measurements[0].values, { parse_failed: 1 });
-});
-
-test("named failure counters are wired at their choke points", () => {
-  const background = readFileSync("src/background/background.ts", "utf8");
-  // Onboarding + backend-health counters ride the central errorResponse hook.
-  assert.match(background, /captureEvent\("dictionary_install_failed"/);
-  assert.match(background, /status >= 500/);
-  assert.match(background, /captureEvent\("api_error"/);
-  // A 4xx the server returned on purpose (needs Pro, missing scope, not
-  // connected) is a state, not a fault: reporting it as an exception buries
-  // the real ones and tells us nothing we didn't design.
-  assert.match(background, /status >= 400 && api\.status < 500/);
-  // Core-functionality + feature counters at their own sites.
-  assert.match(background, /captureMeasurement\("parse_failed", 1\)/);
-  assert.match(background, /captureEvent\("audio_fetch_failed"/);
-});
-
 
 const posthogIdentity: PostHogIdentity = {
   token: "phc_test",

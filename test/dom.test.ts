@@ -762,31 +762,6 @@ test("YouTube parses the styled segment, not the parent visual line", async () =
   assert.ok(window.document.querySelector(".ytp-caption-segment"), "styled segment stays in the tree");
 });
 
-test("inline grading submits the displayed review identity and clears it when details no longer include it", async () => {
-  const window = installDom("<span class='sb-word' id='w' data-lemma='猫' data-reading='ねこ'>猫</span>");
-  const { applyStudyDetails, grade } = await import("../src/content/actions.js");
-  const { ext } = await import("../src/common/browser.js");
-  const word = window.document.getElementById("w") as unknown as HTMLElement;
-  const original = ext.runtime.sendMessage;
-  const requests: unknown[] = [];
-  ext.runtime.sendMessage = async (request: unknown) => {
-    requests.push(request);
-    return { ok: false, error: "Card changed" };
-  };
-  try {
-    const details = { state: "due" as const, decks: [], cardId: 99, reviewCard: { id: 15, revision: "a".repeat(64) } };
-    applyStudyDetails(word, details);
-    await grade(word, 3);
-    assert.deepEqual(requests, [{ type: "grade", lemma: "猫", cardId: 15, revision: "a".repeat(64), rating: 3, key: (requests[0] as { key: string }).key }]);
-    applyStudyDetails(word, { state: "due", decks: [] });
-    const result = await grade(word, 3);
-    assert.equal(result.ok, false);
-    assert.equal(requests.length, 1);
-  } finally {
-    ext.runtime.sendMessage = original;
-  }
-});
-
 test("Manage opens the card itself, or the browser when a word has one per meaning", async () => {
   const window = installDom("<p><span class='sb-word' id='w' data-lemma='今日'>今日</span></p>");
   const { applyStudyDetails, studyUrlForWord } = await import("../src/content/actions.js");

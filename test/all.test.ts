@@ -11,6 +11,7 @@ import "./placement.test.js";
 import "./content-render.test.js";
 import "./card-form.test.js";
 import "./manifest.test.js";
+import "./config.test.js";
 import "./telemetry.test.js";
 import "./pro-gate.test.js";
 import "./word-marks.test.js";

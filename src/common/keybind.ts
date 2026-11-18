@@ -12,36 +12,24 @@ export type Keybind = {
 
 // The actions a user can rebind. `parse` acts on the page (parse the page, or the
 // selection if any); the rest act on the word currently under the pointer.
-export type KeybindAction = "parse" | "highlighting" | "again" | "hard" | "good" | "easy" | "save" | "known" | "ignore";
+export type KeybindAction = "parse" | "highlighting" | "save" | "known" | "ignore";
 
-// What the settings page lets you rebind. The grade actions keep their type,
-// their labels and their defaults: they are simply not offered while the reader
-// has no grade row to fire them (see REVIEW_IN_READER in content/actions.ts), so
-// nobody binds a key to a button that isn't there.
+// What the settings page lets you rebind, in display order.
 export const KEYBIND_ACTIONS: KeybindAction[] = ["parse", "highlighting", "save", "known", "ignore"];
 
 // Human labels for the settings UI, in display order.
 export const KEYBIND_LABELS: Record<KeybindAction, string> = {
   parse: "Parse page",
   highlighting: "Show or hide highlighting",
-  again: "Grade: Again",
-  hard: "Grade: Hard",
-  good: "Grade: Good",
-  easy: "Grade: Easy",
   save: "Save word",
   known: "Mark known",
   ignore: "Ignore word",
 };
 
-// Defaults preserve today's behaviour: bare 1–4 / S / K on the hovered word, plus
-// a new Alt+P page-parse shortcut.
+// Defaults: bare S / K / I on the hovered word, Alt+P to parse, Alt+H to toggle highlighting.
 export const DEFAULT_KEYBINDS: Record<KeybindAction, Keybind> = {
   parse: { code: "KeyP", alt: true, ctrl: false, shift: false, meta: false },
   highlighting: { code: "KeyH", alt: true, ctrl: false, shift: false, meta: false },
-  again: { code: "Digit1", alt: false, ctrl: false, shift: false, meta: false },
-  hard: { code: "Digit2", alt: false, ctrl: false, shift: false, meta: false },
-  good: { code: "Digit3", alt: false, ctrl: false, shift: false, meta: false },
-  easy: { code: "Digit4", alt: false, ctrl: false, shift: false, meta: false },
   save: { code: "KeyS", alt: false, ctrl: false, shift: false, meta: false },
   known: { code: "KeyK", alt: false, ctrl: false, shift: false, meta: false },
   ignore: { code: "KeyI", alt: false, ctrl: false, shift: false, meta: false },

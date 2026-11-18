@@ -1,4 +1,4 @@
-import { isProRequired, retryKey, send, type Failure, type Rating, type SentenceCapture, type StudyDetails } from "../common/messages.js";
+import { isProRequired, retryKey, send, type Failure, type SentenceCapture, type StudyDetails } from "../common/messages.js";
 import { loadConfig } from "../common/config.js";
 import { captureSentenceAudio } from "./sentence-audio.js";
 import { type Cue, cueFor } from "./cues.js";
@@ -19,16 +19,6 @@ function refusal(res: Failure): Outcome {
     : { ok: false, message: res.error };
 }
 
-export const GRADES: Record<Rating, string> = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };
-
-// Reviewing stays on the site for now, so the reader matches what a dictionary
-// result there offers: what the word is, and a way into its card. Grading wants
-// the review history and interval previews around it to mean anything, and the
-// popup is the wrong size for that argument. `grade` and its callers stay wired
-// up behind this: flipping it back on is the whole change.
-export const REVIEW_IN_READER = false;
-const INTERVAL_KEYS = { 1: "again", 2: "hard", 3: "good", 4: "easy" } as const;
-
 // Four callers feed this: a save response, a state change, and two reads of a
 // cache that outlives the build that wrote it. `decks` is only ever a label, so
 // none of them is worth throwing over: a missing list means no deck line, not a
@@ -37,15 +27,6 @@ const INTERVAL_KEYS = { 1: "again", 2: "hard", 3: "good", 4: "easy" } as const;
 export function applyStudyDetails(word: HTMLElement, details: StudyDetails): void {
   word.dataset.state = details.state;
   word.dataset.deckNames = (details.decks ?? []).map((deck) => deck.name).join(", ");
-  if (details.intervals) word.dataset.intervals = JSON.stringify(details.intervals);
-  else delete word.dataset.intervals;
-  if (details.reviewCard) {
-    word.dataset.reviewCardId = String(details.reviewCard.id);
-    word.dataset.reviewRevision = details.reviewCard.revision;
-  } else {
-    delete word.dataset.reviewCardId;
-    delete word.dataset.reviewRevision;
-  }
   // Never clear an existing cardId: a later states payload without one would
   // hide the "Open in Shirabe" link after a successful save.
   if (details.cardId != null) word.dataset.cardId = String(details.cardId);
@@ -389,30 +370,7 @@ function nextPaint(): Promise<void> {
   });
 }
 
-export async function grade(word: HTMLElement, rating: Rating): Promise<Outcome> {
-  const lemma = lemmaOf(word);
-  if (word.dataset.state !== "due") return { ok: false, message: `${lemma} is not due for review` };
-  const cardId = Number(word.dataset.reviewCardId);
-  const revision = word.dataset.reviewRevision;
-  if (!Number.isSafeInteger(cardId) || cardId <= 0 || !revision) return { ok: false, message: "Reload this card before grading it." };
-  const res = await send({ type: "grade", lemma, cardId, revision, rating, key: retryKey() });
-  let cardUrl: string | undefined;
-  if (res.ok) {
-    delete word.dataset.reviewCardId;
-    delete word.dataset.reviewRevision;
-    applyStateEverywhere(lemma, res.result.state);
-    // Grading returns no deck list (membership is unchanged), so update state +
-    // interval previews + cardId directly rather than via applyStudyDetails.
-    word.dataset.state = res.result.state;
-    word.dataset.intervals = JSON.stringify(res.result.intervals);
-    cardUrl = await rememberCard(word, res.result.cardId);
-  }
-  const interval = res.ok ? res.result.intervals?.[INTERVAL_KEYS[rating]] : undefined;
-  if (!res.ok) return { ...refusal(res), cardUrl };
-  return { ok: true, message: `${lemma} → ${GRADES[rating]}${interval ? ` · ${interval}` : ""}`, cardUrl };
-}
-
-// Add to the deck without grading. `senses` scopes the card to a subset
+// Add to the deck. `senses` scopes the card to a subset
 // of the word's senses (empty/undefined = the whole word).
 export async function save(word: HTMLElement, senseRefs?: string[]): Promise<Outcome> {
   const lemma = lemmaOf(word);
@@ -472,7 +430,6 @@ export async function markKnown(word: HTMLElement): Promise<Outcome> {
     // The answer describes the whole word: its state, its decks, how many cards
     // it holds: so Manage re-points itself without a second lookup.
     applyStudyDetails(word, res.details);
-    delete word.dataset.intervals;
   }
   if (!res.ok) return refusal(res);
   return { ok: true, message: `${lemma} marked known` };
