@@ -1,4 +1,4 @@
-import { isProRequired, send, type Failure, type Rating, type SentenceCapture, type StudyDetails } from "../common/messages.js";
+import { isProRequired, retryKey, send, type Failure, type Rating, type SentenceCapture, type StudyDetails } from "../common/messages.js";
 import { loadConfig } from "../common/config.js";
 import { captureSentenceAudio } from "./sentence-audio.js";
 import { type Cue, cueFor } from "./cues.js";
@@ -252,6 +252,7 @@ async function saveRequest(word: HTMLElement, senseRefs?: string[]) {
     ...(senseRefs?.length ? { senses: senseRefs } : {}),
     ...(imageDataUrl ? { imageDataUrl } : {}),
     ...(audioDataUrl ? { audioDataUrl } : {}),
+    key: retryKey(),
   });
 }
 
@@ -394,7 +395,7 @@ export async function grade(word: HTMLElement, rating: Rating): Promise<Outcome>
   const cardId = Number(word.dataset.reviewCardId);
   const revision = word.dataset.reviewRevision;
   if (!Number.isSafeInteger(cardId) || cardId <= 0 || !revision) return { ok: false, message: "Reload this card before grading it." };
-  const res = await send({ type: "grade", lemma, cardId, revision, rating });
+  const res = await send({ type: "grade", lemma, cardId, revision, rating, key: retryKey() });
   let cardUrl: string | undefined;
   if (res.ok) {
     delete word.dataset.reviewCardId;
@@ -436,7 +437,7 @@ export async function save(word: HTMLElement, senseRefs?: string[]): Promise<Out
 // Never study this word: the server records it, and the page stops marking it.
 export async function ignore(word: HTMLElement): Promise<Outcome> {
   const lemma = lemmaOf(word);
-  const res = await send({ type: "ignore", lemma, ...(word.dataset.reading ? { reading: word.dataset.reading } : {}) });
+  const res = await send({ type: "ignore", lemma, ...(word.dataset.reading ? { reading: word.dataset.reading } : {}), key: retryKey() });
   if (!res.ok) return refusal(res);
   applyStateEverywhere(lemma, "ignored");
   word.dataset.state = "ignored";
@@ -454,6 +455,7 @@ export async function markKnown(word: HTMLElement): Promise<Outcome> {
     ...(word.dataset.reading ? { reading: word.dataset.reading } : {}),
     entry: await entryFor(word),
     ...(config.preferredDeckId == null ? {} : { deckId: config.preferredDeckId }),
+    key: retryKey(),
   });
   if (res.ok) {
     applyStateEverywhere(lemma, res.state);

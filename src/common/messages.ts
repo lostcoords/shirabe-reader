@@ -108,17 +108,18 @@ export type Request =
       hint?: string;
       notes?: string;
       sentences?: SentenceCapture[];
+      key: string;
     }
-  | { type: "grade"; lemma: string; cardId: number; revision: string; rating: Rating }
+  | { type: "grade"; lemma: string; cardId: number; revision: string; rating: Rating; key: string }
   | { type: "decks" }
   | { type: "states"; lemmas: string[] }
   | { type: "pageMetrics"; metrics: PageMetrics }
   | { type: "activePageMetrics" } // popup asks what the active tab last measured
   // The same identity a save sends: the reading keeps a homograph's cards out of
   // it, and the entry and deck place the card an unsaved word gets.
-  | { type: "setState"; lemma: string; state: "retired" | "reviewing"; reading?: string; entry?: string; deckId?: number }
+  | { type: "setState"; lemma: string; state: "retired" | "reviewing"; reading?: string; entry?: string; deckId?: number; key: string }
   // Never study this word. No card is made; the reading keeps a homograph out of it.
-  | { type: "ignore"; lemma: string; reading?: string }
+  | { type: "ignore"; lemma: string; reading?: string; key: string }
   | { type: "connect" } // begin device login; resolves with the code to show
   | { type: "disconnect" }
   | { type: "updateDictionaryStack"; dictionaries: string[]; dictionaryReveal: Record<string, "show" | "hover"> }
@@ -180,6 +181,14 @@ type ResponseFor<T extends Request["type"]> = Extract<Response, { ok: true; type
 // grading and marking known all answer this way for a free account
 // (docs/specs/api.md §2 · specs/browser-extension.md §1).
 export const isProRequired = (res: Failure): boolean => res.code === "PRO_REQUIRED" || res.status === 402;
+
+// Every write carries a key, sent as Idempotency-Key, so a repeat of the same
+// request is answered with the first answer instead of being applied twice. One
+// per action; a form the learner may submit again keeps its own. Built from
+// getRandomValues because randomUUID is missing from an http page's content script.
+export function retryKey(): string {
+  return [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 export async function send<R extends Request>(request: R): Promise<ResponseFor<R["type"]>> {
   try {

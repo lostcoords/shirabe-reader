@@ -376,11 +376,12 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       // here is a screenshot of the popup covering the scene: worse than the no
       // image it replaces.
       const result = await api.save(options);
+      if (request.newDeckName) await forgetDecks();
       await cacheStates({ [request.lemma]: result.state }, { [request.lemma]: result });
       return { ok: true, type: "save", result };
     }
     case "grade": {
-      const result = await api.grade({ cardId: request.cardId, revision: request.revision, rating: request.rating });
+      const result = await api.grade({ cardId: request.cardId, revision: request.revision, rating: request.rating, key: request.key });
       // Refresh the cached details too, not just the top-level state: the popup
       // prefers `details.state` on reopen, so caching state-only would let a stale
       // detail snap a just-graded word back to "due". Carry the cached decks +
@@ -423,7 +424,7 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       return { ok: true, type: "setState", state: details.state, details };
     }
     case "ignore": {
-      await api.ignore({ lemma: request.lemma, reading: request.reading });
+      await api.ignore({ lemma: request.lemma, reading: request.reading, key: request.key });
       await cacheStates({ [request.lemma]: "ignored" }, { [request.lemma]: { state: "ignored", decks: [] } });
       return { ok: true, type: "ignore" };
     }
@@ -600,6 +601,12 @@ async function drainRemoteStateRefresh(): Promise<void> {
 }
 
 let memoryDeckSnapshot: { decks: Deck[]; checkedAt: string } | null = null;
+
+// A save that made a deck: the next form has to list it.
+async function forgetDecks(): Promise<void> {
+  memoryDeckSnapshot = null;
+  await ext.storage.local.remove(DECK_CACHE_KEY);
+}
 
 async function cachedDecks(): Promise<Deck[]> {
   if (memoryDeckSnapshot && Date.parse(memoryDeckSnapshot.checkedAt) >= Date.now() - ACCOUNT_CACHE_MAX_AGE_MS) {

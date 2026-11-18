@@ -24,6 +24,10 @@ const OAUTH_SCOPES = ["user:profile:read", "user:dictionary:read", "user:prefere
 const OAUTH_CLIENT_ID = "shirabe-extension";
 export type Tokens = PublicCredentials;
 
+// Built before the call, never inside it: the SDK repeats the call after
+// renewing a token, and the repeat has to carry the same key.
+const retrying = (key: string) => ({ headers: { "Idempotency-Key": key } });
+
 const studyDetails = (word: WordStateEntry): StudyDetails => ({
   state: word.state,
   decks: word.decks,
@@ -86,10 +90,16 @@ export class ShirabeApi {
   async save(options: {
     lemma: string; surface?: string; reading?: string; entry?: string; deckId?: number; newDeckName?: string;
     hint?: string; notes?: string; sentence?: SentenceCapture; sentences?: SentenceCapture[];
-    senses?: string[]; imageDataUrl?: string; audioDataUrl?: string;
+    senses?: string[]; imageDataUrl?: string; audioDataUrl?: string; key: string;
   }): Promise<SaveResult> {
-    const { entry, ...fields } = options;
-    const response = await this.oauth.request((client) => client.saveCard({ ...fields, ...entryHandle(entry) }));
+    const { entry, newDeckName, key, ...fields } = options;
+    // A new deck is made through the deck endpoint, which answers a repeated key
+    // with the deck it already made, so saving again after a failure lands in
+    // that deck instead of a second one with the same name.
+    const deckId = newDeckName ? (await this.createDeck(newDeckName, key)).id : fields.deckId;
+    const body = { ...fields, ...(deckId == null ? {} : { deckId }), ...entryHandle(entry) };
+    const headers = retrying(key);
+    const response = await this.oauth.request((client) => client.saveCard(body, headers));
     // The card that was written identifies itself; everything else about the word
     //: its state, decks, how many cards it now holds: comes from `word`, the
     // same block a lookup returns.
@@ -100,14 +110,22 @@ export class ShirabeApi {
     };
   }
 
-  async grade(options: { cardId: number; revision: string; rating: 1 | 2 | 3 | 4 }): Promise<GradeResult> {
-    const response = await this.oauth.request((client) => client.gradeCard(options));
+  async grade(options: { cardId: number; revision: string; rating: 1 | 2 | 3 | 4; key: string }): Promise<GradeResult> {
+    const { key, ...body } = options;
+    const headers = retrying(key);
+    const response = await this.oauth.request((client) => client.gradeCard(body, headers));
     const cardId = response.card?.id;
     return {
       state: response.card.state,
       intervals: response.intervals as IntervalPreviews,
       ...(cardId != null ? { cardId } : {}),
     };
+  }
+
+  async createDeck(name: string, key: string): Promise<Deck> {
+    const headers = retrying(key);
+    const { deck } = await this.oauth.request((client) => client.createDeck({ name }, headers));
+    return deck;
   }
 
   async decks(): Promise<Deck[]> {
@@ -160,15 +178,17 @@ export class ShirabeApi {
   // it into rotation. It lands on every card of this lemma and reading, so the
   // answer is the whole word, not one card. A word with no card gets one, linked
   // to `entry` in `deckId`.
-  async setState(options: { lemma: string; state: "retired" | "reviewing"; reading?: string; entry?: string; deckId?: number }): Promise<StudyDetails> {
-    const { entry, ...fields } = options;
-    const { word } = await this.oauth.request((client) => client.setWordState({ ...fields, ...entryHandle(entry) }));
+  async setState(options: { lemma: string; state: "retired" | "reviewing"; reading?: string; entry?: string; deckId?: number; key: string }): Promise<StudyDetails> {
+    const { entry, key, ...fields } = options;
+    const headers = retrying(key);
+    const { word } = await this.oauth.request((client) => client.setWordState({ ...fields, ...entryHandle(entry) }, headers));
     return studyDetails(word);
   }
 
   // Ignore a word: the server's "don't study this" list, which bulk adds skip.
-  async ignore(options: { lemma: string; reading?: string }): Promise<void> {
-    await this.oauth.request((client) => client.ignoreWord({ text: options.lemma, ...(options.reading ? { reading: options.reading } : {}) }));
+  async ignore(options: { lemma: string; reading?: string; key: string }): Promise<void> {
+    const headers = retrying(options.key);
+    await this.oauth.request((client) => client.ignoreWord({ text: options.lemma, ...(options.reading ? { reading: options.reading } : {}) }, headers));
   }
 
   // Connected account's display name + SRS entitlement, for the settings UI.

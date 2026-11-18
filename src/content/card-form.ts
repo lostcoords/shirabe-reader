@@ -1,4 +1,4 @@
-import { send } from "../common/messages.js";
+import { retryKey, send } from "../common/messages.js";
 import type { SentenceCapture } from "../common/messages.js";
 import type { Definition } from "../common/types.js";
 import { senseText } from "@shirabe-org/card/word-card/senses";
@@ -260,6 +260,10 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
   cancel.type = "button";
   cancel.addEventListener("click", options.onCancel);
 
+  // One key for the life of the form: saving again after a failure is the same
+  // save, so a first attempt that did land (a new deck included) is answered,
+  // not repeated.
+  const key = retryKey();
   submit.addEventListener("click", async () => {
     submit.disabled = true;
     feedback.textContent = "Saving…";
@@ -288,6 +292,7 @@ export async function renderCardForm(host: HTMLElement, options: CardFormOptions
       ...(sentences.length ? { sentences } : {}),
       hint: hint.value.trim(),
       notes: notes.value.trim(),
+      key,
     });
 
     if (!response.ok) {

@@ -327,7 +327,7 @@ try {
     }, { apiBase: process.env.PARITY_SAVE_API, accessToken: process.env.PARITY_SAVE_TOKEN, refreshToken: process.env.PARITY_SAVE_REFRESH_TOKEN });
     await page.waitForFunction(async (apiBase) => (await chrome.runtime.sendMessage({ type: "status" })).status.apiBase === apiBase,
       process.env.PARITY_SAVE_API);
-    const saved = await page.evaluate((word) => chrome.runtime.sendMessage({ type: "save", ...word }), pickedWord);
+    const saved = await page.evaluate((word) => chrome.runtime.sendMessage({ type: "save", ...word, key: "installed-parity-save" }), pickedWord);
     assert.equal(saved.ok, true, JSON.stringify(saved));
     assert.equal(saved.result.created, true);
     console.log(JSON.stringify({ savedPickedEntry: pickedWord.entry }));

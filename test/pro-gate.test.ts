@@ -16,7 +16,7 @@ test("a 402 keeps the server's code and sentence, so the UI can offer plans", as
     const { ApiError, ShirabeApi } = await import("../src/common/api.js");
     const api = new ShirabeApi({ apiBase: "https://shirabe.test", accessToken: "shra_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), refreshToken: "shrr_test" } as never);
 
-    const error = await api.save({ lemma: "勉強" }).then(() => null, (err: unknown) => err);
+    const error = await api.save({ lemma: "勉強", key: "save-1" }).then(() => null, (err: unknown) => err);
 
     assert.ok(error instanceof ApiError, "a refusal surfaces as ApiError");
     assert.equal(error.status, 402);

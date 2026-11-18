@@ -68,8 +68,10 @@ test("Known keeps the whole word it answered, so a reopened card does not snap b
   answers.set("POST /api/v1/srs/states", () => json({
     word: { lemma: "橋", state: "retired", decks: [{ id: 7, name: "Reading pile" }], cardId: 41, cardCount: 1 },
   }));
-  const known = await worker({ type: "setState", lemma: "橋", state: "retired", reading: "はし", entry: "jmdict:1489850" });
+  sent.length = 0;
+  const known = await worker({ type: "setState", lemma: "橋", state: "retired", reading: "はし", entry: "jmdict:1489850", key: "known-1" });
   assert.ok(known.ok && known.type === "setState");
+  assert.equal(sent.find(({ path }) => path === "/api/v1/srs/states")?.headers.get("Idempotency-Key"), "known-1");
 
   sent.length = 0;
   const reopened = await worker({ type: "states", lemmas: ["橋"] });
@@ -83,14 +85,46 @@ test("Ignore reaches the server's list and the word reads as ignored without ask
   const worker = await send;
   answers.set("POST /api/v1/srs/word-ignores", (body) => json({ ignore: body }, 201));
   sent.length = 0;
-  const ignored = await worker({ type: "ignore", lemma: "田中", reading: "たなか" });
+  const ignored = await worker({ type: "ignore", lemma: "田中", reading: "たなか", key: "ignore-1" });
   assert.ok(ignored.ok && ignored.type === "ignore");
-  assert.deepEqual(sent.map(({ method, path, body }) => ({ method, path, body })),
-    [{ method: "POST", path: "/api/v1/srs/word-ignores", body: { text: "田中", reading: "たなか" } }]);
+  assert.deepEqual(sent.map(({ method, path, headers, body }) => ({ method, path, key: headers.get("Idempotency-Key"), body })),
+    [{ method: "POST", path: "/api/v1/srs/word-ignores", key: "ignore-1", body: { text: "田中", reading: "たなか" } }]);
 
   sent.length = 0;
   const states = await worker({ type: "states", lemmas: ["田中"] });
   assert.ok(states.ok && states.type === "states");
   assert.equal(states.states["田中"], "ignored");
   assert.deepEqual(sent, []);
+});
+
+// A save into a deck typed by name used to post the name with the save, and the
+// server made a deck on every attempt. The deck endpoint answers a repeated key
+// with the deck it already made, so saving again after a failure finds it.
+test("a new deck is made once under the save's key, and saving again after a failure lands in it", async () => {
+  const worker = await send;
+  const deck = { id: 12, name: "Immersion", visibility: "personal", counts: { total: 0, new: 0, due: 0, learning: 0, review: 0 } };
+  answers.set("POST /api/v1/srs/decks", () => json({ deck }, 201));
+  answers.delete("POST /api/v1/srs/saves");
+  sent.length = 0;
+  const save = { type: "save", lemma: "高い", reading: "たかい", newDeckName: "Immersion", key: "form-1" } as const;
+  const failed = await worker(save);
+  assert.equal(failed.ok, false, "the save itself answered 503");
+
+  answers.set("POST /api/v1/srs/saves", () => json({
+    card: { id: 5 }, created: true, word: { lemma: "高い", state: "new", decks: [{ id: 12, name: "Immersion" }] },
+  }, 201));
+  const saved = await worker(save);
+  assert.ok(saved.ok && saved.type === "save");
+
+  const writes = sent.map(({ method, path, headers, body }) => ({ method, path, key: headers.get("Idempotency-Key"), body }));
+  const created = { method: "POST", path: "/api/v1/srs/decks", key: "form-1", body: { name: "Immersion" } };
+  const into = { method: "POST", path: "/api/v1/srs/saves", key: "form-1", body: { lemma: "高い", reading: "たかい", deckId: 12 } };
+  assert.deepEqual(writes, [created, into, created, into], "both attempts are the same two requests");
+
+  answers.set("GET /api/v1/srs/decks", () => json({ decks: [deck] }));
+  sent.length = 0;
+  const decks = await worker({ type: "decks" });
+  assert.ok(decks.ok && decks.type === "decks");
+  assert.deepEqual(decks.decks.map(({ id }) => id), [12]);
+  assert.deepEqual(sent.map(({ method, path }) => `${method} ${path}`), ["GET /api/v1/srs/decks"], "the next form lists the deck it made");
 });

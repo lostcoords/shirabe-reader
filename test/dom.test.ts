@@ -777,7 +777,7 @@ test("inline grading submits the displayed review identity and clears it when de
     const details = { state: "due" as const, decks: [], cardId: 99, reviewCard: { id: 15, revision: "a".repeat(64) } };
     applyStudyDetails(word, details);
     await grade(word, 3);
-    assert.deepEqual(requests, [{ type: "grade", lemma: "猫", cardId: 15, revision: "a".repeat(64), rating: 3 }]);
+    assert.deepEqual(requests, [{ type: "grade", lemma: "猫", cardId: 15, revision: "a".repeat(64), rating: 3, key: (requests[0] as { key: string }).key }]);
     applyStudyDetails(word, { state: "due", decks: [] });
     const result = await grade(word, 3);
     assert.equal(result.ok, false);

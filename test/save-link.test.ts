@@ -4,12 +4,12 @@ import type { Request as MessageRequest } from "../src/common/messages.js";
 
 test("the API client preserves the lookup review target and submits its revision without fetching a newer one", async () => {
   const original = globalThis.fetch;
-  const requests: Array<{ path: string; body: unknown }> = [];
+  const requests: Array<{ path: string; key: string | null; body: unknown }> = [];
   const reviewCard = { id: 15, revision: "b".repeat(64) };
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
     const path = new URL(request.url).pathname;
-    requests.push({ path, body: await request.json() });
+    requests.push({ path, key: request.headers.get("Idempotency-Key"), body: await request.json() });
     return Response.json(path.endsWith("/lookup")
       ? { states: [{ lemma: "猫", state: "due", decks: [], cardId: 99, reviewCard }] }
       : { card: { id: 15, state: "reviewing" }, intervals: { again: "1m", hard: "1d", good: "4d", easy: "8d" } });
@@ -20,10 +20,10 @@ test("the API client preserves the lookup review target and submits its revision
     const api = new ShirabeApi({ ...DEFAULTS, apiBase: "https://shirabe.test", accessToken: "shra_test", refreshToken: "shrr_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString() });
     const snapshot = await api.states(["猫"]);
     assert.deepEqual(snapshot.details["猫"].reviewCard, reviewCard);
-    await api.grade({ cardId: reviewCard.id, revision: reviewCard.revision, rating: 3 });
+    await api.grade({ cardId: reviewCard.id, revision: reviewCard.revision, rating: 3, key: "grade-1" });
     assert.deepEqual(requests, [
-      { path: "/api/v1/srs/states/lookup", body: { words: ["猫"] } },
-      { path: "/api/v1/srs/reviews", body: { cardId: 15, revision: reviewCard.revision, rating: 3 } },
+      { path: "/api/v1/srs/states/lookup", key: null, body: { words: ["猫"] } },
+      { path: "/api/v1/srs/reviews", key: "grade-1", body: { cardId: 15, revision: reviewCard.revision, rating: 3 } },
     ]);
   } finally {
     globalThis.fetch = original;
@@ -37,6 +37,7 @@ test("the API client preserves the lookup review target and submits its revision
 // which is what every Reader card used to be.
 
 async function postedBody(options: { lemma: string; entry?: string }): Promise<Record<string, unknown>> {
+  const save = { ...options, key: "save-1" };
   const original = globalThis.fetch;
   let body: Record<string, unknown> = {};
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -49,7 +50,7 @@ async function postedBody(options: { lemma: string; entry?: string }): Promise<R
   }) as unknown as typeof fetch;
   try {
     const { ShirabeApi } = await import("../src/common/api.js");
-    await new ShirabeApi({ apiBase: "https://shirabe.test", accessToken: "shra_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), refreshToken: "shrr_test" } as never).save(options);
+    await new ShirabeApi({ apiBase: "https://shirabe.test", accessToken: "shra_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), refreshToken: "shrr_test" } as never).save(save);
     return body;
   } finally {
     globalThis.fetch = original;
@@ -62,6 +63,7 @@ test("a save posts the entry as the (dictionarySlug, sourceId) pair /api/v1 link
   assert.equal(body.dictionarySlug, "jmdict");
   assert.equal(body.sourceId, "1207590");
   assert.equal(body.entry, undefined, "the packed handle is a client shape: the wire takes the pair");
+  assert.equal(body.key, undefined, "the retry key travels as a header");
 });
 
 test("a source id may carry colons of its own; the slug never does", async () => {
@@ -124,19 +126,19 @@ test("a word with no entry saves as free text rather than half a handle", async 
 // got a card linked to no entry, in no chosen deck.
 test("Known posts the word's reading, entry and deck, the identity a save sends", async () => {
   const original = globalThis.fetch;
-  const requests: Array<{ path: string; body: unknown }> = [];
+  const requests: Array<{ path: string; key: string | null; body: unknown }> = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
-    requests.push({ path: new URL(request.url).pathname, body: await request.json() });
+    requests.push({ path: new URL(request.url).pathname, key: request.headers.get("Idempotency-Key"), body: await request.json() });
     return Response.json({ word: { lemma: "橋", state: "retired", decks: [{ id: 7, name: "Reading pile" }] } });
   }) as typeof fetch;
   try {
     const { ShirabeApi } = await import("../src/common/api.js");
     const { DEFAULTS } = await import("../src/common/config.js");
     const api = new ShirabeApi({ ...DEFAULTS, apiBase: "https://shirabe.test", accessToken: "shra_test", refreshToken: "shrr_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString() });
-    const details = await api.setState({ lemma: "橋", state: "retired", reading: "はし", entry: "jmdict:1489850", deckId: 7 });
+    const details = await api.setState({ lemma: "橋", state: "retired", reading: "はし", entry: "jmdict:1489850", deckId: 7, key: "known-1" });
     assert.equal(details.state, "retired");
-    assert.deepEqual(requests, [{ path: "/api/v1/srs/states", body: {
+    assert.deepEqual(requests, [{ path: "/api/v1/srs/states", key: "known-1", body: {
       lemma: "橋", state: "retired", reading: "はし", deckId: 7, dictionarySlug: "jmdict", sourceId: "1489850",
     } }]);
   } finally {
@@ -178,18 +180,18 @@ test("Known on a word whose popup never opened asks for its entry, as a save doe
 
 test("Ignore posts the word as text with its reading, and the page stops marking it", async () => {
   const original = globalThis.fetch;
-  const requests: Array<{ path: string; body: unknown }> = [];
+  const requests: Array<{ path: string; key: string | null; body: unknown }> = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
-    requests.push({ path: new URL(request.url).pathname, body: await request.json() });
+    requests.push({ path: new URL(request.url).pathname, key: request.headers.get("Idempotency-Key"), body: await request.json() });
     return Response.json({ ignore: { text: "田中", reading: "たなか" } }, { status: 201 });
   }) as typeof fetch;
   try {
     const { ShirabeApi } = await import("../src/common/api.js");
     const { DEFAULTS } = await import("../src/common/config.js");
     const api = new ShirabeApi({ ...DEFAULTS, apiBase: "https://shirabe.test", accessToken: "shra_test", refreshToken: "shrr_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString() });
-    await api.ignore({ lemma: "田中", reading: "たなか" });
-    assert.deepEqual(requests, [{ path: "/api/v1/srs/word-ignores", body: { text: "田中", reading: "たなか" } }]);
+    await api.ignore({ lemma: "田中", reading: "たなか", key: "ignore-1" });
+    assert.deepEqual(requests, [{ path: "/api/v1/srs/word-ignores", key: "ignore-1", body: { text: "田中", reading: "たなか" } }]);
   } finally {
     globalThis.fetch = original;
   }
@@ -212,6 +214,8 @@ test("Ignore posts the word as text with its reading, and the page stops marking
   word.dataset.reading = "たなか";
   word.dataset.state = "none";
   assert.equal((await ignore(word)).ok, true);
-  assert.deepEqual(sent, [{ type: "ignore", lemma: "田中", reading: "たなか" }]);
+  const [{ key, ...request }] = sent as Array<Extract<MessageRequest, { type: "ignore" }>>;
+  assert.deepEqual([request], [{ type: "ignore", lemma: "田中", reading: "たなか" }]);
+  assert.match(key, /^[0-9a-f]{32}$/);
   assert.equal(word.dataset.state, "ignored");
 });

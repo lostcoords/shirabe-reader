@@ -243,3 +243,30 @@ test("hint and notes are always sent, so clearing them is a real edit", async ()
   assert.equal(request.hint, "money, not height");
   assert.equal(request.notes, "watch this one");
 });
+
+test("saving again after a failure is the same save under the same key; a new form starts a new one", async () => {
+  const first = await mountForm({ senses: [{ glosses: ["expensive"] }] });
+  const { ext } = await import("../src/common/browser.js");
+  const answer = ext.runtime.sendMessage;
+  let failures = 1;
+  ext.runtime.sendMessage = (async (message: Request) => {
+    if (message.type === "save" && failures-- > 0) {
+      first.sent.push(message);
+      return { ok: false, error: "That didn't go through. Try again." };
+    }
+    return (answer as (message: Request) => Promise<unknown>)(message);
+  }) as typeof ext.runtime.sendMessage;
+  const submit = [...first.host.querySelectorAll("button")].find((b) => b.textContent === "Save card") as HTMLButtonElement;
+  submit.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(submit.disabled, false, "a failed save can be tried again");
+  submit.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const keys = first.sent.filter((message): message is SaveRequest => message.type === "save").map((message) => message.key);
+  assert.equal(keys.length, 2);
+  assert.match(keys[0], /^[0-9a-f]{32}$/);
+  assert.equal(keys[1], keys[0]);
+
+  const second = await mountForm({ senses: [{ glosses: ["expensive"] }] });
+  assert.notEqual((await second.saveRequest()).key, keys[0]);
+});
