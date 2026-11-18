@@ -124,23 +124,28 @@ test("a word with no entry saves as free text rather than half a handle", async 
 // Known used to post the bare spelling. The server then retired every card of
 // every homograph (はし the bridge with はし the chopsticks), and an unsaved word
 // got a card linked to no entry, in no chosen deck.
-test("Known posts the word's reading, entry and deck, the identity a save sends", async () => {
+test("Known and taking it back post the word's reading and entry, the identity a save sends", async () => {
   const original = globalThis.fetch;
-  const requests: Array<{ path: string; key: string | null; body: unknown }> = [];
+  const requests: Array<{ method: string; path: string; key: string | null; body: unknown }> = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
-    requests.push({ path: new URL(request.url).pathname, key: request.headers.get("Idempotency-Key"), body: await request.json() });
-    return Response.json({ word: { lemma: "橋", state: "retired", decks: [{ id: 7, name: "Reading pile" }] } });
+    requests.push({ method: request.method, path: new URL(request.url).pathname, key: request.headers.get("Idempotency-Key"), body: await request.json() });
+    const state = request.method === "DELETE" ? "none" : "retired";
+    return Response.json({ word: { lemma: "橋", state, decks: state === "none" ? [] : [{ id: 7, name: "Reading pile" }] } });
   }) as typeof fetch;
   try {
     const { ShirabeApi } = await import("../src/common/api.js");
     const { DEFAULTS } = await import("../src/common/config.js");
     const api = new ShirabeApi({ ...DEFAULTS, apiBase: "https://shirabe.test", accessToken: "shra_test", refreshToken: "shrr_test", accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString() });
-    const details = await api.setState({ lemma: "橋", state: "retired", reading: "はし", entry: "jmdict:1489850", deckId: 7, key: "known-1" });
-    assert.equal(details.state, "retired");
-    assert.deepEqual(requests, [{ path: "/api/v1/srs/states", key: "known-1", body: {
-      lemma: "橋", state: "retired", reading: "はし", deckId: 7, dictionarySlug: "jmdict", sourceId: "1489850",
-    } }]);
+    const known = await api.markKnown({ lemma: "橋", reading: "はし", entry: "jmdict:1489850", deckId: 7, key: "known-1" });
+    assert.equal(known.state, "retired");
+    const taken = await api.unmarkKnown({ lemma: "橋", reading: "はし", entry: "jmdict:1489850" });
+    assert.equal(taken.state, "none");
+    const word = { lemma: "橋", reading: "はし", dictionarySlug: "jmdict", sourceId: "1489850" };
+    assert.deepEqual(requests, [
+      { method: "POST", path: "/api/v1/srs/knowns", key: "known-1", body: { ...word, deckId: 7 } },
+      { method: "DELETE", path: "/api/v1/srs/knowns", key: null, body: word },
+    ]);
   } finally {
     globalThis.fetch = original;
   }
@@ -162,7 +167,7 @@ test("Known on a word whose popup never opened asks for its entry, as a save doe
     if (message.type === "lookup") {
       return { ok: true, type: "lookup", definition: { headword: "橋", entry: "jmdict:1489850", senses: [] } };
     }
-    return { ok: true, type: "setState", state: "retired", details: { state: "retired", decks: [] } };
+    return { ok: true, type: "markKnown", details: { state: "retired", decks: [] } };
   }) as typeof ext.runtime.sendMessage;
 
   const { markKnown } = await import("../src/content/actions.js");
@@ -173,7 +178,7 @@ test("Known on a word whose popup never opened asks for its entry, as a save doe
 
   assert.equal((await markKnown(word)).ok, true);
 
-  const request = sent.find((message) => message.type === "setState") as Extract<MessageRequest, { type: "setState" }>;
+  const request = sent.find((message) => message.type === "markKnown") as Extract<MessageRequest, { type: "markKnown" }>;
   assert.equal(request.reading, "はし", "the reading keeps the chopsticks' card out of it");
   assert.equal(request.entry, "jmdict:1489850", "an unsaved word's new card links to its entry");
 });
@@ -218,4 +223,68 @@ test("Ignore posts the word as text with its reading, and the page stops marking
   assert.deepEqual([request], [{ type: "ignore", lemma: "田中", reading: "たなか" }]);
   assert.match(key, /^[0-9a-f]{32}$/);
   assert.equal(word.dataset.state, "ignored");
+});
+
+test("a save that kept its line but not its clip tells the reader, and why", async () => {
+  const { Window } = await import("happy-dom");
+  const window = new Window({ url: "https://reader.test/page" });
+  Object.assign(globalThis, {
+    window, document: window.document, HTMLElement: window.HTMLElement,
+    requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0) as unknown as number,
+    cancelAnimationFrame: (handle: number) => clearTimeout(handle),
+    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
+  });
+  const { ext } = await import("../src/common/browser.js");
+  ext.runtime.sendMessage = (async (message: MessageRequest) => {
+    if (message.type === "lookup") return { ok: true, type: "lookup", definition: null };
+    if (message.type === "captureTab") return { ok: false, error: "no tab" };
+    return { ok: true, type: "save", result: { state: "new", created: true, decks: [], mediaError: "The screenshot is not an image." } };
+  }) as typeof ext.runtime.sendMessage;
+  const { save } = await import("../src/content/actions.js");
+  const word = window.document.createElement("span") as unknown as HTMLElement;
+  word.dataset.lemma = "猫";
+  window.document.body.append(word as never);
+
+  const outcome = await save(word);
+
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.message, "Saved 猫. Saved without the clip or screenshot: The screenshot is not an image.");
+});
+
+test("Not known and Stop ignoring take back what was set, and a card Known made is forgotten with it", async () => {
+  const { Window } = await import("happy-dom");
+  const window = new Window({ url: "https://reader.test/page" });
+  Object.assign(globalThis, {
+    window, document: window.document, HTMLElement: window.HTMLElement,
+    requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0) as unknown as number,
+    cancelAnimationFrame: (handle: number) => clearTimeout(handle),
+    chrome: globalThis.chrome ?? { runtime: { id: "test", sendMessage: async () => ({ ok: true }) } },
+  });
+  const { ext } = await import("../src/common/browser.js");
+  const sent: MessageRequest[] = [];
+  ext.runtime.sendMessage = (async (message: MessageRequest) => {
+    sent.push(message);
+    if (message.type === "lookup") return { ok: true, type: "lookup", definition: { headword: "橋", entry: "jmdict:1489850", senses: [] } };
+    if (message.type === "unmarkKnown") return { ok: true, type: "unmarkKnown", details: { state: "none", decks: [] } };
+    return { ok: true, type: "unignore", details: { state: "none", decks: [] } };
+  }) as typeof ext.runtime.sendMessage;
+  const { unignore, unmarkKnown } = await import("../src/content/actions.js");
+  const word = window.document.createElement("span") as unknown as HTMLElement;
+  Object.assign(word.dataset, { lemma: "橋", reading: "はし", state: "retired", cardId: "41", cardUrl: "https://shirabe.test/study/cards?card_id=41" });
+  window.document.body.append(word as never);
+
+  assert.equal((await unmarkKnown(word)).ok, true);
+  assert.equal(word.dataset.state, "none");
+  assert.equal(word.dataset.cardId, undefined, "the card Known made is gone");
+  assert.equal(word.dataset.cardUrl, undefined);
+
+  word.dataset.state = "ignored";
+  assert.equal((await unignore(word)).ok, true);
+  assert.equal(word.dataset.state, "none");
+
+  const writes = sent.filter((message) => message.type !== "lookup");
+  assert.deepEqual(writes, [
+    { type: "unmarkKnown", lemma: "橋", reading: "はし", entry: "jmdict:1489850" },
+    { type: "unignore", lemma: "橋", reading: "はし" },
+  ]);
 });

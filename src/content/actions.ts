@@ -427,9 +427,10 @@ export async function save(word: HTMLElement, senseRefs?: string[]): Promise<Out
   }
   if (!res.ok) return { ...refusal(res), cardUrl };
   const decks = (res.result.decks ?? []).map((deck) => deck.name).join(", ");
+  const media = res.result.mediaError ? `. Saved without the clip or screenshot: ${res.result.mediaError}` : "";
   return {
     ok: true,
-    message: `${res.result.created ? "Saved" : "Already saved"} ${lemma}${decks ? ` · ${decks}` : ""}`,
+    message: `${res.result.created ? "Saved" : "Already saved"} ${lemma}${decks ? ` · ${decks}` : ""}${media}`,
     cardUrl,
   };
 }
@@ -444,6 +445,15 @@ export async function ignore(word: HTMLElement): Promise<Outcome> {
   return { ok: true, message: `Ignored ${lemma}` };
 }
 
+export async function unignore(word: HTMLElement): Promise<Outcome> {
+  const lemma = lemmaOf(word);
+  const res = await send({ type: "unignore", lemma, ...(word.dataset.reading ? { reading: word.dataset.reading } : {}) });
+  if (!res.ok) return refusal(res);
+  applyStateEverywhere(lemma, res.details.state);
+  applyStudyDetails(word, res.details);
+  return { ok: true, message: `${lemma} is no longer ignored` };
+}
+
 // Park as learned (out of review rotation). It names the word the way a save
 // does: a bare lemma would retire every homograph's cards, and an unsaved word
 // would get a card linked to nothing.
@@ -451,14 +461,14 @@ export async function markKnown(word: HTMLElement): Promise<Outcome> {
   const lemma = lemmaOf(word);
   const config = await loadConfig();
   const res = await send({
-    type: "setState", lemma, state: "retired",
+    type: "markKnown", lemma,
     ...(word.dataset.reading ? { reading: word.dataset.reading } : {}),
     entry: await entryFor(word),
     ...(config.preferredDeckId == null ? {} : { deckId: config.preferredDeckId }),
     key: retryKey(),
   });
   if (res.ok) {
-    applyStateEverywhere(lemma, res.state);
+    applyStateEverywhere(lemma, res.details.state);
     // The answer describes the whole word: its state, its decks, how many cards
     // it holds: so Manage re-points itself without a second lookup.
     applyStudyDetails(word, res.details);
@@ -466,4 +476,24 @@ export async function markKnown(word: HTMLElement): Promise<Outcome> {
   }
   if (!res.ok) return refusal(res);
   return { ok: true, message: `${lemma} marked known` };
+}
+
+// Take Known back on the same word Known named. A card that existed only
+// because of Known is gone afterwards, so the page forgets the card it linked.
+export async function unmarkKnown(word: HTMLElement): Promise<Outcome> {
+  const lemma = lemmaOf(word);
+  const res = await send({
+    type: "unmarkKnown", lemma,
+    ...(word.dataset.reading ? { reading: word.dataset.reading } : {}),
+    entry: await entryFor(word),
+  });
+  if (!res.ok) return refusal(res);
+  if (res.details.cardId == null) {
+    delete word.dataset.cardId;
+    delete word.dataset.cardUrl;
+    delete word.dataset.cardCount;
+  }
+  applyStateEverywhere(lemma, res.details.state);
+  applyStudyDetails(word, res.details);
+  return { ok: true, message: `${lemma} is no longer marked known` };
 }

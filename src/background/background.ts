@@ -417,16 +417,29 @@ async function handle(request: Request, senderTabId?: number, senderWindowId?: n
       const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
       return { ok: true, type: "activePageMetrics", metrics: (tab?.id != null && tabMetrics.get(tab.id)) || null };
     }
-    case "setState": {
+    case "markKnown": {
       const { type: _type, ...options } = request;
-      const details = await api.setState(options);
+      const details = await api.markKnown(options);
       await cacheStates({ [request.lemma]: details.state }, { [request.lemma]: details });
-      return { ok: true, type: "setState", state: details.state, details };
+      return { ok: true, type: "markKnown", details };
+    }
+    case "unmarkKnown": {
+      const { type: _type, ...options } = request;
+      const details = await api.unmarkKnown(options);
+      await cacheStates({ [request.lemma]: details.state }, { [request.lemma]: details });
+      return { ok: true, type: "unmarkKnown", details };
     }
     case "ignore": {
       await api.ignore({ lemma: request.lemma, reading: request.reading, key: request.key });
       await cacheStates({ [request.lemma]: "ignored" }, { [request.lemma]: { state: "ignored", decks: [] } });
       return { ok: true, type: "ignore" };
+    }
+    case "unignore": {
+      await api.unignore({ lemma: request.lemma, reading: request.reading });
+      // Only a word with no card reads as ignored, so lifting it leaves none.
+      const details: StudyDetails = { state: "none", decks: [] };
+      await cacheStates({ [request.lemma]: details.state }, { [request.lemma]: details });
+      return { ok: true, type: "unignore", details };
     }
     case "connect":
       await connect();

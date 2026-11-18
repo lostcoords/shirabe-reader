@@ -8,7 +8,9 @@ export type { DeckMembership, IntervalPreviews, StudyDetails };
 // A grade on Shirabe's 1–4 FSRS scale, matching POST /api/v1/srs/reviews.
 export type Rating = 1 | 2 | 3 | 4;
 export type Deck = { id: number; name: string; visibility: "personal" | "school" };
-export type SaveResult = StudyDetails & { created: boolean };
+// `mediaError`: the card and its line were saved, but the clip or screenshot
+// was not, and this says why.
+export type SaveResult = StudyDetails & { created: boolean; mediaError?: string };
 // Grading returns the card's new state + next-grade previews, but not deck
 // membership (grading a card never changes which decks hold it).
 export type GradeResult = { state: WordState; intervals: IntervalPreviews; cardId?: number };
@@ -117,9 +119,11 @@ export type Request =
   | { type: "activePageMetrics" } // popup asks what the active tab last measured
   // The same identity a save sends: the reading keeps a homograph's cards out of
   // it, and the entry and deck place the card an unsaved word gets.
-  | { type: "setState"; lemma: string; state: "retired" | "reviewing"; reading?: string; entry?: string; deckId?: number; key: string }
+  | { type: "markKnown"; lemma: string; reading?: string; entry?: string; deckId?: number; key: string }
+  | { type: "unmarkKnown"; lemma: string; reading?: string; entry?: string }
   // Never study this word. No card is made; the reading keeps a homograph out of it.
   | { type: "ignore"; lemma: string; reading?: string; key: string }
+  | { type: "unignore"; lemma: string; reading?: string }
   | { type: "connect" } // begin device login; resolves with the code to show
   | { type: "disconnect" }
   | { type: "updateDictionaryStack"; dictionaries: string[]; dictionaryReveal: Record<string, "show" | "hover"> }
@@ -155,8 +159,10 @@ export type Response =
   | { ok: true; type: "states"; states: Record<string, WordState>; details: Record<string, StudyDetails> }
   | { ok: true; type: "pageMetrics" }
   | { ok: true; type: "activePageMetrics"; metrics: PageMetrics | null }
-  | { ok: true; type: "setState"; state: WordState; details: StudyDetails }
+  | { ok: true; type: "markKnown"; details: StudyDetails }
+  | { ok: true; type: "unmarkKnown"; details: StudyDetails }
   | { ok: true; type: "ignore" }
+  | { ok: true; type: "unignore"; details: StudyDetails }
   | { ok: true; type: "connect" }
   | { ok: true; type: "disconnect" }
   | { ok: true; type: "updateDictionaryStack"; synced: boolean }

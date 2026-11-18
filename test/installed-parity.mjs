@@ -331,6 +331,37 @@ try {
     assert.equal(saved.ok, true, JSON.stringify(saved));
     assert.equal(saved.result.created, true);
     console.log(JSON.stringify({ savedPickedEntry: pickedWord.entry }));
+
+    // Known, Ignore and each undo, through the installed worker, each checked
+    // against what the server itself now says about the word.
+    if (process.env.PARITY_STUDY_WORD) {
+      const word = JSON.parse(process.env.PARITY_STUDY_WORD);
+      const serverState = async () => {
+        const answer = await fetch(new URL("/api/v1/srs/states/lookup", saveApi), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.PARITY_SAVE_TOKEN}` },
+          body: JSON.stringify({ words: [word.lemma] }),
+        });
+        assert.equal(answer.status, 200, await answer.clone().text());
+        return (await answer.json()).states[0].state;
+      };
+      const write = (message) => page.evaluate((request) => chrome.runtime.sendMessage(request), message);
+      const steps = [
+        [{ type: "markKnown", ...word, key: "installed-parity-known" }, "retired"],
+        [{ type: "unmarkKnown", ...word }, "none"],
+        [{ type: "ignore", lemma: word.lemma, reading: word.reading, key: "installed-parity-ignore" }, "ignored"],
+        [{ type: "unignore", lemma: word.lemma, reading: word.reading }, "none"],
+      ];
+      const states = [];
+      for (const [message, expected] of steps) {
+        const answer = await write(message);
+        assert.equal(answer.ok, true, JSON.stringify(answer));
+        if (answer.details) assert.equal(answer.details.state, expected, `${message.type} answered the word's new state`);
+        assert.equal(await serverState(), expected, `after ${message.type} the server reads the word as ${expected}`);
+        states.push(`${message.type}:${expected}`);
+      }
+      console.log(JSON.stringify({ studyWrites: states }));
+    }
   }
   console.log(JSON.stringify({ extension: id, profile, installed: true, parsed: parsed.tokens, lookup: lookup.definition.entry, annotated,
     adverb: { entry: selected.entry, lemma: selected.lemma, reading: selected.reading, popup: true },

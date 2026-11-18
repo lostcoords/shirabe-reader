@@ -1,5 +1,5 @@
 import type { Config } from "./config.js";
-import { ShirabePublicClient, ShirabePublicApiError, type ParseToken, type PublicAuthorization, type PublicCredentials, type ShirabeScope, type WordStateEntry } from "@shirabe-org/api";
+import { ShirabePublicClient, ShirabePublicApiError, type PublicAuthorization, type PublicCredentials, type ShirabeScope, type WordStateEntry } from "@shirabe-org/api";
 import { glossLanguagesFrom, type GlossLanguage } from "@shirabe-org/card/word-card/languages";
 import { cardWordState } from "@shirabe-org/card/word-card/types";
 import type { ParsedToken, WordState } from "./types.js";
@@ -28,7 +28,9 @@ export type Tokens = PublicCredentials;
 // renewing a token, and the repeat has to carry the same key.
 const retrying = (key: string) => ({ headers: { "Idempotency-Key": key } });
 
-const studyDetails = (word: WordStateEntry): StudyDetails => ({
+// A lookup, a write and a parsed token all answer with this block; only the
+// token leaves out `lemma`, since the token names the word.
+const studyDetails = (word: Omit<WordStateEntry, "lemma">): StudyDetails => ({
   state: word.state,
   decks: word.decks,
   ...(word.cardId != null ? { cardId: word.cardId } : {}),
@@ -37,18 +39,6 @@ const studyDetails = (word: WordStateEntry): StudyDetails => ({
   ...(word.savedSenses ? { savedSenses: word.savedSenses } : {}),
   ...(word.savedWholeWord ? { savedWholeWord: word.savedWholeWord } : {}),
   ...(word.intervals ? { intervals: word.intervals as IntervalPreviews } : {}),
-});
-
-// A parsed word's study block says what a lookup says about the word, in a looser
-// declared shape: a deck missing its id or name names nothing to show.
-const parsedStudy = (study: NonNullable<ParseToken["study"]>): StudyDetails => ({
-  state: cardWordState(study.state),
-  decks: study.decks.flatMap(({ id, name }) => (id != null && name != null ? [{ id, name }] : [])),
-  ...(study.cardId != null ? { cardId: study.cardId } : {}),
-  ...(study.cardCount != null ? { cardCount: study.cardCount } : {}),
-  ...(study.savedSenses ? { savedSenses: study.savedSenses } : {}),
-  ...(study.savedWholeWord ? { savedWholeWord: study.savedWholeWord } : {}),
-  ...(study.intervals ? { intervals: study.intervals as IntervalPreviews } : {}),
 });
 
 // The pack cites an entry as one handle ("jmdict:2517580"); /api/v1 takes it as the
@@ -119,6 +109,7 @@ export class ShirabeApi {
       ...studyDetails(response.word),
       created: response.created,
       ...(response.card?.id != null ? { cardId: response.card.id } : {}),
+      ...(response.mediaError ? { mediaError: response.mediaError } : {}),
     };
   }
 
@@ -188,18 +179,25 @@ export class ShirabeApi {
       state: cardWordState(token.study?.state),
     })));
     const study = Object.fromEntries(response.results.flatMap(({ tokens }) =>
-      tokens.flatMap((token) => (token.study && token.lemma ? [[token.lemma, parsedStudy(token.study)] as const] : []))));
+      tokens.flatMap((token) => (token.study && token.lemma ? [[token.lemma, studyDetails(token.study)] as const] : []))));
     return { tokens, study, packRevision: response.packRevision, stackFingerprint: response.stackFingerprint, sources: response.sources };
   }
 
-  // Set a word's state directly: "retired" parks it as learned, "reviewing" brings
-  // it into rotation. It lands on every card of this lemma and reading, so the
-  // answer is the whole word, not one card. A word with no card gets one, linked
-  // to `entry` in `deckId`.
-  async setState(options: { lemma: string; state: "retired" | "reviewing"; reading?: string; entry?: string; deckId?: number; key: string }): Promise<StudyDetails> {
+  // Park a word as learned: every card of this lemma and reading leaves review,
+  // so the answer is the whole word, not one card. A word with no card gets one,
+  // linked to `entry` in `deckId`.
+  async markKnown(options: { lemma: string; reading?: string; entry?: string; deckId?: number; key: string }): Promise<StudyDetails> {
     const { entry, key, ...fields } = options;
     const headers = retrying(key);
-    const { word } = await this.oauth.request((client) => client.setWordState({ ...fields, ...entryHandle(entry) }, headers));
+    const { word } = await this.oauth.request((client) => client.markWordKnown({ ...fields, ...entryHandle(entry) }, headers));
+    return studyDetails(word);
+  }
+
+  // Take Known back: a card that exists only because Known was pressed is
+  // deleted, a studied one resumes its schedule.
+  async unmarkKnown(options: { lemma: string; reading?: string; entry?: string }): Promise<StudyDetails> {
+    const { entry, ...fields } = options;
+    const { word } = await this.oauth.request((client) => client.unmarkWordKnown({ ...fields, ...entryHandle(entry) }));
     return studyDetails(word);
   }
 
@@ -207,6 +205,10 @@ export class ShirabeApi {
   async ignore(options: { lemma: string; reading?: string; key: string }): Promise<void> {
     const headers = retrying(options.key);
     await this.oauth.request((client) => client.ignoreWord({ text: options.lemma, ...(options.reading ? { reading: options.reading } : {}) }, headers));
+  }
+
+  async unignore(options: { lemma: string; reading?: string }): Promise<void> {
+    await this.oauth.request((client) => client.unignoreWord({ text: options.lemma, ...(options.reading ? { reading: options.reading } : {}) }));
   }
 
   // Connected account's display name + SRS entitlement, for the settings UI.

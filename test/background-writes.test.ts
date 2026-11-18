@@ -65,13 +65,13 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 test("Known keeps the whole word it answered, so a reopened card does not snap back", async () => {
   const worker = await send;
-  answers.set("POST /api/v1/srs/states", () => json({
+  answers.set("POST /api/v1/srs/knowns", () => json({
     word: { lemma: "橋", state: "retired", decks: [{ id: 7, name: "Reading pile" }], cardId: 41, cardCount: 1 },
   }));
   sent.length = 0;
-  const known = await worker({ type: "setState", lemma: "橋", state: "retired", reading: "はし", entry: "jmdict:1489850", key: "known-1" });
-  assert.ok(known.ok && known.type === "setState");
-  assert.equal(sent.find(({ path }) => path === "/api/v1/srs/states")?.headers.get("Idempotency-Key"), "known-1");
+  const known = await worker({ type: "markKnown", lemma: "橋", reading: "はし", entry: "jmdict:1489850", key: "known-1" });
+  assert.ok(known.ok && known.type === "markKnown");
+  assert.equal(sent.find(({ path }) => path === "/api/v1/srs/knowns")?.headers.get("Idempotency-Key"), "known-1");
 
   sent.length = 0;
   const reopened = await worker({ type: "states", lemmas: ["橋"] });
@@ -95,6 +95,70 @@ test("Ignore reaches the server's list and the word reads as ignored without ask
   assert.ok(states.ok && states.type === "states");
   assert.equal(states.states["田中"], "ignored");
   assert.deepEqual(sent, []);
+});
+
+test("taking Known back keeps the word the server answered, the card it purged gone with it", async () => {
+  const worker = await send;
+  answers.set("DELETE /api/v1/srs/knowns", () => json({ word: { lemma: "橋", state: "none", decks: [] } }));
+  sent.length = 0;
+  const taken = await worker({ type: "unmarkKnown", lemma: "橋", reading: "はし", entry: "jmdict:1489850" });
+  assert.ok(taken.ok && taken.type === "unmarkKnown");
+  assert.deepEqual(sent.map(({ method, path, body }) => ({ method, path, body })),
+    [{ method: "DELETE", path: "/api/v1/srs/knowns", body: { lemma: "橋", reading: "はし", dictionarySlug: "jmdict", sourceId: "1489850" } }]);
+
+  sent.length = 0;
+  const reopened = await worker({ type: "states", lemmas: ["橋"] });
+  assert.ok(reopened.ok && reopened.type === "states");
+  assert.deepEqual(reopened.details["橋"], { state: "none", decks: [] });
+  assert.deepEqual(sent, []);
+});
+
+test("stopping ignoring a word lifts it on the server, and the word reads as unsaved", async () => {
+  const worker = await send;
+  answers.set("DELETE /api/v1/srs/word-ignores", () => new Response(null, { status: 204 }));
+  sent.length = 0;
+  const lifted = await worker({ type: "unignore", lemma: "田中", reading: "たなか" });
+  assert.ok(lifted.ok && lifted.type === "unignore");
+  assert.deepEqual(sent.map(({ method, path, body }) => ({ method, path, body })),
+    [{ method: "DELETE", path: "/api/v1/srs/word-ignores", body: { text: "田中", reading: "たなか" } }]);
+
+  sent.length = 0;
+  const states = await worker({ type: "states", lemmas: ["田中"] });
+  assert.ok(states.ok && states.type === "states");
+  assert.equal(states.states["田中"], "none");
+  assert.deepEqual(sent, []);
+});
+
+// Ignore used to live only in the reader's cache: the next parse answered the
+// word as `none` and the page marked it again.
+test("an ignored word stays ignored when the page is parsed again", async () => {
+  const worker = await send;
+  answers.set("POST /api/v1/srs/word-ignores", (body) => json({ ignore: body }, 201));
+  await worker({ type: "ignore", lemma: "田中", reading: "たなか", key: "ignore-2" });
+  answers.set("POST /api/v1/parse", () => json({
+    packRevision: "r", stackFingerprint: "f", sources: ["jmdict:en"],
+    results: [{ tokens: [
+      { startOffset: 0, endOffset: 2, surface: "田中", lemma: "田中", reading: "たなか", kind: "word", study: { state: "ignored", decks: [] } },
+    ] }],
+  }));
+
+  const parsed = await worker({ type: "parseBatchOnline", texts: ["田中"] });
+  assert.ok(parsed.ok && parsed.type === "parseBatchOnline");
+  assert.equal(parsed.tokens[0]?.[0]?.state, "ignored");
+  const opened = await worker({ type: "states", lemmas: ["田中"] });
+  assert.ok(opened.ok && opened.type === "states");
+  assert.equal(opened.details["田中"]?.state, "ignored");
+});
+
+test("a save that kept its line but not its clip says so, and why", async () => {
+  const worker = await send;
+  answers.set("POST /api/v1/srs/saves", () => json({
+    card: { id: 6 }, created: true, mediaError: "The audio clip is longer than 30 seconds.",
+    word: { lemma: "猫", state: "new", decks: [{ id: 1, name: "Saved words" }] },
+  }, 201));
+  const saved = await worker({ type: "save", lemma: "猫", reading: "ねこ", key: "save-media" });
+  assert.ok(saved.ok && saved.type === "save");
+  assert.equal(saved.result.mediaError, "The audio clip is longer than 30 seconds.");
 });
 
 // A save into a deck typed by name used to post the name with the save, and the
